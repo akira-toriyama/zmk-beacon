@@ -3,10 +3,10 @@
 A [ZMK](https://zmk.dev) module for the **Prospector Dongle**: a Seeed XIAO
 nRF52840 with a Waveshare 1.69" 240x280 LCD (the
 [beekeeb pre-soldered Prospector](https://shop.beekeeb.com/products/pre-soldered-prospector-zmk-dongle))
-that sits next to a keyboard and shows its state, the active layer and the
-battery of each half, received over BLE from the keyboard's status
-advertisement. It never pairs or connects. Its USB-C carries power and one
-serial port, used only to reflash it.
+that sits next to a keyboard and shows the battery of each half, received
+over BLE from the keyboard's status advertisement. It only listens: it never
+advertises, pairs or connects. Its USB-C carries power and one serial port,
+used only to reflash it.
 
 It is built for the Cyboard Imprint through its Imprint Dongle
 ([akira-toriyama/canon](https://github.com/akira-toriyama/canon)), which today
@@ -17,19 +17,34 @@ This module replaces that dependency end to end: the display side first (the
 
 ## Status
 
-Skeleton. The `prospector` shield builds; its screen shows placeholder text
-and receives nothing yet. The BLE observer, the real screen and the
-keyboard-side broadcaster follow (canon tasks t-5gxp, t-eray, t-k8pk). The
-parts moved here from canon were run on hardware there (USB layout, 1200 baud
-bootloader entry, backlight); nothing has been flashed from this repository
-yet.
+The `prospector` shield receives the status advertisement that
+prospector-zmk-module v2.2.3 sends from the keyboard, with its own BLE observer,
+and shows each half's battery. Run on the Prospector Dongle against canon's
+Imprint Dongle on 2026-09-26. Next: canon builds its Prospector Dongle from
+this module (canon task t-5gxp), then the keyboard-side broadcaster moves here
+(t-eray, t-k8pk) and a sprite joins the screen (t-rx4e).
+
+## The screen
+
+The left half's battery sits in the bottom-left corner, the right half's in
+the bottom-right.
+
+| Shows | Meaning |
+| --- | --- |
+| `75%` in white | The battery of that half, from a status advertisement received in the last minute. |
+| `--` in white | The keyboard is heard, but that half has no reading: it is off, out of range, or has not reported since it connected. |
+| `--` in grey | No status advertisement in the last minute, or none since the Prospector Dongle started. |
+
+Which half is "left" is decided on the keyboard side: the Imprint Dongle
+reports its first-paired half first (canon's CLAUDE.md, split peripheral slot).
 
 ## What the module provides
 
 | Path | What |
 | --- | --- |
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
-| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9). Placeholder until the observer lands. |
+| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery from the prospector-zmk-module v2.2.3 status payload. |
+| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
 | `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`). |
 
