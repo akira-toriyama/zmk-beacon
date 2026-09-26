@@ -24,7 +24,8 @@ Japanese.
   overlap: Kconfig `BEACON_*` (theirs: `PROSPECTOR_*`, `ZMK_STATUS_ADV_*`) and
   the shield `prospector` (theirs: `prospector_scanner`).
 - Roadmap = furrow, projects epic e-7n2v: t-5gxp (own BLE observer + battery
-  screen + BLE silence + canon switch) → t-eray (second advertising set spike)
+  screen + BLE silence, run on hardware 2026-09-26; then the canon switch and
+  a 24 h run) → t-eray (second advertising set spike)
   → t-k8pk (broadcaster, drop the t-ogura module from canon) → t-rx4e (GIF
   sprite) → t-mxb7 (sprite updates).
 
@@ -57,6 +58,35 @@ Japanese.
   2026-09-26). `CONFIG_BOARD_SERIAL_BACKEND_CDC_ACM=n` keeps the board's
   console set off, so the port is silent unless `--logging`
   (`CONFIG_ZMK_USB_LOGGING=y`) turns the console on.
+- **The status payload is a contract with prospector-zmk-module v2.2.3**, the
+  broadcaster on canon's Imprint Dongle until t-k8pk. `src/status_observer.c`
+  reads bytes 0-4 (`FF FF AB CD`, version `0x22`), 5 (left half) and 12 (right
+  half); its header cites the module lines. Byte 4 is major.minor only, so a
+  patch bump of the module in canon's `config/west.yml` passes the filter:
+  re-read `include/zmk/status_advertisement.h` and the `CENTRAL_SIDE="AUX"`
+  branch of `src/status_advertisement.c` on every bump.
+- **The observer owns Bluetooth.** `CONFIG_ZMK_BLE=n` (shield conf) removes
+  ZMK's `bt_enable()` callers, its connectable advertisement (a Mac saw it as
+  "Prospect", HID + BAS, before 2026-09-26), SMP and settings; the shield conf
+  sets `BT=y` and `BT_OBSERVER=y` by hand. Keep the scan ACTIVE (the payload is
+  in the scan response while ZMK advertises on the keyboard) and without
+  `BT_LE_SCAN_OPT_FILTER_DUPLICATE`, which every `BT_LE_SCAN_*` helper sets
+  (the controller then reports each address once and the numbers freeze).
+  Measured 2026-09-26: 475-507 payloads a minute; a 70 s CoreBluetooth scan
+  from the Mac saw no advertisement from the device. The build warns that the
+  `SETTINGS_NVS` choice has no selection: the board defconfig selects it and
+  settings are off. Harmless, and a `=n` in the shield conf does not silence it.
+- **LVGL only from the display work queue.** LVGL is not thread-safe
+  (`LV_USE_OS=0`); the scan callback runs on the BT RX work queue. The screen
+  reads `beacon_status_get()` from an `lv_timer` created in
+  `zmk_display_status_screen()`, which runs on ZMK's display queue.
+- **A logging build drops its boot log unless the port is opened within a
+  second or so.** ZMK sets the CDC ACM ring buffer to 1024 bytes and the boot
+  banner fills it, so later lines are lost until the host reads. For a boot
+  log, build once by hand with `-DCONFIG_USB_CDC_ACM_RINGBUF_SIZE=8192` next to
+  `-DCONFIG_ZMK_USB_LOGGING=y`. Read the port at any rate but 1200 (see
+  below). Logging builds print one observer line (payloads per minute) and one
+  screen line (what it shows) every minute.
 - **1200 baud bootloader entry** (`BEACON_BOOTLOADER_ON_1200_BAUD`, default y
   under the shield): `bootmode_set()` + warm reboot, not `sys_reboot(0x57)`;
   the reasons are in [src/bootloader_on_1200_baud.c](src/bootloader_on_1200_baud.c).
@@ -74,10 +104,13 @@ Japanese.
   widget and font is opt-in in `prospector.conf` (`CONFIG_LV_USE_*`,
   `CONFIG_LV_FONT_*`). A widget used without its symbol fails at link time,
   not in Kconfig.
-- **Memory** (first local build, 2026-09-26, zmk 9ebbeff0): FLASH 363,948 B of
-  788 KB (45.10%), RAM 202,740 B of 256 KB (77.34%). RAM is mostly LVGL: VDB
+- **Memory** (observer + battery screen, 2026-09-26, zmk 9ebbeff0): FLASH
+  293,516 B of 788 KB (36.38%), RAM 177,948 B of 256 KB (67.88%); `--logging`
+  39.62% / 71.64%. The skeleton had 363,948 B / 202,740 B with ZMK's BLE
+  stack and Montserrat 16 + 28; Montserrat 48, now the only font linked, is
+  about 97 KB of flash (from its source tables). RAM is mostly LVGL: VDB
   30% × 2 and the 48 KiB pool. A GIF decoder will draw on that pool (t-rx4e,
-  t-mxb7), so watch RAM before adding widgets.
+  t-mxb7).
 - **Fleet-managed files, do not edit here**:
   `.github/workflows/{actionlint,commit-lint,repo-policy,taplo,task-status,version-preview,zizmor}.yml`,
   `.github/zizmor.yml`, `.github/dependabot.yml`, `docs/commit-convention.md`.

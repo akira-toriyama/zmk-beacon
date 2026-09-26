@@ -5,7 +5,7 @@
 # are added from the module root, guarded by the shield symbol.
 
 if(CONFIG_SHIELD_PROSPECTOR)
-  target_sources(app PRIVATE src/backlight_init.c)
+  target_sources(app PRIVATE src/backlight_init.c src/status_observer.c)
   target_sources_ifdef(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM app PRIVATE src/prospector_screen.c)
 endif()
 
