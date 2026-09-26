@@ -1,0 +1,189 @@
+name: Release
+
+# On every push to main (a merged PR), glyph walks main since the last v* tag
+# (squash-safe: each merge point is expanded into its pull request's
+# pre-squash commits), computes the next version and the release notes in one
+# walk, and upserts the repository's single rolling DRAFT release. No tag is
+# created: publishing the draft by hand in the GitHub UI creates it. Merging
+# more grows the draft; unpublished versions never multiply.
+# workflow_dispatch with dry_run=true is a full preview (verdict + notes +
+# firmware as an artifact) that writes no draft and consumes no version.
+# Convention: https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md
+#
+# The firmware comes from the same reusable as CI (zmk-build.yml), so the
+# release cannot build something CI did not. Jobs: version (verdict + draft
+# upsert) -> build (reusable) -> draft (asset upload).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only (no draft; firmware and notes as an artifact)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Least privilege: `version` (glyph upserts the draft) and `draft` (asset
+# upload) write releases; `build` reads only.
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release: ${{ steps.verdict.outputs.release }}
+      version: ${{ steps.verdict.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # glyph reads tags and the walk range from local git: full history.
+          fetch-depth: 0
+          # Every write goes through glyph/gh with GH_TOKEN, never git push;
+          # do not leave the checkout token in .git/config.
+          persist-credentials: false
+
+      # glyph comes from its own composite install (checksum + provenance
+      # verified). The action pin and the binary version move together.
+      - uses: akira-toriyama/glyph/.github/actions/install@v4.0.0
+        with:
+          version: v4.0.0
+          token: ${{ github.token }}
+
+      # One walk yields the version and the notes together (separate bump and
+      # notes calls could straddle a merge). Outside a dry run the same call
+      # upserts the rolling draft. Exit 1 is glyph's uniform soft no-release;
+      # it folds into a successful no-op. On a none verdict glyph also deletes
+      # a leftover draft.
+      - name: Compose the verdict and upsert the rolling DRAFT
+        id: verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          args=(release --json)
+          if [ "$DRY_RUN" = "true" ]; then
+            args=(release --dry-run --json)
+          fi
+          status=0
+          glyph "${args[@]}" > "$RUNNER_TEMP/verdict.json" 2> "$RUNNER_TEMP/verdict.err" || status=$?
+          cat "$RUNNER_TEMP/verdict.err" >&2
+          if [ "$status" -eq 1 ]; then
+            reason="$(jq -r '.reason // empty' "$RUNNER_TEMP/verdict.json" 2>/dev/null || true)"
+            echo "::notice::${reason:-Nothing to release.}"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+          tag="$(jq -r .tag "$RUNNER_TEMP/verdict.json")"
+          jq -r .body "$RUNNER_TEMP/verdict.json" > RELEASE_NOTES.md
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag"     >> "$GITHUB_OUTPUT"
+          echo "verdict: $tag (draft $(jq -r .action "$RUNNER_TEMP/verdict.json"))"
+
+      # The notes as an artifact, for the dry-run preview and the draft job's
+      # summary (the draft body itself is written by glyph).
+      - name: Upload release notes
+        if: steps.verdict.outputs.release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.md
+
+  build:
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    uses: ./.github/workflows/zmk-build.yml
+
+  draft:
+    needs: [version, build]
+    if: needs.version.outputs.release == 'true'
+    # Assets only: upload the firmware and prune anything outside the
+    # allowlist. The draft itself (create / update / stale deletion / target)
+    # is glyph's, in the `version` job.
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # No checkout here (artifact download only), so gh cannot read the repo
+      # from a git remote: name it.
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      # download-artifact expands to <path>/<artifact name>/<file>.
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+
+      - name: Collect firmware + notes
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          # Public repository: release assets are an explicit allowlist, never
+          # a glob, so a future build.yaml entry cannot leak into a public
+          # release unnoticed.
+          for f in prospector; do
+            cp "dist/$f/$f.uf2" "out/$f.uf2"
+          done
+          if [ -n "$(find dist -name '*.uf2' ! -name 'prospector.uf2' -print -quit)" ]; then
+            echo "::error::a .uf2 outside the allowlist was built; refusing to attach assets"
+            exit 1
+          fi
+          cp dist/release-notes/RELEASE_NOTES.md out/RELEASE_NOTES.md
+          echo "collected:"; ls -l out
+
+      - name: Upload preview (dry run)
+        if: github.event.inputs.dry_run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-preview-${{ needs.version.outputs.version }}
+          path: |
+            out/prospector.uf2
+            out/RELEASE_NOTES.md
+
+      - name: Dry-run summary
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          {
+            echo "## Dry run: ${VERSION} (no draft written)"
+            echo
+            echo '```'
+            cat out/RELEASE_NOTES.md
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Attach the firmware to the draft glyph upserted, then prune assets
+      # outside the allowlist: --clobber only overwrites same-named files, and
+      # anything left on the draft goes public the moment it is published.
+      # Published releases are never touched.
+      - name: Attach firmware to the rolling DRAFT
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          set -euo pipefail
+          gh release upload "$VERSION" out/prospector.uf2 --clobber
+          while IFS= read -r a; do
+            [ -z "$a" ] && continue
+            echo "::notice::removing asset $a (outside the allowlist) from draft $VERSION"
+            gh release delete-asset "$VERSION" "$a" --yes
+          done < <(gh release view "$VERSION" --json assets \
+            --jq '.assets[].name | select(. != "prospector.uf2")')
+
+          url="$(gh release view "$VERSION" --json url --jq .url)"
+          echo "::notice::Firmware attached to draft release ${VERSION} (unpublished, no tag yet). Review and publish by hand: ${url}"
+          {
+            echo "## Draft release ${VERSION}: firmware attached (unpublished)"
+            echo
+            echo "Merging to main keeps growing this draft."
+            echo "Review and publish it by hand (the tag is created then): ${url}"
+          } >> "$GITHUB_STEP_SUMMARY"

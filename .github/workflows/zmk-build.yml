@@ -1,0 +1,102 @@
+name: ZMK Build
+
+# Reusable build job, called by build.yml (CI) and release.yml (artifacts).
+#
+# Kept local instead of calling zmkfirmware/zmk's build-user-config.yml: the
+# fleet's zizmor policy (.github/zizmor.yml) hash-pins every third-party
+# `uses:`, so a moving @main ref would fail the gate and a commit pin would be
+# moved by Dependabot to a release tag older than the main branch the manifest
+# tracks. The build itself is what ZMK's reusable does for a config repo that
+# carries a zephyr/module.yml: the west topdir is a temp dir holding config/,
+# and the repository root is passed as -DZMK_EXTRA_MODULES (config/west.yml
+# says why the two stay apart). scripts/build.sh runs the same west build
+# locally; keep the arguments identical.
+#
+# The job name `build / Build (<board>, <shield>)` is what a main ruleset's
+# required status check references; keep it stable.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  # build.yaml is the single source of board/shield pairs (scripts/build.sh
+  # reads it with the same awk); the matrix is derived here, never written out
+  # a second time.
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.gen.outputs.include }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Reads build.yaml only, never pushes.
+          persist-credentials: false
+      - id: gen
+        name: Derive the build matrix from build.yaml
+        run: |
+          set -euo pipefail
+          include=$(awk '
+            /^[[:space:]]*#/ { next }
+            /^[[:space:]]*-[[:space:]]/ { if (b != "") print b "\t" s; b=""; s="" }
+            /^[[:space:]]*(-[[:space:]]*)?board:[[:space:]]/  { t=$0; sub(/.*board:[[:space:]]*/,  "", t); b=t }
+            /^[[:space:]]*(-[[:space:]]*)?shield:[[:space:]]/ { t=$0; sub(/.*shield:[[:space:]]*/, "", t); s=t }
+            END { if (b != "") print b "\t" s }
+          ' build.yaml | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {board: .[0], shield: .[1]})')
+          echo "include=$include" >> "$GITHUB_OUTPUT"
+          echo "matrix: $include"
+
+  build:
+    needs: matrix
+    runs-on: ubuntu-latest
+    # The toolchain image ZMK's own reusable workflow builds in.
+    container:
+      image: zmkfirmware/zmk-build-arm:stable
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    name: Build (${{ matrix.board }}, ${{ matrix.shield }})
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Build-only: west and the build write locally, never push.
+          persist-credentials: false
+
+      - name: West init + update (ZMK @ main)
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory '*'
+          ws="$RUNNER_TEMP/ws"
+          mkdir -p "$ws"
+          cp -R config "$ws/config"
+          cd "$ws"
+          west init -l config
+          west update --fetch-opt=--filter=tree:0
+          west zephyr-export
+
+      - name: Build firmware
+        env:
+          BOARD: ${{ matrix.board }}
+          SHIELD: ${{ matrix.shield }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ws"
+          west build -p -s zmk/app -b "$BOARD" -- \
+            -DSHIELD="$SHIELD" \
+            -DZMK_CONFIG="$RUNNER_TEMP/ws/config" \
+            -DZMK_EXTRA_MODULES="$GITHUB_WORKSPACE"
+          cp build/zephyr/zmk.uf2 "$GITHUB_WORKSPACE/$SHIELD.uf2"
+
+      # One artifact per shield, named after it, so release.yml can collect
+      # dist/<shield>/<shield>.uf2 without a mapping table.
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.shield }}
+          path: ${{ matrix.shield }}.uf2

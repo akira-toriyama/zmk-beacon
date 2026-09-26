@@ -1,0 +1,26 @@
+name: Build
+
+# Builds every target in build.yaml through the local reusable
+# (.github/workflows/zmk-build.yml), which release.yml shares, so the CI build
+# and the release artifacts cannot drift apart. The caller job is named `build`
+# so the status check reads `build / Build (<board>, <shield>)`.
+
+on:
+  # Pull requests build once (pull_request); main builds once per push. The
+  # push arm is limited to main so a PR branch is not built twice.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # Weekly: the manifest tracks zmk@main, so an upstream break surfaces here
+  # before it surfaces in canon's build. A failure notifies the repository
+  # owner without extra setup.
+  schedule:
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/zmk-build.yml

@@ -1,0 +1,22 @@
+name: Assign PR
+
+# Assign every opened pull request to the maintainer. Dependabot PRs are
+# skipped (their GITHUB_TOKEN is read-only and the step would fail); those are
+# assigned through .github/dependabot.yml instead.
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  assign:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign maintainer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-assignee akira-toriyama
