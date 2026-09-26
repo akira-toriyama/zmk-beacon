@@ -1,0 +1,26 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{yml,yaml,json,toml}]
+indent_style = space
+indent_size = 2
+
+[*.{sh,bash}]
+indent_style = space
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+# Markdown は行末の二空白が改行の意味を持つため trim しない
+[*.md]
+trim_trailing_whitespace = false
+
+# devicetree / ZMK keymap / C ヘッダは既存の書式を尊重し indent を強制しない
+[*.{keymap,dtsi,overlay,conf,h}]
+trim_trailing_whitespace = false

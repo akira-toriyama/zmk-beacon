@@ -1,0 +1,35 @@
+# Copyright (c) 2026 akira-toriyama
+# SPDX-License-Identifier: MIT
+#
+# Module-wide options. Every symbol carries the BEACON_ prefix so the module
+# can share a manifest with prospector-zmk-module (PROSPECTOR_*, ZMK_STATUS_ADV_*)
+# while canon migrates from it.
+
+menu "Beacon"
+
+config BEACON_BACKLIGHT_BRIGHTNESS
+    int "Backlight brightness at boot (percent)"
+    range 0 100
+    default 80
+    depends on LED_PWM
+    help
+      Duty cycle written to the pwm-leds backlight before the display driver
+      starts. The unit has no ambient light sensor, so this value is fixed for
+      the whole runtime.
+
+config BEACON_BOOTLOADER_ON_1200_BAUD
+    bool "Enter the UF2 bootloader on a 1200 baud touch"
+    depends on USB_CDC_ACM && RETENTION_BOOT_MODE
+    select CDC_ACM_DTE_RATE_CALLBACK_SUPPORT
+    help
+      When the host sets any CDC ACM port of the device to 1200 baud (for
+      example "stty -f /dev/cu.usbmodemXXXX 1200" on macOS), set the retained
+      boot mode to bootloader and warm-reboot 250 ms later, so the UF2
+      bootloader mounts its drive without a reset double-tap. The delay lets
+      the host's control transfer complete before the device resets.
+
+      Any program that sets the port to 1200 baud, a serial monitor included,
+      reboots the device. The prospector shield turns this on by default
+      because the unit has no key for &bootloader and no touch input.
+
+endmenu

@@ -1,0 +1,7 @@
+# Build matrix: the single source of board/shield pairs for CI
+# (.github/workflows/zmk-build.yml), the release (release.yml) and the local
+# build (scripts/build.sh). Entries follow ZMK's build.yaml include: form.
+---
+include:
+  - board: xiao_ble/nrf52840/zmk
+    shield: prospector

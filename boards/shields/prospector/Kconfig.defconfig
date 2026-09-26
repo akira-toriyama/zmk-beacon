@@ -1,0 +1,52 @@
+# Copyright (c) 2026 akira-toriyama
+# SPDX-License-Identifier: MIT
+#
+# Display defaults for the Prospector hardware (Waveshare 1.69" 240x280 ST7789V
+# over SPI3, RGB565, landscape). Values follow prospector-zmk-module v2.2.3
+# boards/shields/prospector_scanner/Kconfig.defconfig, which the same panel
+# runs on. ZMK_DISPLAY_STATUS_SCREEN_CUSTOM points ZMK at
+# src/prospector_screen.c.
+
+if SHIELD_PROSPECTOR
+
+config ZMK_KEYBOARD_NAME
+    default "Prospector"
+
+config ZMK_DISPLAY
+    default y
+
+config MIPI_DBI
+    bool
+    default y
+
+config SPI
+    default y
+
+choice ST7789V_PIXEL_FORMAT
+    default ST7789V_RGB565
+endchoice
+
+config LV_Z_VDB_SIZE
+    default 100
+
+config LV_DPI_DEF
+    default 261
+
+config LV_Z_BITS_PER_PIXEL
+    default 16
+
+choice LV_COLOR_DEPTH
+    default LV_COLOR_DEPTH_16
+endchoice
+
+config LV_COLOR_16_SWAP
+    default y
+
+choice ZMK_DISPLAY_STATUS_SCREEN
+    default ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
+endchoice
+
+config BEACON_BOOTLOADER_ON_1200_BAUD
+    default y
+
+endif

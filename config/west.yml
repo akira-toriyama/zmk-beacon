@@ -1,0 +1,27 @@
+# West manifest for building this module's own firmware (CI and
+# scripts/build.sh). The repository plays two roles in that build:
+#   1. zmk-config: this config/ directory (`west init -l config`).
+#   2. Zephyr module: the repository root (zephyr/module.yml), passed to the
+#      build as -DZMK_EXTRA_MODULES, the way ZMK's build-user-config reusable
+#      workflow does for any config repo that carries a module.yml.
+# The west topdir is kept outside the module root (a temp dir in CI,
+# ~/.cache/zmk-beacon/ws locally): zmk/, zephyr/ and modules/ must not land
+# inside the module tree.
+#
+# Consumers do not import this file; they add the repository as a project in
+# their own manifest (README).
+#
+# ZMK tracks main, not a tag: canon (the only consumer) builds against zmk@main
+# because its Cyboard board needs it, and this module has to compile on the
+# same tree.
+manifest:
+  remotes:
+    - name: zmkfirmware
+      url-base: https://github.com/zmkfirmware
+  projects:
+    - name: zmk
+      remote: zmkfirmware
+      revision: main
+      import: app/west.yml
+  self:
+    path: config

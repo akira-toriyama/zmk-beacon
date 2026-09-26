@@ -1,0 +1,6 @@
+name: zmk-beacon
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    board_root: .

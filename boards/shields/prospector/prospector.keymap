@@ -1,0 +1,19 @@
+/*
+ * Copyright (c) 2026 akira-toriyama
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ * ZMK requires a keymap; the device has no keys.
+ */
+
+#include <behaviors.dtsi>
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+
+        default_layer {
+            bindings = <&none>;
+        };
+    };
+};
