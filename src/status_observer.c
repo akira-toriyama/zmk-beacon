@@ -11,8 +11,8 @@
  * The active scan transmits SCAN_REQs only, from a fresh non-resolvable
  * private address.
  *
- * Only the prefix, the version byte and both halves' battery bytes are read.
- * 0 = no reading. No charging state is carried.
+ * Only the prefix, the version byte, both halves' battery bytes and the WPM
+ * byte are read. 0 = no reading. No charging state is carried.
  *
  * - ACTIVE scan: the broadcaster puts the payload in the AD of a
  *   non-connectable PDU, which a passive scan would receive too. The scan
@@ -123,12 +123,15 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     /* payload points into buf, valid only during this callback. */
     const uint8_t left = payload[BEACON_PAYLOAD_OFFSET_LEFT];
     const uint8_t right = payload[BEACON_PAYLOAD_OFFSET_RIGHT];
+    const uint8_t wpm = payload[BEACON_PAYLOAD_OFFSET_WPM];
 
     k_spinlock_key_t key = k_spin_lock(&status_lock);
+    /* WPM moves every second while typing; the change log is for the battery. */
     const bool changed = !status.received || status.left != left || status.right != right;
     status.received = true;
     status.left = left;
     status.right = right;
+    status.wpm = wpm;
     status.last_ms = k_uptime_get();
     k_spin_unlock(&status_lock, key);
 

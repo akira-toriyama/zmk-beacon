@@ -19,6 +19,9 @@ struct beacon_status {
      * reported since it connected, or it is disconnected). */
     uint8_t left;
     uint8_t right;
+    /* Typing speed in words per minute, 0 within about 6 s of the last key
+     * (status_payload.h). */
+    uint8_t wpm;
     /* k_uptime_get() of the last valid payload. */
     int64_t last_ms;
 };

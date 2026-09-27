@@ -6,6 +6,7 @@
 #   ./scripts/build.sh                  # every target in build.yaml
 #   ./scripts/build.sh prospector       # one shield (its board comes from build.yaml)
 #   ./scripts/build.sh --logging        # CONFIG_ZMK_USB_LOGGING=y variants (<shield>-logging.uf2)
+#   ./scripts/build.sh --sprite <gif>   # embed a GIF sprite (<shield>-sprite[-logging].uf2); local builds only
 #   ./scripts/build.sh --update         # force west update (refresh zmk@main and its modules)
 #   ./scripts/build.sh --clean          # delete the workspace and exit
 #
@@ -14,17 +15,25 @@
 #   ws/       west topdir: ws/config (a copy of this repo's config/), .west/,
 #             zmk/, zephyr/, modules/, build/<shield>/
 #   module/   this repository, synced with rsync (the Zephyr module root)
+#   sprite/   the GIF of the current --sprite run, as sprite.gif
 #   output/   the .uf2 files of the last run
 # The topdir stays outside the module root on purpose (config/west.yml). The
 # same build runs in CI (.github/workflows/zmk-build.yml); keep the west build
 # arguments identical.
 #
-# Output: ./firmware/<shield>[-logging].uf2 (gitignored). Only the targets built
-# in this run are copied, so a stale file never shadows a fresh one.
+# --sprite copies the GIF into the workspace (never into the repository: sprite
+# GIFs are personal files, .gitignore) and passes it to the build as
+# CONFIG_BEACON_SPRITE_GIF. CI and the release never build with a sprite.
+#
+# Output: ./firmware/<shield>[-sprite][-logging].uf2 (gitignored). Only the
+# targets built in this run are copied, so a stale file never shadows a fresh
+# one.
 #
 # Environment: ZMK_WS (workspace), ZMK_IMAGE (build image).
 set -euo pipefail
 
+# A relative --sprite path is the caller's, so keep the caller's directory.
+CALLER_DIR="$PWD"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
@@ -34,18 +43,29 @@ TOP="$WS/ws"
 MOD="$WS/module"
 FORCE_UPDATE=0
 LOGGING=0
+SPRITE=""
 
 SHIELDS=()
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --clean)   echo "removing workspace: $WS"; rm -rf "$WS"; exit 0 ;;
     --update)  FORCE_UPDATE=1 ;;
     --logging) LOGGING=1 ;;
+    --sprite)
+      if [ $# -lt 2 ] || [ -z "$2" ]; then echo "--sprite needs a GIF path" >&2; exit 2; fi
+      SPRITE="$2"; shift ;;
     -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,"");print;next} NR>1{exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
-    -*) echo "unknown option: $arg" >&2; exit 2 ;;
-    *)  SHIELDS+=("$arg") ;;
+    -*) echo "unknown option: $1" >&2; exit 2 ;;
+    *)  SHIELDS+=("$1") ;;
   esac
+  shift
 done
+
+case "$SPRITE" in "" | /*) ;; *) SPRITE="$CALLER_DIR/$SPRITE" ;; esac
+if [ -n "$SPRITE" ] && [ ! -r "$SPRITE" ]; then
+  echo "--sprite: cannot read $SPRITE" >&2
+  exit 1
+fi
 
 # "board<TAB>shield" per build.yaml include: entry (board/shield in either
 # order, comment lines skipped). The same awk derives the CI matrix in
@@ -94,13 +114,24 @@ mkdir -p "$TOP/config" "$MOD"
 rsync -a --delete --exclude '/.git' --exclude '/.claude/' --exclude '/firmware/' "$REPO"/ "$MOD"/
 rsync -a --delete "$REPO"/config/ "$TOP"/config/
 
+# A fixed name inside the container: the path goes through an unquoted word
+# list below, and the GIF's own name may hold spaces.
+SPRITE_IN_CONTAINER=""
+rm -rf "$WS/sprite"
+if [ -n "$SPRITE" ]; then
+  mkdir -p "$WS/sprite"
+  cp "$SPRITE" "$WS/sprite/sprite.gif"
+  SPRITE_IN_CONTAINER="/workspace/sprite/sprite.gif"
+fi
+
 NEED_UPDATE=0
 [ ! -d "$TOP/.west" ]     && NEED_UPDATE=1
 [ ! -d "$TOP/zmk/app" ]   && NEED_UPDATE=1
 [ "$FORCE_UPDATE" -eq 1 ] && NEED_UPDATE=1
 
 SUFFIX=""
-[ "$LOGGING" -eq 1 ] && SUFFIX="-logging"
+[ -n "$SPRITE" ] && SUFFIX="-sprite"
+[ "$LOGGING" -eq 1 ] && SUFFIX="$SUFFIX-logging"
 TARGET_LIST=""
 OUTPUTS=()
 for row in "${TARGETS[@]}"; do
@@ -113,6 +144,8 @@ echo "image       : $IMAGE"
 echo "west update : $([ "$NEED_UPDATE" -eq 1 ] && echo yes || echo 'no (cached)')"
 echo "targets     : $TARGET_LIST"
 [ "$LOGGING" -eq 1 ] && echo "logging     : CONFIG_ZMK_USB_LOGGING=y"
+# Not the source path: a GIF's file name usually names its subject.
+[ -n "$SPRITE" ] && echo "sprite      : $(wc -c <"$SPRITE" | tr -d ' ') byte GIF (copied to $WS/sprite/sprite.gif)"
 
 docker run --rm \
   -v "$WS:/workspace" \
@@ -121,6 +154,7 @@ docker run --rm \
   -e NEED_UPDATE="$NEED_UPDATE" \
   -e TARGETS="$TARGET_LIST" \
   -e LOGGING="$LOGGING" \
+  -e SPRITE="$SPRITE_IN_CONTAINER" \
   "$IMAGE" bash -c '
 set -euo pipefail
 git config --global --add safe.directory "*"
@@ -134,7 +168,9 @@ mkdir -p /workspace/output
 for t in $TARGETS; do
   BOARD="${t%%:*}"; SH="${t##*:}"
   EXTRA=""; SUFFIX=""
-  if [ "$LOGGING" = "1" ]; then EXTRA="-DCONFIG_ZMK_USB_LOGGING=y"; SUFFIX="-logging"; fi
+  # Kconfig strings keep their quotes through the shell: -DCONFIG_X="value".
+  if [ -n "$SPRITE" ]; then EXTRA="-DCONFIG_BEACON_SPRITE_GIF=\"$SPRITE\""; SUFFIX="-sprite"; fi
+  if [ "$LOGGING" = "1" ]; then EXTRA="$EXTRA -DCONFIG_ZMK_USB_LOGGING=y"; SUFFIX="$SUFFIX-logging"; fi
   echo "=== BUILD $BOARD / $SH$SUFFIX ==="
   # shellcheck disable=SC2086
   west build -p -s zmk/app -d "build/$SH$SUFFIX" -b "$BOARD" -- \

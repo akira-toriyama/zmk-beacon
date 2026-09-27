@@ -36,3 +36,9 @@
 #define BEACON_PAYLOAD_OFFSET_LAYER 6
 #define BEACON_PAYLOAD_OFFSET_LAYER_NAME 15
 #define BEACON_PAYLOAD_LAYER_NAME_LEN 4
+
+/* Typing speed in words per minute, ZMK's value as is (app/src/wpm.c: keycode
+ * releases only, recomputed every second over a window reset every 5 s, so it
+ * reads 0 1-6 s after the last one). wpm.c keeps it in a uint8_t, so a rate
+ * above 255 wraps there, not here. */
+#define BEACON_PAYLOAD_OFFSET_WPM 24

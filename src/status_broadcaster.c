@@ -38,6 +38,9 @@
  * - The payload goes out from the first start, with 0 for a half that has not
  *   reported yet (the observer shows "--" for 0). ZMK raises the battery event
  *   once per half after every (re)connect and with 0 on disconnect.
+ * - The WPM byte is read from ZMK's wpm.c on every refresh (Kconfig selects
+ *   ZMK_WPM). wpm.c counts keycode releases (zmk_keycode_state_changed) only:
+ *   &vkey, layer and mouse keys do not count.
  */
 
 #include <string.h>
@@ -54,6 +57,7 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/keymap.h>
+#include <zmk/wpm.h>
 
 #include "status_payload.h"
 
@@ -96,6 +100,7 @@ static atomic_t start_failures;
 static void fill_payload(void) {
     payload[BEACON_PAYLOAD_OFFSET_LEFT] = (uint8_t)atomic_get(&battery[0]);
     payload[BEACON_PAYLOAD_OFFSET_RIGHT] = (uint8_t)atomic_get(&battery[1]);
+    payload[BEACON_PAYLOAD_OFFSET_WPM] = (uint8_t)zmk_wpm_get_state();
 
     zmk_keymap_layer_index_t index = zmk_keymap_highest_layer_active();
     const char *name = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(index));
