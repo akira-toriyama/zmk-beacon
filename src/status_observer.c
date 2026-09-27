@@ -3,42 +3,31 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * BLE observer for the keyboard's status advertisement, the payload of
- * prospector-zmk-module v2.2.3 that canon's Imprint Dongle broadcasts. This
- * file owns the Bluetooth bring-up: CONFIG_ZMK_BLE=n compiles out ZMK's
- * bt_enable() callers (ble.c, and split/bluetooth/peripheral.c through
- * ZMK_SPLIT_BLE) and with them the connectable advertisement, so the device
- * never advertises. The active scan transmits SCAN_REQs only, from a fresh
- * non-resolvable private address.
+ * BLE observer for the keyboard's status advertisement (status_payload.h),
+ * which status_broadcaster.c sends from canon's Imprint Dongle. This file owns
+ * the Bluetooth bring-up: CONFIG_ZMK_BLE=n compiles out ZMK's bt_enable()
+ * callers (ble.c, and split/bluetooth/peripheral.c through ZMK_SPLIT_BLE) and
+ * with them the connectable advertisement, so the device never advertises.
+ * The active scan transmits SCAN_REQs only, from a fresh non-resolvable
+ * private address.
  *
- * Payload contract (manufacturer data, 26 bytes), read from the module at
- * v2.2.3 (include/zmk/status_advertisement.h:22-39,
- * src/status_advertisement.c:767-777) on 2026-09-26:
- *   [0..3]  FF FF AB CD (company id 0xFFFF, then the magic in byte order)
- *   [4]     version 0x22
- *   [5]     left half battery, [12] right half battery. The broadcaster maps
- *           them with CENTRAL_SIDE="AUX": ZMK split slot 0 goes to [5], slot 1
- *           to [12]. 0 = no reading.
- * No charging state is carried. Other fields are not read.
+ * Only the prefix, the version byte and both halves' battery bytes are read.
+ * 0 = no reading. No charging state is carried.
  *
- * - ACTIVE scan: while ZMK advertises, the broadcaster puts the payload in the
- *   scan response only (canon's FORCE_NAME_IN_AD workaround selects that
- *   layout); a passive scan receives nothing. When ZMK does not advertise, the
- *   module advertises on its own with the payload in the AD, which this scan
- *   receives as well, except in its idle "host connected" mode, where the AD
- *   carries the name only. That mode needs a connected BLE host profile, and
- *   canon's dongle has none (ZMK_BLE_PROFILE_COUNT = BT_MAX_PAIRED 2 - 2 split
- *   peripherals = 0, so ZMK always advertises; zmk app/include/zmk/ble.h).
+ * - ACTIVE scan: the broadcaster puts the payload in the AD of a
+ *   non-connectable PDU, which a passive scan would receive too. The scan
+ *   stays active so that a keyboard still on prospector-zmk-module v2.2.3
+ *   (same layout, carried in ZMK's scan response) is heard as well; passive
+ *   is a follow-up once no such keyboard remains (canon task t-xe2q).
  * - No duplicate filter: every BT_LE_SCAN_* helper sets FILTER_DUPLICATE, and
  *   the controller then reports each address and PDU type once, so later
  *   payload changes would never arrive. The parameters are spelled out here.
  * - The scan callback runs on the cooperative BT RX work queue (1200-byte
  *   stack without BT_SETTINGS): parse, copy under the spinlock, return. No
  *   logging and no LVGL there.
- * - Version filter: byte 4 is the module's major.minor only (0x22 for every
- *   2.2.x; the patch number sits in byte 7). A major or minor bump shows
- *   "no data" rather than wrong numbers; a patch bump passes unchecked, so the
- *   offsets above are re-read whenever canon bumps the module.
+ * - Version filter: the version byte is the layout's major.minor. A layout
+ *   change (t-xe2q) bumps it, and an old observer then shows "no data" rather
+ *   than wrong numbers.
  * - Any keyboard that sends this payload is accepted (keyboard_id is not
  *   filtered): one keyboard in range is assumed.
  */
@@ -56,21 +45,16 @@
 #include <zephyr/sys/util.h>
 
 #include "status_observer.h"
+#include "status_payload.h"
 
 LOG_MODULE_REGISTER(beacon_observer, LOG_LEVEL_INF);
 
 BUILD_ASSERT(IS_ENABLED(CONFIG_BT_OBSERVER), "the status observer needs CONFIG_BT_OBSERVER=y");
 
-#define PAYLOAD_LEN 26
-#define PAYLOAD_VERSION 0x22
-#define OFFSET_VERSION 4
-#define OFFSET_LEFT 5
-#define OFFSET_RIGHT 12
-
 #define SCAN_RETRY_MS 1000
 #define STATS_PERIOD_MS 60000
 
-static const uint8_t payload_prefix[] = {0xff, 0xff, 0xab, 0xcd};
+static const uint8_t payload_prefix[] = {BEACON_PAYLOAD_PREFIX_INIT};
 
 static const struct bt_le_scan_param scan_param = {
     .type = BT_LE_SCAN_TYPE_ACTIVE,
@@ -114,9 +98,9 @@ static void log_stats(struct k_work *work) {
 static bool find_payload(struct bt_data *data, void *user_data) {
     const uint8_t **payload = user_data;
 
-    if (data->type != BT_DATA_MANUFACTURER_DATA || data->data_len < PAYLOAD_LEN ||
+    if (data->type != BT_DATA_MANUFACTURER_DATA || data->data_len < BEACON_PAYLOAD_LEN ||
         memcmp(data->data, payload_prefix, sizeof(payload_prefix)) != 0 ||
-        data->data[OFFSET_VERSION] != PAYLOAD_VERSION) {
+        data->data[BEACON_PAYLOAD_OFFSET_VERSION] != BEACON_PAYLOAD_VERSION) {
         return true;
     }
 
@@ -137,8 +121,8 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     }
 
     /* payload points into buf, valid only during this callback. */
-    const uint8_t left = payload[OFFSET_LEFT];
-    const uint8_t right = payload[OFFSET_RIGHT];
+    const uint8_t left = payload[BEACON_PAYLOAD_OFFSET_LEFT];
+    const uint8_t right = payload[BEACON_PAYLOAD_OFFSET_RIGHT];
 
     k_spinlock_key_t key = k_spin_lock(&status_lock);
     const bool changed = !status.received || status.left != left || status.right != right;
