@@ -9,20 +9,21 @@ advertises, pairs or connects. Its USB-C carries power and one serial port,
 used only to reflash it.
 
 It is built for the Cyboard Imprint through its Imprint Dongle
-([akira-toriyama/canon](https://github.com/akira-toriyama/canon)), which today
-broadcasts with
-[t-ogura/prospector-zmk-module](https://github.com/t-ogura/prospector-zmk-module).
-This module replaces that dependency end to end: the display side first (the
-`prospector` shield here), then the keyboard side (the broadcaster).
+([akira-toriyama/canon](https://github.com/akira-toriyama/canon)). Both ends
+of the status advertisement are in this module: the `prospector` shield with
+the display, and the broadcaster for the keyboard's split central
+(`CONFIG_BEACON_STATUS_BROADCAST`), which replaced
+[t-ogura/prospector-zmk-module](https://github.com/t-ogura/prospector-zmk-module)
+on the Imprint Dongle.
 
 ## Status
 
-The `prospector` shield receives the status advertisement that
-prospector-zmk-module v2.2.3 sends from the keyboard, with its own BLE observer,
-and shows each half's battery. Run on the Prospector Dongle against canon's
-Imprint Dongle on 2026-09-26. Next: canon builds its Prospector Dongle from
-this module (canon task t-5gxp), then the keyboard-side broadcaster moves here
-(t-eray, t-k8pk) and a sprite joins the screen (t-rx4e).
+The `prospector` shield receives the status advertisement with its own BLE
+observer and shows each half's battery (on the Prospector Dongle since
+2026-09-26, 19 h without a gap). The broadcaster sends that advertisement
+from the Imprint Dongle on a second advertising set next to ZMK's own
+(measured on hardware 2026-09-27 as canon's t-eray spike). Next: a sprite on
+the screen (canon task t-rx4e).
 
 ## The screen
 
@@ -43,10 +44,12 @@ reports its first-paired half first (canon's CLAUDE.md, split peripheral slot).
 | Path | What |
 | --- | --- |
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
-| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery from the prospector-zmk-module v2.2.3 status payload. |
+| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery from the status payload. |
+| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms. |
+| `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes and the active layer's index and name are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
-| `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`). |
+| `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
 
 ## Flashing
 
@@ -91,6 +94,19 @@ include:
 
 `config/prospector.conf` in the consuming repository overrides any line of the
 shield's own `prospector.conf`.
+
+On the keyboard side, the split central's config (canon:
+`config/imprint_dongle.conf`) turns the broadcaster on:
+
+```
+CONFIG_BEACON_STATUS_BROADCAST=y
+CONFIG_BT_EXT_ADV_MAX_ADV_SET=2
+```
+
+The second line is required: the option selects `CONFIG_BT_EXT_ADV`, under
+which ZMK's own advertising takes one of the sets. Peripheral builds compile
+the broadcaster out. The Imprint Dongle keeps its double-tap into the
+bootloader; only the Prospector Dongle listens for 1200 baud.
 
 ## Building this repository
 

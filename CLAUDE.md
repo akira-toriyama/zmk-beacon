@@ -17,17 +17,18 @@ Japanese.
   zmk-config (`config/west.yml` + `build.yaml`) that CI and
   [scripts/build.sh](scripts/build.sh) build.
 - Consumer: [akira-toriyama/canon](https://github.com/akira-toriyama/canon)
-  will pin this repository in its `config/west.yml` (canon task t-5gxp). Until
-  the keyboard-side broadcaster lands here (t-k8pk, after the t-eray spike),
-  the Imprint Dongle keeps broadcasting with t-ogura/prospector-zmk-module, and
-  canon's manifest carries both modules. Symbol names here were chosen for that
-  overlap: Kconfig `BEACON_*` (theirs: `PROSPECTOR_*`, `ZMK_STATUS_ADV_*`) and
-  the shield `prospector` (theirs: `prospector_scanner`).
+  pins this repository by commit in its `config/west.yml` for both ends: the
+  Prospector Dongle (shield `prospector`, since 2026-09-26) and the Imprint
+  Dongle's broadcaster (`CONFIG_BEACON_STATUS_BROADCAST`, canon task t-k8pk),
+  which replaced t-ogura/prospector-zmk-module there. Symbol names were chosen
+  while both modules shared canon's manifest: Kconfig `BEACON_*` (theirs:
+  `PROSPECTOR_*`, `ZMK_STATUS_ADV_*`) and the shield `prospector` (theirs:
+  `prospector_scanner`).
 - Roadmap = furrow, projects epic e-7n2v: t-5gxp (own BLE observer + battery
-  screen + BLE silence, run on hardware 2026-09-26; then the canon switch and
-  a 24 h run) → t-eray (second advertising set spike)
-  → t-k8pk (broadcaster, drop the t-ogura module from canon) → t-rx4e (GIF
-  sprite) → t-mxb7 (sprite updates).
+  screen + BLE silence, on hardware 2026-09-26, 19 h run) → t-eray (second
+  advertising set spike, on hardware 2026-09-27) → t-k8pk (broadcaster, drop
+  the t-ogura module from canon) → t-rx4e (GIF sprite) → t-mxb7 (sprite
+  updates).
 
 ## Fragile points
 
@@ -58,20 +59,31 @@ Japanese.
   2026-09-26). `CONFIG_BOARD_SERIAL_BACKEND_CDC_ACM=n` keeps the board's
   console set off, so the port is silent unless `--logging`
   (`CONFIG_ZMK_USB_LOGGING=y`) turns the console on.
-- **The status payload is a contract with prospector-zmk-module v2.2.3**, the
-  broadcaster on canon's Imprint Dongle until t-k8pk. `src/status_observer.c`
-  reads bytes 0-4 (`FF FF AB CD`, version `0x22`), 5 (left half) and 12 (right
-  half); its header cites the module lines. Byte 4 is major.minor only, so a
-  patch bump of the module in canon's `config/west.yml` passes the filter:
-  re-read `include/zmk/status_advertisement.h` and the `CENTRAL_SIDE="AUX"`
-  branch of `src/status_advertisement.c` on every bump.
+- **The status payload is `src/status_payload.h`**, shared by the broadcaster
+  and the observer: 26 bytes, the prospector-zmk-module v2.2.3 layout kept
+  byte for byte (`FF FF AB CD`, version `0x22`, left half at 5, right at 12,
+  layer index at 6, 4-byte layer name at 15). Only those bytes are written and
+  read. A layout change is a new version byte (t-xe2q) and both ends move in
+  one commit; canon then bumps its pin once.
+- **The broadcaster runs only on a split central** (`ZMK_SPLIT_ROLE_CENTRAL`),
+  so this repository's own build (`build.yaml`: the prospector shield) never
+  compiles it. canon's `imprint_dongle` build is what checks it: after a change
+  in `src/status_broadcaster.c`, build canon against the branch before
+  merging. It selects `BT_EXT_ADV`; the consumer must set
+  `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2` (a `BUILD_ASSERT` in the source fails the
+  build otherwise). The set is created from a settings commit handler at
+  commit priority 1, after ZMK's first `bt_le_adv_start()`; the source header
+  explains the ordering and the own work queue. Hardware 2026-09-27 (t-eray):
+  reconnects unchanged in 5 reboots and a half power cycle, 0 advertising
+  errors, 255-269 payloads a minute at the Prospector Dongle.
 - **The observer owns Bluetooth.** `CONFIG_ZMK_BLE=n` (shield conf) removes
   ZMK's `bt_enable()` callers, its connectable advertisement (a Mac saw it as
   "Prospect", HID + BAS, before 2026-09-26), SMP and settings; the shield conf
-  sets `BT=y` and `BT_OBSERVER=y` by hand. Keep the scan ACTIVE (the payload is
-  in the scan response while ZMK advertises on the keyboard) and without
-  `BT_LE_SCAN_OPT_FILTER_DUPLICATE`, which every `BT_LE_SCAN_*` helper sets
-  (the controller then reports each address once and the numbers freeze).
+  sets `BT=y` and `BT_OBSERVER=y` by hand. The scan is ACTIVE (a keyboard on
+  prospector-zmk-module carries the payload in ZMK's scan response; the own
+  broadcaster's AD would do with a passive scan, a follow-up under t-xe2q) and
+  without `BT_LE_SCAN_OPT_FILTER_DUPLICATE`, which every `BT_LE_SCAN_*` helper
+  sets (the controller then reports each address once and the numbers freeze).
   Measured 2026-09-26: 475-507 payloads a minute; a 70 s CoreBluetooth scan
   from the Mac saw no advertisement from the device. The build warns that the
   `SETTINGS_NVS` choice has no selection: the board defconfig selects it and
@@ -93,8 +105,7 @@ Japanese.
   Kconfig drops a `=y` whose dependency broke with only a warning
   (`was assigned the value 'y' but got the value 'n'`), so after a ZMK bump
   check `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y` in
-  `~/.cache/zmk-beacon/ws/build/prospector/zephyr/.config` (canon
-  `patches/modules/prospector-zmk-module/README.md`, Zephyr
+  `~/.cache/zmk-beacon/ws/build/prospector/zephyr/.config` (Zephyr
   `scripts/kconfig/kconfig.py:123-125`, read 2026-09-26).
 - **Both dongles mount as `XIAO-SENSE`.** Never put the Imprint Dongle and the
   Prospector Dongle in the bootloader at the same time; canon's
