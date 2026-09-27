@@ -45,7 +45,8 @@ Japanese.
   `boards/shields/prospector/prospector.conf` → the consumer's
   `config/prospector.conf`. Later wins: the board sets `CONFIG_ZMK_USB=y` and
   the shield conf's `=n` left it unset in `.config`. Shield-level facts (USB
-  layout, display memory) live in the shield conf; canon-only facts (e.g.
+  layout, display buffers) live in the shield conf, the LVGL pool in the
+  shield's `Kconfig.defconfig` (below); canon-only facts (e.g.
   `CONFIG_ZMK_RGB_UNDERGLOW=n`, forced on by the Cyboard module) stay in
   canon's `config/prospector.conf`.
 - **`CONFIG_USB_DEVICE_PRODUCT="Prospector Dongle"` is a contract** with
@@ -62,9 +63,11 @@ Japanese.
 - **The status payload is `src/status_payload.h`**, shared by the broadcaster
   and the observer: 26 bytes, the prospector-zmk-module v2.2.3 layout kept
   byte for byte (`FF FF AB CD`, version `0x22`, left half at 5, right at 12,
-  layer index at 6, 4-byte layer name at 15). Only those bytes are written and
-  read. A layout change is a new version byte (t-xe2q) and both ends move in
-  one commit; canon then bumps its pin once.
+  layer index at 6, 4-byte layer name at 15, WPM at 24). Only those bytes are
+  written and read. WPM (added 2026-09-27 for the sprite) is a v2.2.3 field,
+  so the version byte stayed `0x22`; `BEACON_STATUS_BROADCAST` selects
+  `ZMK_WPM` for it. A layout change is a new version byte (t-xe2q) and both
+  ends move in one commit; canon then bumps its pin once.
 - **The broadcaster runs only on a split central** (`ZMK_SPLIT_ROLE_CENTRAL`),
   so this repository's own build (`build.yaml`: the prospector shield) never
   compiles it. canon's `imprint_dongle` build is what checks it: after a change
@@ -91,14 +94,19 @@ Japanese.
 - **LVGL only from the display work queue.** LVGL is not thread-safe
   (`LV_USE_OS=0`); the scan callback runs on the BT RX work queue. The screen
   reads `beacon_status_get()` from an `lv_timer` created in
-  `zmk_display_status_screen()`, which runs on ZMK's display queue.
+  `zmk_display_status_screen()`, which runs on ZMK's display queue; the
+  sprite's 10 ms timer and `beacon_sprite_set_speed()` (called from that
+  refresh timer) run there too.
 - **A logging build drops its boot log unless the port is opened within a
   second or so.** ZMK sets the CDC ACM ring buffer to 1024 bytes and the boot
   banner fills it, so later lines are lost until the host reads. For a boot
   log, build once by hand with `-DCONFIG_USB_CDC_ACM_RINGBUF_SIZE=8192` next to
   `-DCONFIG_ZMK_USB_LOGGING=y`. Read the port at any rate but 1200 (see
-  below). Logging builds print one observer line (payloads per minute) and one
-  screen line (what it shows) every minute.
+  below). Logging builds print one observer line (payloads per minute), one
+  screen line (what it shows) and, with a sprite, one sprite line (frames
+  decoded, invalidations, screen renders and their average time, speed, LVGL
+  pool allocated and peak) every minute. "Invalidated" is not "shown": LVGL
+  merges invalidations between two renders, so renders is the shown count.
 - **1200 baud bootloader entry** (`BEACON_BOOTLOADER_ON_1200_BAUD`, default y
   under the shield): `bootmode_set()` + warm reboot, not `sys_reboot(0x57)`;
   the reasons are in [src/bootloader_on_1200_baud.c](src/bootloader_on_1200_baud.c).
@@ -112,16 +120,75 @@ Japanese.
   `flash-watch.sh` / `flash-reset.sh` copy `imprint_dongle.uf2` onto any
   `XIAO-SENSE` mount.
 - **`LV_CONF_MINIMAL=y`** is implied by ZMK's display Kconfig, so every LVGL
-  widget and font is opt-in in `prospector.conf` (`CONFIG_LV_USE_*`,
-  `CONFIG_LV_FONT_*`). A widget used without its symbol fails at link time,
-  not in Kconfig.
-- **Memory** (observer + battery screen, 2026-09-26, zmk 9ebbeff0): FLASH
-  293,516 B of 788 KB (36.38%), RAM 177,948 B of 256 KB (67.88%); `--logging`
-  39.62% / 71.64%. The skeleton had 363,948 B / 202,740 B with ZMK's BLE
-  stack and Montserrat 16 + 28; Montserrat 48, now the only font linked, is
-  about 97 KB of flash (from its source tables). RAM is mostly LVGL: VDB
-  30% × 2 and the 48 KiB pool. A GIF decoder will draw on that pool (t-rx4e,
-  t-mxb7).
+  widget and font is opt-in: in `prospector.conf` (`CONFIG_LV_USE_*`,
+  `CONFIG_LV_FONT_*`), or selected by a `BEACON_*` symbol (`BEACON_SPRITE`
+  selects the image and GIF widgets). A widget used without its symbol fails
+  at link time, not in Kconfig.
+- **Sprite images are local-only.** The GIF is a personal file:
+  `CONFIG_BEACON_SPRITE_GIF` names an absolute path, `build.sh --sprite`
+  copies it to `~/.cache/zmk-beacon/sprite/sprite.gif`, and the build embeds
+  it as `build/<target>/modules/zmk-beacon/beacon_sprite_gif.inc` (build tree
+  only, `generate_inc_file_for_target`). `.gitignore` has `*.[gG][iI][fF]`
+  (`core.ignorecase` is false on this case-sensitive volume); never
+  commit the GIF, an `.inc`, frames or previews, and never write its path or
+  its subject into this repository. CI and `release.yml` build without one,
+  so no release carries a sprite image.
+- **`CONFIG_LV_GIF_CACHE_DECODE_DATA=y` is a correctness requirement**
+  (`BEACON_SPRITE` selects it): in this LVGL (9.3.0-dev, zmk 9ebbeff0) the
+  `=n` `read_image_data()` bound check is `frm_off + str_len >= frm_size`
+  (upstream corrected it to `>` in 660b41df9), so every frame's last LZW token
+  fails, the stream desynchronizes and the code table leaks. The `=y` path is
+  a separate implementation: host-checked against Pillow 12 on 2026-09-27
+  with the real `gifdec.c` from the build cache, three full passes of the
+  test GIF pixel-identical, 0 stray pixels. The harness lived in the session
+  scratchpad, not here.
+- **Two canvas fixes live in `src/sprite.c`, not in gifdec**: `gif_open()`
+  fills the canvas with the background colour at alpha 0xFF, which stays
+  visible wherever no frame paints (an opaque band of 6 rows with the test
+  GIF), so the canvas is cleared to transparent after open; and at the
+  trailer gifdec seeks back to `anim_start` without clearing, so the player
+  clears the canvas when the read pointer moves backwards (otherwise stray
+  pixels under the first frames of every pass, host check 2026-09-27).
+  `loop_count` is 1 for the first decode (a GIF without frames then returns 0
+  instead of spinning in gd_get_frame() forever) and 0 afterwards (loop
+  forever; gifdec would stop after one pass of a GIF without a NETSCAPE
+  block). The stock `lv_gif` has none of this and invalidates every frame;
+  about half the consecutive canvases of the test GIF were identical, which
+  the player's FNV-1a hash skips.
+- **The stretched `lv_image` must not report an extra draw area**:
+  `LV_IMAGE_ALIGN_STRETCH` scales around pivot (0,0), and lv_image's own
+  `LV_EVENT_REFR_EXT_DRAW_SIZE` handler transforms the already stretched size
+  again, claiming about one object size on every side. `lv_obj_invalidate()`
+  and `lv_obj_invalidate_area()` both widen to that area, so every changed
+  frame redrew the whole panel: hardware 2026-09-27, about 67,000 px and
+  152 ms a frame (18 ms per 16,800-px flush, SPIM at 16 MHz: 20 MHz in the
+  overlay is not an nRF frequency), 5 renders a second. `src/sprite.c` sets
+  the claim back to 0 in a callback that runs after the class handler. After
+  that fix, same day: 106 ms a render of the 2x sprite box (about 35 ms of it
+  flush, the rest LVGL's software transform), 209 renders in 30 s of play at
+  100 %, the observer unchanged at 262-273 payloads a minute. The player keeps
+  the tempo by merging frames when drawing falls behind.
+- **The WPM path works end to end** (hardware 2026-09-27): with the
+  broadcaster's image on the Imprint Dongle, typing moved the sprite's logged
+  speed to 148 % (WPM 24) and it froze again when typing stopped.
+- **The LVGL pool is sized in `Kconfig.defconfig`, not in `prospector.conf`**:
+  `LV_Z_MEM_POOL_SIZE` defaults to 90112 (88 KiB) with `BEACON_SPRITE` and to
+  49152 without; a `.conf` line, the consumer's included, would fix it for
+  both. The sprite's one allocation is `sizeof(gd_GIF)` + 5·w·h + 16 KiB
+  (about 58.5 KB for a 90x90 px GIF, exact number in the sprite's boot log
+  line); `CMakeLists.txt` refuses a GIF whose allocation plus an 8 KiB reserve
+  for the screen exceeds the pool. Hardware 2026-09-27: the pool peaked 4.9 KB
+  above the decoder's allocation. 96 KiB would put a logging sprite build over
+  90% RAM.
+- **Memory** (2026-09-27, zmk 9ebbeff0, from the build logs): plain
+  FLASH 293,516 B of 788 KB (36.38%), RAM 177,948 B of 256 KB (67.88%),
+  unchanged by the sprite change; `--logging` 39.62% / 71.64%
+  (2026-09-26). A sprite build adds the GIF's own size plus about 7 KB of
+  code to FLASH and 40 KiB of pool to RAM: with an 80 KB GIF about 48% /
+  84%, and 51% / 87% with logging. The skeleton had 363,948 B / 202,740 B with ZMK's BLE stack and
+  Montserrat 16 + 28; Montserrat 48, the only font linked, is about 97 KB of
+  flash (from its source tables). RAM is mostly LVGL: VDB 30% × 2 and the
+  pool.
 - **Fleet-managed files, do not edit here**:
   `.github/workflows/{actionlint,commit-lint,repo-policy,taplo,task-status,version-preview,zizmor}.yml`,
   `.github/zizmor.yml`, `.github/dependabot.yml`, `docs/commit-convention.md`.
@@ -131,10 +198,11 @@ Japanese.
 
 ## Build
 
-- `./scripts/build.sh [shield] [--logging] [--update]` — Docker
-  (`zmkfirmware/zmk-build-arm:stable`), workspace `~/.cache/zmk-beacon`, output
-  `firmware/` (gitignored). `--update` refreshes zmk@main; without it the
-  cached checkout is reused.
+- `./scripts/build.sh [shield] [--logging] [--sprite <gif>] [--update]` —
+  Docker (`zmkfirmware/zmk-build-arm:stable`), workspace `~/.cache/zmk-beacon`,
+  output `firmware/<shield>[-sprite][-logging].uf2` (gitignored). `--update`
+  refreshes zmk@main; without it the cached checkout is reused. `--sprite` is
+  local-only (above); canon's `scripts/build-zmk.sh` carries the same flag.
 - CI: `build.yml` → `zmk-build.yml` (local reusable; the file says why not
   ZMK's). `release.yml`: glyph computes the next version and notes on every
   push to `main` and upserts one rolling draft release with `prospector.uf2`

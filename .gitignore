@@ -4,6 +4,9 @@
 # scripts/build.sh output
 /firmware/
 
+# Sprite GIFs are personal files: never committed, nor anything derived from them
+*.[gG][iI][fF]
+
 # Python
 __pycache__/
 *.pyc

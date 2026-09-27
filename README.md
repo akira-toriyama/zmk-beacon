@@ -22,8 +22,9 @@ The `prospector` shield receives the status advertisement with its own BLE
 observer and shows each half's battery (on the Prospector Dongle since
 2026-09-26, 19 h without a gap). The broadcaster sends that advertisement
 from the Imprint Dongle on a second advertising set next to ZMK's own
-(measured on hardware 2026-09-27 as canon's t-eray spike). Next: a sprite on
-the screen (canon task t-rx4e).
+(measured on hardware 2026-09-27 as canon's t-eray spike). A local build can
+embed a GIF sprite that plays above the readings at the keyboard's typing
+speed (canon task t-rx4e; shown on the Prospector Dongle 2026-09-27).
 
 ## The screen
 
@@ -39,6 +40,42 @@ the bottom-right.
 Which half is "left" is decided on the keyboard side: the Imprint Dongle
 reports its first-paired half first (canon's CLAUDE.md, split peripheral slot).
 
+## The sprite
+
+With `CONFIG_BEACON_SPRITE_GIF="<absolute path>"` the build embeds a GIF and
+the screen plays it above the battery readings, top-centred and scaled by the
+largest integer factor that fits between the top edge and the digits (a
+90x90 px GIF shows at 2x on the 280x240 panel). The tempo follows the keyboard:
+
+| Keyboard                                              | Sprite                                                                 |
+| ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| Typed on                                              | The GIF's own tempo plus 2 % per WPM, capped at 300 % (100 WPM and up) |
+| No typed key for about 30-36 s                        | Frozen on the current frame                                            |
+| Not heard for a minute, or not yet since boot         | Frozen                                                                 |
+
+The first 30 s after boot count as typing. WPM is what ZMK computes on the
+Imprint Dongle (`CONFIG_ZMK_WPM`, selected by the broadcaster) from keycode
+releases only, so `&vkey`, layer and mouse keys do not count; it travels in
+byte 24 of the status payload and reads 0 1-6 s after the last typed key.
+The sprite freezes 30 s after the last payload with WPM above 0 (ZMK's default
+idle timeout).
+
+Limits:
+
+- GIF89a with a global colour table only (what LVGL's gifdec opens), at most
+  280x185 px (the box above the digits), with at least one frame. The build
+  rejects anything else, and a GIF whose decoder state (5 bytes per pixel
+  plus 16 KiB) does not fit the LVGL pool next to the screen; the error names
+  the `CONFIG_LV_Z_MEM_POOL_SIZE` that would fit. The shield's pool grows from
+  48 KiB to 88 KiB when a sprite is configured, room for about 110x110 px.
+- Frame delays of 0 and 10 ms play as 100 ms, as browsers do.
+- gifdec ignores disposal 3 (restore to previous), and a frame without its
+  own graphic control extension reuses the previous frame's delay and
+  transparency. Such a GIF shows trails or holes on the device.
+- The GIF is a personal file and never enters a repository: build locally with
+  `./scripts/build.sh --sprite <gif>` (`firmware/prospector-sprite.uf2`;
+  `--logging` combines). CI and the release build without a sprite.
+
 ## What the module provides
 
 | Path | What |
@@ -46,10 +83,11 @@ reports its first-paired half first (canon's CLAUDE.md, split peripheral slot).
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
 | `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery from the status payload. |
 | `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms. |
-| `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes and the active layer's index and name are used. |
-| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above. |
+| `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes, the active layer's index and name, and the WPM byte are used. |
+| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above, and the sprite's tempo from the payload's WPM. |
+| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with speed control, one invalidation per changed frame and an endless loop. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
-| `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
+| `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
 
 ## Flashing
 
@@ -113,6 +151,7 @@ bootloader; only the Prospector Dongle listens for 1200 baud.
 ```sh
 ./scripts/build.sh              # every target in build.yaml -> firmware/prospector.uf2
 ./scripts/build.sh --logging    # firmware/prospector-logging.uf2 (CONFIG_ZMK_USB_LOGGING=y, console on the serial port)
+./scripts/build.sh --sprite ~/a.gif  # firmware/prospector-sprite.uf2 (local only; --logging combines to -sprite-logging)
 ./scripts/build.sh --update     # refresh zmk@main and its modules first
 ```
 
