@@ -46,20 +46,13 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 #define LOG_EVERY_MS 60000
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
-/* Sprite tempo in percent of the GIF's own: always at least SPEED_BASE (the
- * user wants it moving, keyboard heard or not; 2026-09-28), plus SPEED_PER_WPM
- * per WPM (50 WPM, an everyday pace, doubles it), capped at SPEED_MAX
- * (100 WPM; beyond that the decoder only outruns the draw). ZMK's WPM counts
- * keycode releases only (&vkey and layer keys do not count) and reads 0 1-6 s
- * after the last one, which brings the sprite back to SPEED_BASE. A WPM from
- * a payload older than WPM_MAX_AGE_MS counts as 0: the observer keeps the last
- * value when payloads stop. The age assumes the broadcaster's
- * BEACON_STATUS_BROADCAST_INTERVAL_MS (200 ms in canon) stays well under it;
- * near or above it the sprite would pulse between fast and SPEED_BASE. */
-#define SPRITE_SPEED_BASE_PCT 100
-#define SPRITE_SPEED_PER_WPM_PCT 2
-#define SPRITE_SPEED_MAX_PCT 300
-#define SPRITE_WPM_MAX_AGE_MS 5000
+/* Sprite tempo in percent of the GIF's own, fixed: the user's choice
+ * (2026-09-28) after seeing the trade on hardware. Decoding costs about 11 ms
+ * a GIF frame and a render of the 2x box about 105 ms, so a faster tempo takes
+ * renders away: 7 renders a second at 100 %, 6 at 150 % (hardware 2026-09-28:
+ * 1,790 frames decoded and 363 renders a minute), and 3.5 at about 2.8x with a
+ * catch-up limit of 16 (sprite.c CATCHUP_MAX). No link to the keyboard. */
+#define SPRITE_SPEED_PCT 150
 /* Every character a label can show; the sprite box ends where their ink begins. */
 #define LABEL_CHARS "0123456789%-"
 #endif
@@ -113,13 +106,6 @@ static void refresh(lv_timer_t *timer) {
     const bool left_changed = show(&left_side, fresh, now.left);
     const bool right_changed = show(&right_side, fresh, now.right);
 
-#if IS_ENABLED(CONFIG_BEACON_SPRITE)
-    const unsigned int wpm = now.received && age_ms <= SPRITE_WPM_MAX_AGE_MS ? now.wpm : 0;
-
-    beacon_sprite_set_speed(
-        MIN(SPRITE_SPEED_BASE_PCT + SPRITE_SPEED_PER_WPM_PCT * wpm, SPRITE_SPEED_MAX_PCT));
-#endif
-
     if (IS_ENABLED(CONFIG_LOG) &&
         (left_changed || right_changed || now_ms - logged_ms >= LOG_EVERY_MS)) {
         logged_ms = now_ms;
@@ -170,7 +156,7 @@ lv_obj_t *zmk_display_status_screen(void) {
         .x2 = lv_display_get_horizontal_resolution(NULL) - 1,
         .y2 = label_ink_top(lv_display_get_vertical_resolution(NULL)) - 1,
     };
-    beacon_sprite_create(screen, &box);
+    beacon_sprite_create(screen, &box, SPRITE_SPEED_PCT);
 #endif
 
     make_label(&left_side, screen, LV_ALIGN_BOTTOM_LEFT, MARGIN_PX);

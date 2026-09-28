@@ -63,11 +63,11 @@ Japanese.
 - **The status payload is `src/status_payload.h`**, shared by the broadcaster
   and the observer: 26 bytes, the prospector-zmk-module v2.2.3 layout kept
   byte for byte (`FF FF AB CD`, version `0x22`, left half at 5, right at 12,
-  layer index at 6, 4-byte layer name at 15, WPM at 24). Only those bytes are
-  written and read. WPM (added 2026-09-27 for the sprite) is a v2.2.3 field,
-  so the version byte stayed `0x22`; `BEACON_STATUS_BROADCAST` selects
-  `ZMK_WPM` for it. A layout change is a new version byte (t-xe2q) and both
-  ends move in one commit; canon then bumps its pin once.
+  layer index at 6, 4-byte layer name at 15). Only those bytes are written and
+  read. The WPM byte (24) was written and read from 2026-09-27 to 09-28 for
+  the sprite's tempo and dropped when the tempo became fixed. A layout change
+  is a new version byte (t-xe2q) and both ends move in one commit; canon then
+  bumps its pin once.
 - **The broadcaster runs only on a split central** (`ZMK_SPLIT_ROLE_CENTRAL`),
   so this repository's own build (`build.yaml`: the prospector shield) never
   compiles it. canon's `imprint_dongle` build is what checks it: after a change
@@ -95,8 +95,7 @@ Japanese.
   (`LV_USE_OS=0`); the scan callback runs on the BT RX work queue. The screen
   reads `beacon_status_get()` from an `lv_timer` created in
   `zmk_display_status_screen()`, which runs on ZMK's display queue; the
-  sprite's 10 ms timer and `beacon_sprite_set_speed()` (called from that
-  refresh timer) run there too.
+  sprite's 10 ms timer runs there too.
 - **A logging build drops its boot log unless the port is opened within a
   second or so.** ZMK sets the CDC ACM ring buffer to 1024 bytes and the boot
   banner fills it, so later lines are lost until the host reads. For a boot
@@ -167,12 +166,17 @@ Japanese.
   that fix, same day: 106 ms a render of the 2x sprite box (about 35 ms of it
   flush, the rest LVGL's software transform), 209 renders in 30 s of play at
   100 %, the observer unchanged at 262-273 payloads a minute. The player keeps
-  the tempo by merging frames when drawing falls behind.
-- **The WPM path works end to end** (hardware 2026-09-27): with the
-  broadcaster's image on the Imprint Dongle, typing moved the sprite's logged
-  speed to 148 % (WPM 24). That build froze the sprite 30 s after the last
-  typed key; since 2026-09-28 it never stops and falls back to 100 % instead
-  (user's choice).
+  the tempo by merging frames when drawing falls behind, up to a ceiling set
+  by `CATCHUP_MAX` (see the CPU budget below).
+- **The sprite's CPU budget is spent at 100 %** (hardware 2026-09-28): a
+  gifdec decode costs about 11 ms a frame and a render of the 2x box about
+  105 ms, so 20 GIF frames a second plus 7 renders fill the second. A faster
+  tempo takes renders away: with `CATCHUP_MAX` 16, 300 % and 500 % requested
+  both reached about 2.8x at 3.5 renders a second; the committed 8 caps near
+  2.1x at about 5 (model, not measured). The tempo is a fixed 150 % (the user's pick after
+  a WPM-driven tempo, 2026-09-27/28). Faster and smoother needs cheaper frames
+  (pre-composited frames in flash instead of gifdec) or a cheaper draw (an own
+  2x blit into an RGB565 buffer; RAM is the limit), not a higher factor.
 - **The LVGL pool is sized in `Kconfig.defconfig`, not in `prospector.conf`**:
   `LV_Z_MEM_POOL_SIZE` defaults to 90112 (88 KiB) with `BEACON_SPRITE` and to
   49152 without; a `.conf` line, the consumer's included, would fix it for

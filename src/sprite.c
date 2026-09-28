@@ -8,7 +8,7 @@
  * ARGB8888 canvas that an lv_image shows scaled by an integer factor. An own
  * player instead of lv_gif: the stock widget invalidates on every frame even
  * when the canvas did not change (half the frames of the test GIF, host check
- * 2026-09-27), has no speed control, and plays once when the GIF has no
+ * 2026-09-27), has no tempo control, and plays once when the GIF has no
  * NETSCAPE loop block.
  *
  * - LV_GIF_CACHE_DECODE_DATA=y is required (Kconfig selects it): in this LVGL
@@ -35,15 +35,14 @@
  *   about 67,000 px and 152 ms a frame, 5 frames a second). no_ext_draw()
  *   runs after the class handler and takes the claim back.
  * - Timing: the GCE delay (10 ms units; 0 and 1 read as 100 ms, as browsers
- *   do) divided by the speed, kept in 1/100 ms so that 50 ms at 300 % is
- *   16.67 ms rather than 16. A TICK_MS lv_timer decodes every frame that is
+ *   do) divided by the speed, kept in 1/100 ms so that 50 ms at 150 % is
+ *   33.33 ms rather than 33. A TICK_MS lv_timer decodes every frame that is
  *   due, at most CATCHUP_MAX per tick (then drops the backlog), and
  *   invalidates at most once per tick and only when the canvas changed
  *   (FNV-1a over its words), so the tempo holds while drawing is slower than
- *   the GIF.
+ *   the GIF, as long as the frames due per tick stay within CATCHUP_MAX.
  * - Display work queue only (LV_USE_OS=0): creation from
- *   zmk_display_status_screen(), the timer, and beacon_sprite_set_speed()
- *   from the screen's refresh timer.
+ *   zmk_display_status_screen() and the timer.
  * - gd_get_frame() < 0 (malformed data) or no frame at all: the sprite is
  *   removed and its pool memory freed; the battery labels are unaffected.
  */
@@ -68,6 +67,12 @@ BUILD_ASSERT(sizeof(gd_GIF) % sizeof(uint32_t) == 0,
              "the canvas follows gd_GIF in one allocation and is hashed as words");
 
 #define TICK_MS 10
+/* The tick cannot run while LVGL renders (about 105 ms for the 2x box), and a
+ * decode takes about 11 ms (hardware 2026-09-28), so a cycle is about
+ * 105 + 11n ms for n frames and the tempo ceiling is CATCHUP_MAX frames per
+ * cycle: about 2.1x of 50 ms frames at 8 (about 5 renders a second, from that
+ * model), about 2.8x at 16 (3.5 renders, measured with 16). A higher limit
+ * raises the ceiling and costs renders. 150 % needs about 5 a cycle. */
 #define CATCHUP_MAX 8
 #define DELAY_UNIT_MS 10
 #define DELAY_MIN_UNITS 10
@@ -183,38 +188,35 @@ static void log_stats(void) {
 static void tick(lv_timer_t *timer) {
     ARG_UNUSED(timer);
     const uint32_t now = lv_tick_get();
+    const uint32_t now_sub = now * SUB_PER_MS;
+    unsigned int n = 0;
 
-    if (sprite.speed_pct > 0) {
-        const uint32_t now_sub = now * SUB_PER_MS;
-        unsigned int n = 0;
-
-        for (;;) {
-            const uint32_t interval = interval_sub();
-            if ((int32_t)(now_sub - sprite.frame_at) < (int32_t)interval) {
-                break;
-            }
-            if (n == CATCHUP_MAX) {
-                sprite.frame_at = now_sub;
-                break;
-            }
-            sprite.frame_at += interval;
-            if (!decode_next()) {
-                remove_sprite("malformed GIF data");
-                return;
-            }
-            n++;
+    for (;;) {
+        const uint32_t interval = interval_sub();
+        if ((int32_t)(now_sub - sprite.frame_at) < (int32_t)interval) {
+            break;
         }
+        if (n == CATCHUP_MAX) {
+            sprite.frame_at = now_sub;
+            break;
+        }
+        sprite.frame_at += interval;
+        if (!decode_next()) {
+            remove_sprite("malformed GIF data");
+            return;
+        }
+        n++;
+    }
 
-        if (n > 0) {
-            const uint32_t hash = canvas_hash();
-            if (hash != sprite.hash) {
-                sprite.hash = hash;
-                sprite.invalidated++;
-                /* A no-op with LV_CACHE_DEF_SIZE=0; a consumer's image cache
-                 * would otherwise keep drawing the previous frame. */
-                lv_image_cache_drop(&sprite.dsc);
-                lv_obj_invalidate(sprite.img);
-            }
+    if (n > 0) {
+        const uint32_t hash = canvas_hash();
+        if (hash != sprite.hash) {
+            sprite.hash = hash;
+            sprite.invalidated++;
+            /* A no-op with LV_CACHE_DEF_SIZE=0; a consumer's image cache would
+             * otherwise keep drawing the previous frame. */
+            lv_image_cache_drop(&sprite.dsc);
+            lv_obj_invalidate(sprite.img);
         }
     }
 
@@ -222,17 +224,6 @@ static void tick(lv_timer_t *timer) {
         sprite.logged_at = now;
         log_stats();
     }
-}
-
-void beacon_sprite_set_speed(uint16_t percent) {
-    if (sprite.gif == NULL || percent == sprite.speed_pct) {
-        return;
-    }
-    if (sprite.speed_pct == 0) {
-        /* Resumed: the shown frame's delay starts now, not when it was paused. */
-        sprite.frame_at = lv_tick_get() * SUB_PER_MS;
-    }
-    sprite.speed_pct = percent;
 }
 
 static void no_ext_draw(lv_event_t *e) {
@@ -250,7 +241,7 @@ static void count_render(lv_event_t *e) {
     }
 }
 
-lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
+lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct) {
     const int32_t box_w = lv_area_get_width(box);
     const int32_t box_h = lv_area_get_height(box);
 
@@ -304,7 +295,7 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
     lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
 
     sprite.img = img;
-    sprite.speed_pct = 0;
+    sprite.speed_pct = MAX(speed_pct, 1);
     sprite.frame_at = lv_tick_get() * SUB_PER_MS;
     sprite.logged_at = lv_tick_get();
     sprite.timer = lv_timer_create(tick, TICK_MS, NULL);

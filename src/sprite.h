@@ -14,11 +14,8 @@
 #include <lvgl.h>
 
 /* Creates the sprite inside parent, in box (parent coordinates), scaled by the
- * largest integer factor that fits and top-centred; it starts paused on its
- * first frame. NULL: the GIF could not be opened or does not fit at 1x, and
- * the screen goes on without a sprite. Call once. */
-lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box);
-
-/* Tempo in percent of the GIF's own: 0 freezes on the current frame, 100 is
- * the GIF's timing, 200 twice as fast. No-op without a sprite. */
-void beacon_sprite_set_speed(uint16_t percent);
+ * largest integer factor that fits and top-centred, playing at speed_pct of
+ * the GIF's own tempo (100 = its timing, 200 twice as fast; not 0). NULL: the
+ * GIF could not be opened or does not fit at 1x, and the screen goes on
+ * without a sprite. Call once. */
+lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct);
