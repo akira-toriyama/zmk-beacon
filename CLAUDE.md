@@ -194,10 +194,12 @@ Japanese.
   nrfx sets H0H1 itself at 32 MHz, but Zephyr's SPIM driver leaves the pins
   to pinctrl, `skip_gpio_cfg`). A render of the 2.2x sprite box above the HP
   bar, flush included, takes about 43 ms against 63 at 16 MHz (20 MHz in the
-  overlay rounded down), hardware 2026-09-28, the observer unchanged at
-  256-269 payloads a minute. Above the ST7789V data sheet's 15 MHz write
-  cycle, as 16 MHz already was; set 20 MHz back if the panel ever shows
-  noise.
+  overlay rounded down), hardware 2026-09-28. The observer then counted
+  239-269 payloads a minute against 255-269 with fewer renders: the display
+  thread now takes about 63 % of the CPU and decoding 33 %, and the host's
+  scan callback occasionally waits. Above the ST7789V data sheet's 15 MHz
+  write cycle, as 16 MHz already was; set 20 MHz back if the panel ever
+  shows noise.
 - **The sprite's CPU budget** (hardware 2026-09-28): a gifdec decode costs
   about 11 ms a frame and a render about 43 ms, so at the fixed 150 % (the
   user's pick after a WPM-driven tempo, 2026-09-27/28) the screen shows about
