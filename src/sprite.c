@@ -5,11 +5,29 @@
  *
  * The status screen's GIF sprite: the file named by CONFIG_BEACON_SPRITE_GIF,
  * embedded at build time (CMakeLists.txt), decoded with LVGL's gifdec into an
- * ARGB8888 canvas that an lv_image shows scaled by an integer factor. An own
- * player instead of lv_gif: the stock widget invalidates on every frame even
- * when the canvas did not change (half the frames of the test GIF, host check
- * 2026-09-27), has no tempo control, and plays once when the GIF has no
- * NETSCAPE loop block.
+ * ARGB8888 canvas that blit() scales by nearest neighbour straight into the
+ * display buffer. An own player instead of lv_gif: the stock widget
+ * invalidates on every frame even when the canvas did not change (half the
+ * frames of the test GIF, host check 2026-09-27), has no tempo control, and
+ * plays once when the GIF has no NETSCAPE loop block. An own blit instead of
+ * lv_image: LVGL's software transform (LV_DRAW_SW_ASM_NONE, per-pixel
+ * ARGB8888 blending) took about 70 of the 105 ms a render of the 2x box cost
+ * (hardware 2026-09-27), which left 4 to 6 renders a second against the
+ * GIF's 15 steps a second at 150 % (the user's v2, canon t-dzxf 2026-09-28).
+ *
+ * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
+ *   and writes RGB565 into the layer's buffer for the clip area. Safe here
+ *   because LVGL renders every draw task as it is created when it has no OS
+ *   (lv_draw_finalize_task_creation() -> lv_draw_dispatch() -> the sw unit's
+ *   execute_drawing(), LV_USE_OS=0): the screen's fill has landed before the
+ *   sprite's event, and the objects after it draw over the sprite. The
+ *   refresh renders an invalid area in VDB-sized parts and sends the event
+ *   once per part with layer->buf_area / _clip_area set to it. The layer
+ *   holds native RGB565: LV_COLOR_16_SWAP is applied at flush
+ *   (lv_refr.c, lv_draw_sw_rgb565_swap()). The canvas is B, G, R, A per pixel
+ *   (gifdec.c render_frame_rect()); GIFs have no partial alpha, so a pixel
+ *   is drawn or skipped, and a skipped one shows the screen's black, the only
+ *   thing under the sprite box.
  *
  * - LV_GIF_CACHE_DECODE_DATA=y is required (Kconfig selects it): in this LVGL
  *   checkout the other read_image_data() rejects every frame's last LZW token
@@ -27,13 +45,6 @@
  * - Inherited from gifdec, not handled: disposal 3 (restore to previous) is a
  *   no-op, and a frame without its own GCE reuses the previous frame's delay,
  *   transparency and disposal. Such GIFs show trails or holes on the device.
- * - Extra draw area: STRETCH scales around pivot (0,0), so the image draws
- *   exactly inside the object's coords, but lv_image's
- *   LV_EVENT_REFR_EXT_DRAW_SIZE handler transforms the already stretched size
- *   a second time and claims about one object size on every side. Every
- *   changed frame then redrew the whole 280x240 panel (hardware 2026-09-27:
- *   about 67,000 px and 152 ms a frame, 5 frames a second). no_ext_draw()
- *   runs after the class handler and takes the claim back.
  * - Timing: the GCE delay (10 ms units; 0 and 1 read as 100 ms, as browsers
  *   do) divided by the speed, kept in 1/100 ms so that 50 ms at 150 % is
  *   33.33 ms rather than 33. A TICK_MS lv_timer decodes every frame that is
@@ -88,8 +99,7 @@ static const uint8_t sprite_gif[] = {
 
 static struct {
     gd_GIF *gif;
-    lv_obj_t *img;
-    lv_image_dsc_t dsc;
+    lv_obj_t *obj;
     lv_timer_t *timer;
     uint16_t speed_pct;
     /* lv_tick in 1/SUB_PER_MS ms: when the shown frame became due. */
@@ -156,8 +166,8 @@ static void remove_sprite(const char *why) {
     LOG_ERR("sprite removed: %s", why);
     lv_timer_delete(sprite.timer);
     sprite.timer = NULL;
-    lv_obj_delete(sprite.img);
-    sprite.img = NULL;
+    lv_obj_delete(sprite.obj);
+    sprite.obj = NULL;
     gd_close_gif(sprite.gif);
     sprite.gif = NULL;
 }
@@ -213,10 +223,7 @@ static void tick(lv_timer_t *timer) {
         if (hash != sprite.hash) {
             sprite.hash = hash;
             sprite.invalidated++;
-            /* A no-op with LV_CACHE_DEF_SIZE=0; a consumer's image cache would
-             * otherwise keep drawing the previous frame. */
-            lv_image_cache_drop(&sprite.dsc);
-            lv_obj_invalidate(sprite.img);
+            lv_obj_invalidate(sprite.obj);
         }
     }
 
@@ -226,8 +233,61 @@ static void tick(lv_timer_t *timer) {
     }
 }
 
-static void no_ext_draw(lv_event_t *e) {
-    *(int32_t *)lv_event_get_param(e) = 0;
+/* The canvas, nearest neighbour, into the layer's RGB565 buffer: destination
+ * column x reads source column (x - x1) * src_w / obj_w, stepped as a DDA
+ * (src_w <= obj_w, so at most one source column per destination pixel). */
+static void blit(lv_event_t *e) {
+    lv_layer_t *layer = lv_event_get_layer(e);
+    const lv_draw_buf_t *buf = layer->draw_buf;
+    lv_area_t coords;
+    lv_obj_get_coords(lv_event_get_target(e), &coords);
+
+    const int32_t x1 = MAX(coords.x1, layer->_clip_area.x1);
+    const int32_t y1 = MAX(coords.y1, layer->_clip_area.y1);
+    const int32_t x2 = MIN(coords.x2, layer->_clip_area.x2);
+    const int32_t y2 = MIN(coords.y2, layer->_clip_area.y2);
+    if (x1 > x2 || y1 > y2) {
+        return;
+    }
+    if (layer->color_format != LV_COLOR_FORMAT_RGB565) {
+        static bool said;
+        if (!said) {
+            said = true;
+            LOG_ERR("sprite: layer format %d is not RGB565, nothing drawn", layer->color_format);
+        }
+        return;
+    }
+
+    const gd_GIF *gif = sprite.gif;
+    /* Word access as in canvas_hash(): B | G << 8 | R << 16 | A << 24. */
+    const uint32_t *canvas = (const uint32_t *)gif->canvas;
+    const int32_t src_w = gif->width;
+    const int32_t obj_w = lv_area_get_width(&coords);
+    const int32_t obj_h = lv_area_get_height(&coords);
+    const int32_t x_off = x1 - coords.x1;
+    const int32_t sx0 = x_off * src_w / obj_w;
+    const int32_t err0 = x_off * src_w - sx0 * obj_w;
+
+    for (int32_t y = y1; y <= y2; y++) {
+        const int32_t sy = (y - coords.y1) * gif->height / obj_h;
+        const uint32_t *srow = canvas + (size_t)sy * src_w;
+        uint16_t *dst = (uint16_t *)(buf->data + (size_t)(y - layer->buf_area.y1) * buf->header.stride) +
+                        (x1 - layer->buf_area.x1);
+        int32_t sx = sx0;
+        int32_t err = err0;
+
+        for (int32_t x = x1; x <= x2; x++, dst++) {
+            const uint32_t px = srow[sx];
+            if (px >> 24) {
+                *dst = (uint16_t)(((px >> 8) & 0xF800) | ((px >> 5) & 0x07E0) | ((px >> 3) & 0x001F));
+            }
+            err += src_w;
+            if (err >= obj_w) {
+                err -= obj_w;
+                sx++;
+            }
+        }
+    }
 }
 
 static void count_render(lv_event_t *e) {
@@ -275,23 +335,9 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
         return NULL;
     }
 
-    const uint32_t canvas_bytes = 4u * gif->width * gif->height;
-    memset(gif->canvas, 0, canvas_bytes);
+    memset(gif->canvas, 0, 4u * gif->width * gif->height);
     gif->loop_count = 1;
     sprite.gif = gif;
-    sprite.dsc = (lv_image_dsc_t){
-        .header =
-            {
-                .magic = LV_IMAGE_HEADER_MAGIC,
-                .cf = LV_COLOR_FORMAT_ARGB8888,
-                .flags = LV_IMAGE_FLAGS_MODIFIABLE,
-                .w = gif->width,
-                .h = gif->height,
-                .stride = gif->width * 4,
-            },
-        .data_size = canvas_bytes,
-        .data = gif->canvas,
-    };
     if (!decode_next()) {
         LOG_ERR("sprite: no frame, or the first frame is malformed");
         gd_close_gif(gif);
@@ -301,24 +347,27 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     gif->loop_count = 0;
     sprite.hash = canvas_hash();
 
-    lv_obj_t *img = lv_image_create(parent);
-    lv_obj_add_event_cb(img, no_ext_draw, LV_EVENT_REFR_EXT_DRAW_SIZE, NULL);
-    lv_image_set_src(img, &sprite.dsc);
-    /* src, then size, then STRETCH: lv_image derives the scale from the
-     * object size in set_src() and set_inner_align() only, not on a resize. */
-    lv_obj_set_size(img, w, h);
+    /* A plain object that draws nothing of its own (no theme is installed, so
+     * the styles are explicit); blit() paints its area. */
+    lv_obj_t *obj = lv_obj_create(parent);
+    lv_obj_remove_flag(obj, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(obj, 0, 0);
+    lv_obj_set_style_outline_width(obj, 0, 0);
+    lv_obj_set_style_shadow_width(obj, 0, 0);
+    lv_obj_set_style_pad_all(obj, 0, 0);
+    lv_obj_set_size(obj, w, h);
     /* Filling, the sprite stands on the box's bottom edge (the readings). */
-    lv_obj_set_pos(img, box->x1 + (box_w - w) / 2, box->y1 + (fill ? box_h - h : 0));
-    lv_image_set_antialias(img, false);
-    lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
+    lv_obj_set_pos(obj, box->x1 + (box_w - w) / 2, box->y1 + (fill ? box_h - h : 0));
+    lv_obj_add_event_cb(obj, blit, LV_EVENT_DRAW_MAIN, NULL);
 
-    sprite.img = img;
+    sprite.obj = obj;
     sprite.speed_pct = MAX(speed_pct, 1);
     sprite.frame_at = lv_tick_get() * SUB_PER_MS;
     sprite.logged_at = lv_tick_get();
     sprite.timer = lv_timer_create(tick, TICK_MS, NULL);
     if (IS_ENABLED(CONFIG_LOG)) {
-        lv_display_t *disp = lv_obj_get_display(img);
+        lv_display_t *disp = lv_obj_get_display(obj);
         lv_display_add_event_cb(disp, count_render, LV_EVENT_RENDER_START, NULL);
         lv_display_add_event_cb(disp, count_render, LV_EVENT_RENDER_READY, NULL);
     }
@@ -327,5 +376,5 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
             gif->width, gif->height, w, h, h / gif->height, h * 100 / gif->height % 100,
             (unsigned int)sizeof(sprite_gif),
             (unsigned int)(sizeof(gd_GIF) + 5u * gif->width * gif->height + LZW_CACHE_BYTES));
-    return img;
+    return obj;
 }
