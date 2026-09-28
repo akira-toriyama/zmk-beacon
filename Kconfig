@@ -40,10 +40,9 @@ config BEACON_SPRITE_GIF
       Absolute path of a GIF89a file with a global colour table (the only
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
       the status screen plays it above the battery readings, scaled by the
-      largest integer factor that fits: at the GIF's own tempo while the
-      keyboard is typed on, faster with the typing speed, frozen while the
-      keyboard is idle or not heard. Empty: no sprite, which is what CI and
-      the release build.
+      largest integer factor that fits: always at the GIF's own tempo, faster
+      while the keyboard is typed on (WPM from the status advertisement).
+      Empty: no sprite, which is what CI and the release build.
 
       The decoder keeps 5 bytes per pixel plus 16 KiB in the LVGL pool for
       the whole run; the build fails when that does not fit
