@@ -102,7 +102,8 @@ Japanese.
   log, build once by hand with `-DCONFIG_USB_CDC_ACM_RINGBUF_SIZE=8192` next to
   `-DCONFIG_ZMK_USB_LOGGING=y`. Read the port at any rate but 1200 (see
   below). Logging builds print one observer line (payloads per minute), one
-  screen line (what it shows) and, with a sprite, one sprite line (frames
+  screen line (the halves' raw levels and the payload age; absent with
+  `BEACON_READINGS_NONE` while a sprite shows) and, with a sprite, one sprite line (frames
   decoded, invalidations, screen renders and their average time, speed, LVGL
   pool allocated and peak) every minute. "Invalidated" is not "shown": LVGL
   merges invalidations between two renders, so renders is the shown count.
@@ -121,8 +122,9 @@ Japanese.
 - **`LV_CONF_MINIMAL=y`** is implied by ZMK's display Kconfig, so every LVGL
   widget and font is opt-in: in `prospector.conf` (`CONFIG_LV_USE_*`,
   `CONFIG_LV_FONT_*`), or selected by a `BEACON_*` symbol (`BEACON_SPRITE`
-  selects the image and GIF widgets). A widget used without its symbol fails
-  at link time, not in Kconfig.
+  selects the image and GIF widgets, `BEACON_READINGS_HP_BAR` the bar widget
+  and the unscii 16 font). A widget used without its symbol fails at link
+  time, not in Kconfig.
 - **Sprite images are local-only.** The GIF is a personal file:
   `CONFIG_BEACON_SPRITE_GIF` names an absolute path, `build.sh --sprite`
   copies it to `~/.cache/zmk-beacon/sprite/sprite.gif`, and the build embeds
@@ -154,29 +156,57 @@ Japanese.
   block). The stock `lv_gif` has none of this and invalidates every frame;
   about half the consecutive canvases of the test GIF were identical, which
   the player's FNV-1a hash skips.
-- **The stretched `lv_image` must not report an extra draw area**:
-  `LV_IMAGE_ALIGN_STRETCH` scales around pivot (0,0), and lv_image's own
-  `LV_EVENT_REFR_EXT_DRAW_SIZE` handler transforms the already stretched size
-  again, claiming about one object size on every side. `lv_obj_invalidate()`
-  and `lv_obj_invalidate_area()` both widen to that area, so every changed
-  frame redrew the whole panel: hardware 2026-09-27, about 67,000 px and
-  152 ms a frame (18 ms per 16,800-px flush, SPIM at 16 MHz: 20 MHz in the
-  overlay is not an nRF frequency), 5 renders a second. `src/sprite.c` sets
-  the claim back to 0 in a callback that runs after the class handler. After
-  that fix, same day: 106 ms a render of the 2x sprite box (about 35 ms of it
-  flush, the rest LVGL's software transform), 209 renders in 30 s of play at
-  100 %, the observer unchanged at 262-273 payloads a minute. The player keeps
-  the tempo by merging frames when drawing falls behind, up to a ceiling set
-  by `CATCHUP_MAX` (see the CPU budget below).
-- **The sprite's CPU budget is spent at 100 %** (hardware 2026-09-28): a
-  gifdec decode costs about 11 ms a frame and a render of the 2x box about
-  105 ms, so 20 GIF frames a second plus 7 renders fill the second. A faster
-  tempo takes renders away: with `CATCHUP_MAX` 16, 300 % and 500 % requested
-  both reached about 2.8x at 3.5 renders a second; the committed 8 caps near
-  2.1x at about 5 (model, not measured). The tempo is a fixed 150 % (the user's pick after
-  a WPM-driven tempo, 2026-09-27/28). Faster and smoother needs cheaper frames
-  (pre-composited frames in flash instead of gifdec) or a cheaper draw (an own
-  2x blit into an RGB565 buffer; RAM is the limit), not a higher factor.
+- **The screen is two siblings** (`src/prospector_screen.c`): a battery
+  readings style along the bottom (`src/readings.h`, a three-call table; the
+  `BEACON_READINGS` Kconfig choice picks `readings_digits.c` or `hp_bar.c`,
+  and `BEACON_READINGS_NONE` shows the digits only when the build has no
+  sprite, so a consumer's conf stays valid for CI) and the sprite above it,
+  never over it. The readings keep a 12 px margin: the panel's corners are
+  rounded and a box 2 px from the edge lost its bottom corners (hardware
+  2026-09-28). A filling sprite (`BEACON_SPRITE_FILL`) keeps 2 px. No LVGL
+  theme is installed, so every widget sets its styles itself.
+- **The sprite draws itself** (`src/sprite.c` `blit()`, since 2026-09-28): a
+  plain transparent object whose `LV_EVENT_DRAW_MAIN` handler scales the
+  gifdec canvas by nearest neighbour straight into the layer's RGB565 buffer.
+  That is safe only under conditions the screen must keep (all read in this
+  LVGL checkout, 9.3.0-dev, review 2026-09-28): `LV_USE_OS` is NONE (a
+  `BUILD_ASSERT`), so `lv_draw_finalize_task_creation()` dispatches and the
+  sw unit renders each draw task synchronously, one per task created; the
+  sprite is the screen's first child, so the only task before its event is
+  the screen's fill; and nothing drawn before it renders through a layer
+  (`opa_layered`, a transform, a blend mode, a bitmap mask, an `lv_bar`
+  indicator shorter than its radius), whose blend task runs one task late
+  and would land on top of the sprite. The refresh renders an invalid area
+  in VDB-sized parts and sends the event once per part with
+  `layer->buf_area` / `_clip_area` set to it, and `LV_COLOR_16_SWAP` is
+  applied at flush (`lv_refr.c`, `lv_draw_sw_rgb565_swap()`), so the layer
+  holds native RGB565. Before it, lv_image with `LV_IMAGE_ALIGN_STRETCH` cost 105 ms a
+  render of the 2x box (about 70 ms of it LVGL's software transform,
+  `LV_DRAW_SW_ASM_NONE`) once its `LV_EVENT_REFR_EXT_DRAW_SIZE` claim of an
+  extra object size on every side had been zeroed (152 ms and the whole
+  panel before that, hardware 2026-09-27). Invalidating only the frames'
+  touched rectangles instead of the whole box changed nothing: the test
+  GIF's frames cover 65-76 % of the canvas and two consecutive ones nearly
+  all of it.
+- **The panel's SPI runs at 32 MHz** (`mipi-max-frequency` in the shield
+  overlay; SPIM3 is the one nRF52840 instance that can) **with high drive on
+  the SPIM pins** (`nordic,drive-mode = <NRF_DRIVE_H0H1>` in `spi3_default`:
+  nrfx sets H0H1 itself at 32 MHz, but Zephyr's SPIM driver leaves the pins
+  to pinctrl, `skip_gpio_cfg`). A render of the 2.2x sprite box above the HP
+  bar, flush included, takes about 43 ms against 63 at 16 MHz (20 MHz in the
+  overlay rounded down), hardware 2026-09-28. The observer then counted
+  239-269 payloads a minute against 255-269 with fewer renders: the display
+  thread now takes about 63 % of the CPU and decoding 33 %, and the host's
+  scan callback occasionally waits. Above the ST7789V data sheet's 15 MHz
+  write cycle, as 16 MHz already was; set 20 MHz back if the panel ever
+  shows noise.
+- **The sprite's CPU budget** (hardware 2026-09-28): a gifdec decode costs
+  about 11 ms a frame and a render about 43 ms, so at the fixed 150 % (the
+  user's pick after a WPM-driven tempo, 2026-09-27/28) the screen shows about
+  15 frames a second, the GIF's every step. The player keeps the tempo by
+  merging frames when drawing falls behind, up to `CATCHUP_MAX` frames a
+  tick; with the old 105 ms renders and `CATCHUP_MAX` 16, 300 % and 500 %
+  requested both reached about 2.8x at 3.5 renders a second.
 - **The LVGL pool is sized in `Kconfig.defconfig`, not in `prospector.conf`**:
   `LV_Z_MEM_POOL_SIZE` defaults to 90112 (88 KiB) with `BEACON_SPRITE` and to
   49152 without; a `.conf` line, the consumer's included, would fix it for
@@ -192,9 +222,10 @@ Japanese.
   (2026-09-26). A sprite build adds the GIF's own size plus about 7 KB of
   code to FLASH and 40 KiB of pool to RAM: with an 80 KB GIF about 48% /
   84%, and 51% / 87% with logging. The skeleton had 363,948 B / 202,740 B with ZMK's BLE stack and
-  Montserrat 16 + 28; Montserrat 48, the only font linked, is about 97 KB of
-  flash (from its source tables). RAM is mostly LVGL: VDB 30% × 2 and the
-  pool.
+  Montserrat 16 + 28; Montserrat 48 is about 97 KB of flash (from its source
+  tables) and stays linked by the shield conf even when the HP bar, which
+  draws its text with unscii 16, is the readings style. RAM is mostly LVGL:
+  VDB 30% × 2 and the pool.
 - **Fleet-managed files, do not edit here**:
   `.github/workflows/{actionlint,commit-lint,repo-policy,taplo,task-status,version-preview,zizmor}.yml`,
   `.github/zizmor.yml`, `.github/dependabot.yml`, `docs/commit-convention.md`.
