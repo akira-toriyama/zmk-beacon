@@ -43,22 +43,30 @@
  *   canvas and consecutive ones nearly all of it, and invalidating only the
  *   touched rectangles changed nothing measurable (hardware 2026-09-28).
  * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
- *   and writes RGB565 into the layer's buffer for the clip area. Safe because
- *   LVGL renders every draw task as it is created when it has no OS
- *   (lv_draw_finalize_task_creation() -> lv_draw_dispatch() -> the sw unit's
- *   execute_drawing(), LV_USE_OS=0): the screen's fill has landed before the
- *   sprite's event, and the objects after it draw over the sprite. The
- *   refresh renders an invalid area in VDB-sized parts and sends the event
- *   once per part with layer->buf_area / _clip_area set to it. The layer
- *   holds native RGB565: LV_COLOR_16_SWAP is applied at flush (lv_refr.c,
- *   lv_draw_sw_rgb565_swap()). The canvas is B, G, R, A per pixel (gifdec.c
+ *   and writes RGB565 into the layer's buffer for the clip area. That is
+ *   safe under three conditions, which the screen keeps: LVGL has no OS
+ *   (LV_USE_OS == LV_OS_NONE, asserted below), so lv_draw_finalize_task_creation()
+ *   dispatches and the sw unit renders each draw task synchronously, one per
+ *   task created; the sprite is the screen's first child, so the only task
+ *   before its event is the screen's fill, which has therefore landed; and
+ *   nothing drawn before the sprite renders through a layer (opa_layered,
+ *   transform, blend mode, bitmap mask, or an lv_bar indicator shorter than
+ *   its radius), whose blend task is queued one task late and would land on
+ *   top of the sprite. The objects after the sprite draw over it as usual.
+ *   The refresh renders an invalid area in VDB-sized parts and sends the
+ *   event once per part with layer->buf_area / _clip_area set to it. The
+ *   layer holds native RGB565: LV_COLOR_16_SWAP is applied at flush
+ *   (lv_refr.c, lv_draw_sw_rgb565_swap()); a layer of another format (LVGL
+ *   would render the sprite into an ARGB8888 layer if it were ever layered
+ *   itself) is left alone. The canvas is B, G, R, A per pixel (gifdec.c
  *   render_frame_rect()); GIFs have no partial alpha, so a pixel is drawn or
  *   skipped, and a skipped one shows the screen's black, the only thing under
  *   the sprite box.
  * - Display work queue only (LV_USE_OS=0): creation from
  *   zmk_display_status_screen(), the timer and the draw event.
  * - gd_get_frame() < 0 (malformed data) or no frame at all: the sprite is
- *   removed and its pool memory freed; the readings are unaffected.
+ *   removed and its pool memory freed; the screen hears of it through the
+ *   object's LV_EVENT_DELETE.
  */
 
 #include <stdint.h>
@@ -79,13 +87,13 @@ LOG_MODULE_REGISTER(beacon_sprite, LOG_LEVEL_INF);
 
 BUILD_ASSERT(sizeof(gd_GIF) % sizeof(uint32_t) == 0,
              "the canvas follows gd_GIF in one allocation and is read as words");
+BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
+             "blit() writes into the layer buffer directly; with an OS the screen's fill could land later");
 
 #define TICK_MS 10
-/* The tick cannot run while LVGL renders, and a decode takes about 11 ms
- * (hardware 2026-09-28), so a cycle is one render plus 11 ms per frame and the
- * tempo ceiling is CATCHUP_MAX frames per cycle. A higher limit raises the
- * ceiling and costs renders; 150 % needs about 2 frames a cycle at the 62 ms
- * renders blit() gave the 2.2x box. */
+/* The tick cannot run while LVGL renders, so a cycle is one render plus one
+ * decode per frame due, and the tempo ceiling is CATCHUP_MAX frames a cycle. A
+ * higher limit raises the ceiling and costs renders. */
 #define CATCHUP_MAX 8
 #define DELAY_UNIT_MS 10
 #define DELAY_MIN_UNITS 10
@@ -345,8 +353,9 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     gif->loop_count = 0;
     sprite.hash = canvas_hash();
 
-    /* A plain object that draws nothing of its own (no theme is installed, so
-     * the styles are explicit); blit() paints its area. */
+    /* A plain object that draws nothing of its own; blit() paints its area.
+     * LVGL's defaults already draw nothing, and the explicit styles keep it
+     * so should a theme ever be installed. */
     lv_obj_t *obj = lv_obj_create(parent);
     lv_obj_remove_flag(obj, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);

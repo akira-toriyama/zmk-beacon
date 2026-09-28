@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  *
  * The HP bar readings (BEACON_READINGS_HP_BAR): one battle-screen HP bar,
- * "HP" and a bar in a dark box along the bottom, after the games. Its length
+ * "HP" and a bar in a dark box along the bottom. Its length
  * is the keyboard's battery as hp_level() maps it: the mean of the halves
  * with a reading, or the one half that has one (the user's pick, 2026-09-28).
  * Green, yellow under YELLOW_BELOW, red under RED_BELOW; the digits' "--" is

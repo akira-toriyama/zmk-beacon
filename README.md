@@ -54,9 +54,10 @@ reports its first-paired half first (canon's CLAUDE.md, split peripheral slot).
 
 With `CONFIG_BEACON_SPRITE_GIF="<absolute path>"` the build embeds a GIF and
 the screen plays it above the battery readings, top-centred and scaled by the
-largest integer factor that fits between the top edge and the digits (a
-90x90 px GIF shows at 2x on the 280x240 panel). It never stops and always
-plays at 150 % of the GIF's own tempo, with no link to the keyboard.
+largest whole factor that fits between the top edge and the readings (a
+90x90 px GIF shows at 2x above the digits on the 280x240 panel). It never
+stops and always plays at 150 % of the GIF's own tempo, with no link to the
+keyboard.
 
 The sprite draws itself: the player scales the decoded frame straight into
 the display buffer by nearest neighbour (`src/sprite.c`), and the panel's SPI
@@ -81,10 +82,11 @@ a GIF the option does nothing, so it can stay in a consumer's conf.
 
 Limits:
 
-- GIF89a with a global colour table only (what LVGL's gifdec opens), at most
-  280x185 px (the box above the digits; 276x198 above the HP bar with
-  `BEACON_SPRITE_FILL`),
-  with at least one frame. The build
+- GIF89a with a global colour table only (what LVGL's gifdec opens), no
+  larger than the sprite box, with at least one frame. The box is the panel
+  down to the readings' top: 280x185 above the digits, 280x200 above the HP
+  bar, 280x240 with `BEACON_READINGS_NONE`, and 4 px narrower and 2 px
+  shorter with `BEACON_SPRITE_FILL` (276x198 above the HP bar). The build
   rejects anything else, and a GIF whose decoder state (5 bytes per pixel
   plus 16 KiB) does not fit the LVGL pool next to the screen; the error names
   the `CONFIG_LV_Z_MEM_POOL_SIZE` that would fit. The shield's pool grows from

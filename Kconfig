@@ -40,9 +40,10 @@ config BEACON_SPRITE_GIF
       Absolute path of a GIF89a file with a global colour table (the only
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
       the status screen plays it above the battery readings, scaled by the
-      largest integer factor that fits, always at a fixed 150 % of the GIF's
-      own tempo (src/prospector_screen.c). Empty: no sprite, which is what CI
-      and the release build.
+      largest whole factor that fits (or filling the space above them, see
+      BEACON_SPRITE_FILL), always at a fixed 150 % of the GIF's own tempo
+      (src/prospector_screen.c). Empty: no sprite, which is what CI and the
+      release build.
 
       The decoder keeps 5 bytes per pixel plus 16 KiB in the LVGL pool for
       the whole run; the build fails when that does not fit
@@ -94,17 +95,18 @@ config BEACON_READINGS_HP_BAR
     select LV_FONT_UNSCII_16
     help
       A battle-screen HP bar, "HP" and a bar in one dark box along the
-      bottom, a filling sprite standing on it. Its length is the keyboard's
-      battery: the mean of the halves with a reading, or the one half that
-      has one. Green above 50 %, yellow above 20 %, red below; an empty track
-      without a reading, a grey "HP" without a payload in the last minute.
-      Text in the 8x16 pixel font.
+      bottom. Its length is the keyboard's battery: the mean of the halves
+      with a reading, or the one half that has one. Green from 50 %, yellow
+      from 20 %, red below; an empty track without a reading, a grey "HP"
+      without a payload in the last minute. Text in the 8x16 pixel font.
 
 config BEACON_READINGS_NONE
     bool "None while a sprite shows"
     help
-      No readings while a sprite shows. Without a sprite (CI, the release
-      build) the digits show, so the conf stays valid for those builds.
+      No readings while a sprite shows, and the sprite may use the whole
+      panel. Without a sprite (CI, the release build), or when the sprite
+      stops on malformed GIF data, the digits show, so the conf stays valid
+      for those builds.
 
 endchoice
 

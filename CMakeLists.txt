@@ -28,17 +28,32 @@ target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broad
 # LZW cache (LV_GIF_CACHE_DECODE_DATA), kept for the whole run. The reserve is
 # for the battery screen's widgets and the draw tasks: on hardware 2026-09-27
 # the pool peaked at 63,376 B with a 58,515 B decoder allocation, so the screen
-# took under 5 KB. The size limits are the panel width and the box above the
-# digits that prospector_screen.c computes at run time (240 - 12 margin - 9
-# base line - 34 digit height = 185 rows with Montserrat 48); change them
-# together.
+# took under 5 KB. The size limit is the sprite box prospector_screen.c
+# computes at run time: the panel (280x240) down to the readings' top (the
+# digits: 240 - 12 margin - 9 base line - 34 digit ink = 185 rows with
+# Montserrat 48, hp_bar.c: 240 - 12 - 28 = 200, BEACON_READINGS_NONE: the
+# panel's 240), less BEACON_SPRITE_FILL's 2 px inset at each edge. A GIF that
+# passes here but not sprite.c's fit check would boot without a sprite; change
+# both together.
 if(CONFIG_BEACON_SPRITE)
   set(sprite_gif "${CONFIG_BEACON_SPRITE_GIF}")
   set(sprite_gd_gif_bytes 2048)
   set(sprite_lzw_cache_bytes 16384)
   set(sprite_reserve_bytes 8192)
-  set(sprite_max_w 280)
-  set(sprite_max_h 185)
+  if(CONFIG_BEACON_READINGS_HP_BAR)
+    set(sprite_readings_top 200)
+  elseif(CONFIG_BEACON_READINGS_NONE)
+    set(sprite_readings_top 240)
+  else()
+    set(sprite_readings_top 185)
+  endif()
+  if(CONFIG_BEACON_SPRITE_FILL)
+    set(sprite_inset 2)
+  else()
+    set(sprite_inset 0)
+  endif()
+  math(EXPR sprite_max_w "280 - 2 * ${sprite_inset}")
+  math(EXPR sprite_max_h "${sprite_readings_top} - ${sprite_inset}")
 
   if(NOT IS_ABSOLUTE "${sprite_gif}")
     message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF must be an absolute path, got '${sprite_gif}'")
@@ -73,7 +88,7 @@ if(CONFIG_BEACON_SPRITE)
   if(sprite_w EQUAL 0 OR sprite_h EQUAL 0 OR sprite_w GREATER sprite_max_w OR sprite_h GREATER sprite_max_h)
     message(FATAL_ERROR
             "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} is ${sprite_w}x${sprite_h}; the sprite box above the "
-            "digits is ${sprite_max_w}x${sprite_max_h}")
+            "readings is ${sprite_max_w}x${sprite_max_h}")
   endif()
 
   math(EXPR sprite_need

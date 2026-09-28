@@ -67,6 +67,9 @@
             psels = <NRF_PSEL(SPIM_SCK, 1, 13)>,
                 <NRF_PSEL(SPIM_MOSI, 1, 15)>,
                 <NRF_PSEL(SPIM_MISO, 1, 10)>;
+            /* nrfx wants high drive on SPIM pins at 32 MHz (nrfx_spim.c); Zephyr
+             * leaves the pins to pinctrl (skip_gpio_cfg), so it is set here. */
+            nordic,drive-mode = <NRF_DRIVE_H0H1>;
         };
     };
 
