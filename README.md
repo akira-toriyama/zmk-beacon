@@ -28,10 +28,20 @@ on the Prospector Dongle 2026-09-27).
 
 ## The screen
 
-The left half's battery sits in the bottom-left corner, the right half's in
-the bottom-right.
+The battery readings come in three styles (the `BEACON_READINGS` choice):
 
-| Shows | Meaning |
+- **Digits** (the default): the left half's battery in the bottom-left corner,
+  the right half's in the bottom-right, Montserrat 48.
+- **HP bar** (`CONFIG_BEACON_READINGS_HP_BAR=y`): one battle-screen HP bar,
+  `HP` and a bar in a dark box along the bottom. Its length is the
+  keyboard's battery, the mean of the halves with a reading (or the one half
+  that has one): green, yellow under 50 %, red under 20 %. The digits' `--`
+  is an empty track and their grey is a grey `HP`.
+- **None** (`CONFIG_BEACON_READINGS_NONE=y`): no readings while a sprite
+  shows; without a sprite the digits show, so CI and the release build stay
+  valid with that conf.
+
+| Shows (digits) | Meaning |
 | --- | --- |
 | `75%` in white | The battery of that half, from a status advertisement received in the last minute. |
 | `--` in white | The keyboard is heard, but that half has no reading: it is off, out of range, or has not reported since it connected. |
@@ -55,10 +65,18 @@ limit), skipping GIF
 frames to keep the tempo (hardware 2026-09-28). 150 % is the user's pick of
 that trade: 6 frames a second on the screen, the GIF's tempo exactly 1.5x.
 
+`CONFIG_BEACON_SPRITE_FILL=y` lets the sprite fill the panel instead: centred,
+scaled by the largest factor of its proportions that fits inside a 12 px
+margin, whole or not (about 2.4x for a 90x90 px GIF, a GIF pixel covering 2 or
+3 panel pixels in turn), with the battery readings drawn over it (the
+`BEACON_READINGS` choice above picks their style, or none). Without a GIF the
+option does nothing, so it can stay in a consumer's conf.
+
 Limits:
 
 - GIF89a with a global colour table only (what LVGL's gifdec opens), at most
-  280x185 px (the box above the digits), with at least one frame. The build
+  280x185 px (the box above the digits; 256x216 with `BEACON_SPRITE_FILL`),
+  with at least one frame. The build
   rejects anything else, and a GIF whose decoder state (5 bytes per pixel
   plus 16 KiB) does not fit the LVGL pool next to the screen; the error names
   the `CONFIG_LV_Z_MEM_POOL_SIZE` that would fit. The shield's pool grows from
@@ -82,7 +100,7 @@ Limits:
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above, and the sprite's fixed tempo. |
 | `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo factor, one invalidation per changed frame and an endless loop. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
-| `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
+| `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_FILL`, the `BEACON_READINGS` choice, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
 
 ## Flashing
 

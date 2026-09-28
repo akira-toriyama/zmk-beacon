@@ -241,7 +241,8 @@ static void count_render(lv_event_t *e) {
     }
 }
 
-lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct) {
+lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct,
+                               bool fill) {
     const int32_t box_w = lv_area_get_width(box);
     const int32_t box_h = lv_area_get_height(box);
 
@@ -251,8 +252,24 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
                 (unsigned int)sizeof(sprite_gif));
         return NULL;
     }
-    const int32_t scale = MIN(box_w / gif->width, box_h / gif->height);
-    if (scale < 1) {
+    int32_t w, h;
+    if (fill) {
+        /* The largest size of the GIF's proportions inside the box, whole
+         * factor or not: STRETCH below scales to the object's size, so a GIF
+         * pixel covers 2 or 3 panel pixels in turn at 2.6x. */
+        if ((int64_t)box_w * gif->height <= (int64_t)box_h * gif->width) {
+            w = box_w;
+            h = (int32_t)((int64_t)box_w * gif->height / gif->width);
+        } else {
+            h = box_h;
+            w = (int32_t)((int64_t)box_h * gif->width / gif->height);
+        }
+    } else {
+        const int32_t scale = MIN(box_w / gif->width, box_h / gif->height);
+        w = gif->width * scale;
+        h = gif->height * scale;
+    }
+    if (w < gif->width || h < gif->height) {
         LOG_ERR("sprite %ux%u does not fit %dx%d", gif->width, gif->height, box_w, box_h);
         gd_close_gif(gif);
         return NULL;
@@ -289,8 +306,8 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     lv_image_set_src(img, &sprite.dsc);
     /* src, then size, then STRETCH: lv_image derives the scale from the
      * object size in set_src() and set_inner_align() only, not on a resize. */
-    lv_obj_set_size(img, gif->width * scale, gif->height * scale);
-    lv_obj_set_pos(img, box->x1 + (box_w - gif->width * scale) / 2, box->y1);
+    lv_obj_set_size(img, w, h);
+    lv_obj_set_pos(img, box->x1 + (box_w - w) / 2, box->y1 + (fill ? (box_h - h) / 2 : 0));
     lv_image_set_antialias(img, false);
     lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
 
@@ -305,8 +322,9 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
         lv_display_add_event_cb(disp, count_render, LV_EVENT_RENDER_READY, NULL);
     }
 
-    LOG_INF("sprite %ux%u at %dx from a %u byte GIF, %u bytes of the lvgl pool", gif->width,
-            gif->height, (int)scale, (unsigned int)sizeof(sprite_gif),
+    LOG_INF("sprite %ux%u as %dx%d (%d.%02dx) from a %u byte GIF, %u bytes of the lvgl pool",
+            gif->width, gif->height, w, h, h / gif->height, h * 100 / gif->height % 100,
+            (unsigned int)sizeof(sprite_gif),
             (unsigned int)(sizeof(gd_GIF) + 5u * gif->width * gif->height + LZW_CACHE_BYTES));
     return img;
 }

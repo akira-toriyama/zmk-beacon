@@ -63,6 +63,51 @@ config BEACON_SPRITE
       logging on, the sprite's minute line reports the LVGL pool's allocated
       and peak bytes, the numbers the pool size is chosen from.
 
+config BEACON_SPRITE_FILL
+    bool "Let the sprite fill the screen, the battery readings over it"
+    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
+    help
+      With a sprite (BEACON_SPRITE_GIF) it is centred and scaled by the
+      largest factor of its proportions that fits the panel inside a 12 px
+      margin, whole or not (a GIF pixel then covers 2 or 3 panel pixels in
+      turn; a 90x90 px GIF shows at about 2.4x on 280x240), and the battery
+      readings draw over it in the bottom corners instead of below it.
+      Without a sprite the readings show
+      as usual, so a consumer can keep the option in its conf while CI and
+      the release build without a GIF.
+
+choice BEACON_READINGS
+    prompt "Battery readings"
+    default BEACON_READINGS_DIGITS
+    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
+
+config BEACON_READINGS_DIGITS
+    bool "Digits in the bottom corners"
+    help
+      Each half's battery as a percentage in Montserrat 48, the left half
+      bottom-left, the right half bottom-right; "--" without a reading, grey
+      without a payload in the last minute.
+
+config BEACON_READINGS_HP_BAR
+    bool "One HP bar at the bottom"
+    select LV_USE_BAR
+    select LV_FONT_UNSCII_16
+    help
+      A battle-screen HP bar, "HP" and a bar in one dark box along the
+      bottom, drawn over a filling sprite. Its length is the keyboard's
+      battery: the mean of the halves with a reading, or the one half that
+      has one. Green above 50 %, yellow above 20 %, red below; an empty track
+      without a reading, a grey "HP" without a payload in the last minute.
+      Text in the 8x16 pixel font.
+
+config BEACON_READINGS_NONE
+    bool "None while a sprite shows"
+    help
+      No readings while a sprite shows. Without a sprite (CI, the release
+      build) the digits show, so the conf stays valid for those builds.
+
+endchoice
+
 config BEACON_STATUS_BROADCAST
     bool "Broadcast the keyboard's status on a second advertising set"
     depends on ZMK_SPLIT_ROLE_CENTRAL && BT && SETTINGS
