@@ -4,30 +4,14 @@
  * SPDX-License-Identifier: MIT
  *
  * The status screen's GIF sprite: the file named by CONFIG_BEACON_SPRITE_GIF,
- * embedded at build time (CMakeLists.txt), decoded with LVGL's gifdec into an
- * ARGB8888 canvas that blit() scales by nearest neighbour straight into the
- * display buffer. An own player instead of lv_gif: the stock widget
- * invalidates on every frame even when the canvas did not change (half the
- * frames of the test GIF, host check 2026-09-27), has no tempo control, and
- * plays once when the GIF has no NETSCAPE loop block. An own blit instead of
- * lv_image: LVGL's software transform (LV_DRAW_SW_ASM_NONE, per-pixel
- * ARGB8888 blending) took about 70 of the 105 ms a render of the 2x box cost
- * (hardware 2026-09-27), which left 4 to 6 renders a second against the
- * GIF's 15 steps a second at 150 % (the user's v2, canon t-dzxf 2026-09-28).
- *
- * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
- *   and writes RGB565 into the layer's buffer for the clip area. Safe here
- *   because LVGL renders every draw task as it is created when it has no OS
- *   (lv_draw_finalize_task_creation() -> lv_draw_dispatch() -> the sw unit's
- *   execute_drawing(), LV_USE_OS=0): the screen's fill has landed before the
- *   sprite's event, and the objects after it draw over the sprite. The
- *   refresh renders an invalid area in VDB-sized parts and sends the event
- *   once per part with layer->buf_area / _clip_area set to it. The layer
- *   holds native RGB565: LV_COLOR_16_SWAP is applied at flush
- *   (lv_refr.c, lv_draw_sw_rgb565_swap()). The canvas is B, G, R, A per pixel
- *   (gifdec.c render_frame_rect()); GIFs have no partial alpha, so a pixel
- *   is drawn or skipped, and a skipped one shows the screen's black, the only
- *   thing under the sprite box.
+ * embedded at build time (CMakeLists.txt), decoded with LVGL's gifdec into
+ * its ARGB8888 canvas, and drawn by blit() straight into the display buffer,
+ * scaled by nearest neighbour. An own player and an own draw rather than
+ * lv_gif and lv_image: the widget invalidates on every frame even when
+ * nothing changed (half the frames of the test GIF), has no tempo control,
+ * plays once when the GIF has no NETSCAPE loop block, and its software
+ * transform (LV_DRAW_SW_ASM_NONE, per-pixel ARGB8888 blending) cost about 70
+ * of the 105 ms a render of the 2x box took (hardware 2026-09-27/28).
  *
  * - LV_GIF_CACHE_DECODE_DATA=y is required (Kconfig selects it): in this LVGL
  *   checkout the other read_image_data() rejects every frame's last LZW token
@@ -37,11 +21,14 @@
  *   frames on 2026-09-27.
  * - gif_open() fills the canvas with the background colour at alpha 0xFF, and
  *   that stays visible wherever no frame paints; the canvas is cleared to
- *   transparent right after open. loop_count is 1 for the first decode, so
- *   that a GIF without any frame returns 0 at its trailer instead of making
- *   gd_get_frame() seek back to anim_start forever, and 0 (loop forever)
- *   afterwards: read_application_ext() only overwrites a negative count, and a
- *   GIF without a NETSCAPE block would otherwise stop after one pass.
+ *   transparent right after open and whenever gifdec seeks back to anim_start
+ *   at the trailer (the only backwards move of its read pointer), so every
+ *   pass starts transparent, as browsers and Pillow do. loop_count is 1 for
+ *   the first decode, so that a GIF without any frame returns 0 at its
+ *   trailer instead of making gd_get_frame() seek back forever, and 0 (loop
+ *   forever) afterwards: read_application_ext() only overwrites a negative
+ *   count, and a GIF without a NETSCAPE block would otherwise stop after one
+ *   pass.
  * - Inherited from gifdec, not handled: disposal 3 (restore to previous) is a
  *   no-op, and a frame without its own GCE reuses the previous frame's delay,
  *   transparency and disposal. Such GIFs show trails or holes on the device.
@@ -49,13 +36,29 @@
  *   do) divided by the speed, kept in 1/100 ms so that 50 ms at 150 % is
  *   33.33 ms rather than 33. A TICK_MS lv_timer decodes every frame that is
  *   due, at most CATCHUP_MAX per tick (then drops the backlog), and
- *   invalidates at most once per tick and only when the canvas changed
- *   (FNV-1a over its words), so the tempo holds while drawing is slower than
- *   the GIF, as long as the frames due per tick stay within CATCHUP_MAX.
+ *   invalidates at most once per tick: only when the canvas changed (FNV-1a
+ *   over its words) and only the panel area of the canvas rectangles the
+ *   tick's frames touched (each frame's own and the one its predecessor's
+ *   disposal cleared), so the tempo holds while drawing is slower than the
+ *   GIF, as long as the frames due per tick stay within CATCHUP_MAX, and a
+ *   flush carries only what moved.
+ * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
+ *   and writes RGB565 into the layer's buffer for the clip area. Safe because
+ *   LVGL renders every draw task as it is created when it has no OS
+ *   (lv_draw_finalize_task_creation() -> lv_draw_dispatch() -> the sw unit's
+ *   execute_drawing(), LV_USE_OS=0): the screen's fill has landed before the
+ *   sprite's event, and the objects after it draw over the sprite. The
+ *   refresh renders an invalid area in VDB-sized parts and sends the event
+ *   once per part with layer->buf_area / _clip_area set to it. The layer
+ *   holds native RGB565: LV_COLOR_16_SWAP is applied at flush (lv_refr.c,
+ *   lv_draw_sw_rgb565_swap()). The canvas is B, G, R, A per pixel (gifdec.c
+ *   render_frame_rect()); GIFs have no partial alpha, so a pixel is drawn or
+ *   skipped, and a skipped one shows the screen's black, the only thing under
+ *   the sprite box.
  * - Display work queue only (LV_USE_OS=0): creation from
- *   zmk_display_status_screen() and the timer.
+ *   zmk_display_status_screen(), the timer and the draw event.
  * - gd_get_frame() < 0 (malformed data) or no frame at all: the sprite is
- *   removed and its pool memory freed; the battery labels are unaffected.
+ *   removed and its pool memory freed; the readings are unaffected.
  */
 
 #include <stdint.h>
@@ -75,15 +78,14 @@
 LOG_MODULE_REGISTER(beacon_sprite, LOG_LEVEL_INF);
 
 BUILD_ASSERT(sizeof(gd_GIF) % sizeof(uint32_t) == 0,
-             "the canvas follows gd_GIF in one allocation and is hashed as words");
+             "the canvas follows gd_GIF in one allocation and is read as words");
 
 #define TICK_MS 10
-/* The tick cannot run while LVGL renders (about 105 ms for the 2x box), and a
- * decode takes about 11 ms (hardware 2026-09-28), so a cycle is about
- * 105 + 11n ms for n frames and the tempo ceiling is CATCHUP_MAX frames per
- * cycle: about 2.1x of 50 ms frames at 8 (about 5 renders a second, from that
- * model), about 2.8x at 16 (3.5 renders, measured with 16). A higher limit
- * raises the ceiling and costs renders. 150 % needs about 5 a cycle. */
+/* The tick cannot run while LVGL renders, and a decode takes about 11 ms
+ * (hardware 2026-09-28), so a cycle is one render plus 11 ms per frame and the
+ * tempo ceiling is CATCHUP_MAX frames per cycle. A higher limit raises the
+ * ceiling and costs renders; 150 % needs about 2 frames a cycle at the 62 ms
+ * renders blit() gave the 2.2x box. */
 #define CATCHUP_MAX 8
 #define DELAY_UNIT_MS 10
 #define DELAY_MIN_UNITS 10
@@ -106,17 +108,34 @@ static struct {
     uint32_t frame_at;
     /* The shown frame's delay at 100 %. */
     uint32_t frame_ms;
+    /* The last decoded frame's rectangle: the next decode's disposal may
+     * clear it. Empty (x1 > x2) before the first frame. */
+    lv_area_t frame;
+    /* Canvas pixels touched since the last invalidation; empty as above. */
+    lv_area_t dirty;
     /* The canvas as last drawn. */
     uint32_t hash;
     uint32_t decoded;
     uint32_t invalidated;
     uint32_t logged_at;
-    /* Every screen render (labels included) and its time, flush included;
+    /* Every screen render (readings included) and its time, flush included;
      * logging builds only. */
     uint32_t render_start;
     uint32_t renders;
     uint32_t render_us;
 } sprite;
+
+static const lv_area_t empty = {.x1 = INT32_MAX, .y1 = INT32_MAX, .x2 = -1, .y2 = -1};
+
+static void dirty_add(const lv_area_t *area) {
+    if (area->x1 > area->x2 || area->y1 > area->y2) {
+        return;
+    }
+    sprite.dirty.x1 = MIN(sprite.dirty.x1, area->x1);
+    sprite.dirty.y1 = MIN(sprite.dirty.y1, area->y1);
+    sprite.dirty.x2 = MAX(sprite.dirty.x2, area->x2);
+    sprite.dirty.y2 = MAX(sprite.dirty.y2, area->y2);
+}
 
 static uint32_t canvas_hash(void) {
     /* Word access: lv_malloc returns 8-aligned blocks and the canvas follows
@@ -135,20 +154,25 @@ static bool decode_next(void) {
     gd_GIF *gif = sprite.gif;
     const uint32_t before = gif->f_rw_p;
 
+    /* gd_get_frame() first disposes of the previous frame. */
+    dirty_add(&sprite.frame);
     if (gd_get_frame(gif) <= 0) {
         return false;
     }
     if (gif->f_rw_p < before) {
-        /* The trailer sent gifdec back to anim_start (the only backwards
-         * move of its read pointer): every pass starts on a transparent
-         * canvas, as browsers and Pillow do. gifdec alone leaves the last
-         * frame's pixels under the first frames (32 px for two frames with
-         * the test GIF, host check 2026-09-27). */
         memset(gif->canvas, 0, 4u * gif->width * gif->height);
+        dirty_add(&(lv_area_t){.x1 = 0, .y1 = 0, .x2 = gif->width - 1, .y2 = gif->height - 1});
     }
     gd_render_frame(gif, gif->canvas);
+    sprite.frame = (lv_area_t){
+        .x1 = gif->fx,
+        .y1 = gif->fy,
+        .x2 = gif->fx + gif->fw - 1,
+        .y2 = gif->fy + gif->fh - 1,
+    };
+    dirty_add(&sprite.frame);
 
-    uint32_t units = sprite.gif->gce.delay;
+    uint32_t units = gif->gce.delay;
     if (units < 2) {
         units = DELAY_MIN_UNITS;
     }
@@ -160,6 +184,25 @@ static bool decode_next(void) {
 static uint32_t interval_sub(void) {
     const uint64_t sub = (uint64_t)sprite.frame_ms * SUB_PER_MS * SPEED_FULL_PCT / sprite.speed_pct;
     return (uint32_t)MIN(sub, INT32_MAX);
+}
+
+/* The panel pixels that read the dirty canvas columns c1..c2 run from
+ * ceil(c1 * obj_w / src_w) to ceil((c2 + 1) * obj_w / src_w) - 1, the inverse
+ * of blit()'s floor(x * src_w / obj_w); rows alike. */
+static void invalidate_dirty(void) {
+    const gd_GIF *gif = sprite.gif;
+    lv_area_t coords;
+    lv_obj_get_coords(sprite.obj, &coords);
+    const int32_t obj_w = lv_area_get_width(&coords);
+    const int32_t obj_h = lv_area_get_height(&coords);
+    const lv_area_t area = {
+        .x1 = coords.x1 + DIV_ROUND_UP(sprite.dirty.x1 * obj_w, gif->width),
+        .y1 = coords.y1 + DIV_ROUND_UP(sprite.dirty.y1 * obj_h, gif->height),
+        .x2 = coords.x1 + DIV_ROUND_UP((sprite.dirty.x2 + 1) * obj_w, gif->width) - 1,
+        .y2 = coords.y1 + DIV_ROUND_UP((sprite.dirty.y2 + 1) * obj_h, gif->height) - 1,
+    };
+
+    lv_obj_invalidate_area(sprite.obj, &area);
 }
 
 static void remove_sprite(const char *why) {
@@ -223,8 +266,10 @@ static void tick(lv_timer_t *timer) {
         if (hash != sprite.hash) {
             sprite.hash = hash;
             sprite.invalidated++;
-            lv_obj_invalidate(sprite.obj);
+            invalidate_dirty();
         }
+        /* Unchanged pixels need no redraw even where a frame touched them. */
+        sprite.dirty = empty;
     }
 
     if (IS_ENABLED(CONFIG_LOG) && now - sprite.logged_at >= LOG_EVERY_MS) {
@@ -315,8 +360,8 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     int32_t w, h;
     if (fill) {
         /* The largest size of the GIF's proportions inside the box, whole
-         * factor or not: STRETCH below scales to the object's size, so a GIF
-         * pixel covers 2 or 3 panel pixels in turn at 2.2x. */
+         * factor or not: a GIF pixel covers 2 or 3 panel pixels in turn at
+         * 2.2x. */
         if ((int64_t)box_w * gif->height <= (int64_t)box_h * gif->width) {
             w = box_w;
             h = (int32_t)((int64_t)box_w * gif->height / gif->width);
@@ -338,6 +383,8 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     memset(gif->canvas, 0, 4u * gif->width * gif->height);
     gif->loop_count = 1;
     sprite.gif = gif;
+    sprite.frame = empty;
+    sprite.dirty = empty;
     if (!decode_next()) {
         LOG_ERR("sprite: no frame, or the first frame is malformed");
         gd_close_gif(gif);
@@ -346,6 +393,7 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     }
     gif->loop_count = 0;
     sprite.hash = canvas_hash();
+    sprite.dirty = empty;
 
     /* A plain object that draws nothing of its own (no theme is installed, so
      * the styles are explicit); blit() paints its area. */
@@ -359,6 +407,8 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     lv_obj_set_size(obj, w, h);
     /* Filling, the sprite stands on the box's bottom edge (the readings). */
     lv_obj_set_pos(obj, box->x1 + (box_w - w) / 2, box->y1 + (fill ? box_h - h : 0));
+    /* invalidate_dirty() reads the coordinates before the first refresh. */
+    lv_obj_update_layout(obj);
     lv_obj_add_event_cb(obj, blit, LV_EVENT_DRAW_MAIN, NULL);
 
     sprite.obj = obj;
