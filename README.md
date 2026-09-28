@@ -23,9 +23,8 @@ observer and shows each half's battery (on the Prospector Dongle since
 2026-09-26, 19 h without a gap). The broadcaster sends that advertisement
 from the Imprint Dongle on a second advertising set next to ZMK's own
 (measured on hardware 2026-09-27 as canon's t-eray spike). A local build can
-embed a GIF sprite that plays above the readings and speeds up while the
-keyboard is typed on (canon task t-rx4e; shown on the Prospector Dongle
-2026-09-27).
+embed a GIF sprite that plays above the readings (canon task t-rx4e; shown
+on the Prospector Dongle 2026-09-27).
 
 ## The screen
 
@@ -46,19 +45,15 @@ reports its first-paired half first (canon's CLAUDE.md, split peripheral slot).
 With `CONFIG_BEACON_SPRITE_GIF="<absolute path>"` the build embeds a GIF and
 the screen plays it above the battery readings, top-centred and scaled by the
 largest integer factor that fits between the top edge and the digits (a
-90x90 px GIF shows at 2x on the 280x240 panel). The tempo follows the keyboard:
+90x90 px GIF shows at 2x on the 280x240 panel). It never stops and always
+plays at 150 % of the GIF's own tempo, with no link to the keyboard.
 
-| Keyboard                                              | Sprite                                                                 |
-| ----------------------------------------------------- | ---------------------------------------------------------------------- |
-| Typed on                                              | The GIF's own tempo plus 2 % per WPM, capped at 300 % (100 WPM and up) |
-| Not typed on, or not heard                            | The GIF's own tempo                                                    |
-
-The sprite never stops. WPM is what ZMK computes on the Imprint Dongle
-(`CONFIG_ZMK_WPM`, selected by the broadcaster) from keycode releases only,
-so `&vkey`, layer and mouse keys do not count; it travels in byte 24 of the
-status payload and reads 0 1-6 s after the last typed key, which brings the
-sprite back to its own tempo. A WPM from a payload older than 5 s counts as
-0.
+A faster tempo costs smoothness: decoding a GIF frame takes about 11 ms and
+drawing the 2x sprite about 105 ms, so the screen shows about 7 frames a
+second at 100 % and about 3.5 at about 2.8x (measured with a raised catch-up
+limit), skipping GIF
+frames to keep the tempo (hardware 2026-09-28). 150 % is the user's pick of
+that trade: 6 frames a second on the screen, the GIF's tempo exactly 1.5x.
 
 Limits:
 
@@ -83,9 +78,9 @@ Limits:
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
 | `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery from the status payload. |
 | `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms. |
-| `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes, the active layer's index and name, and the WPM byte are used. |
-| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above, and the sprite's tempo from the payload's WPM. |
-| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with speed control, one invalidation per changed frame and an endless loop. |
+| `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes and the active layer's index and name are used. |
+| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above, and the sprite's fixed tempo. |
+| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo factor, one invalidation per changed frame and an endless loop. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
 | `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
 

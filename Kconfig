@@ -40,9 +40,9 @@ config BEACON_SPRITE_GIF
       Absolute path of a GIF89a file with a global colour table (the only
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
       the status screen plays it above the battery readings, scaled by the
-      largest integer factor that fits: always at the GIF's own tempo, faster
-      while the keyboard is typed on (WPM from the status advertisement).
-      Empty: no sprite, which is what CI and the release build.
+      largest integer factor that fits, always at a fixed 150 % of the GIF's
+      own tempo (src/prospector_screen.c). Empty: no sprite, which is what CI
+      and the release build.
 
       The decoder keeps 5 bytes per pixel plus 16 KiB in the LVGL pool for
       the whole run; the build fails when that does not fit
@@ -67,14 +67,12 @@ config BEACON_STATUS_BROADCAST
     bool "Broadcast the keyboard's status on a second advertising set"
     depends on ZMK_SPLIT_ROLE_CENTRAL && BT && SETTINGS
     select BT_EXT_ADV
-    select ZMK_WPM
     help
       On the keyboard's split central, advertise the status payload (each
-      half's battery, the highest active layer and its name, the typing
-      speed in words per minute; src/status_payload.h) as manufacturer data
-      in a legacy, non-connectable, non-scannable advertising set next to
-      ZMK's own connectable one. The Prospector Dongle's observer (the
-      prospector shield) reads it.
+      half's battery, the highest active layer and its name;
+      src/status_payload.h) as manufacturer data in a legacy, non-connectable,
+      non-scannable advertising set next to ZMK's own connectable one. The
+      Prospector Dongle's observer (the prospector shield) reads it.
 
       The consumer's config must also set CONFIG_BT_EXT_ADV_MAX_ADV_SET=2:
       with BT_EXT_ADV the host takes ZMK's legacy advertising from the same
