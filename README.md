@@ -23,8 +23,9 @@ observer and shows each half's battery (on the Prospector Dongle since
 2026-09-26, 19 h without a gap). The broadcaster sends that advertisement
 from the Imprint Dongle on a second advertising set next to ZMK's own
 (measured on hardware 2026-09-27 as canon's t-eray spike). A local build can
-embed a GIF sprite that plays above the readings at the keyboard's typing
-speed (canon task t-rx4e; shown on the Prospector Dongle 2026-09-27).
+embed a GIF sprite that plays above the readings and speeds up while the
+keyboard is typed on (canon task t-rx4e; shown on the Prospector Dongle
+2026-09-27).
 
 ## The screen
 

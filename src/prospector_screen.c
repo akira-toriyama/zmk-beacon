@@ -32,10 +32,12 @@
 
 LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 
-/* The broadcaster answers every scan request (ZMK advertises every 100-150 ms);
- * its known payload-free windows are about 2 s after its boot and, after a
- * failed connection attempt restarts ZMK's advertising, up to its 30 s idle
- * update period. */
+/* zmk-beacon's broadcaster sends a payload every 200 ms in canon (255-273 a
+ * minute received on hardware, 2026-09-27). A keyboard still on
+ * prospector-zmk-module v2.2.3, which the observer also accepts, carries it in
+ * scan responses only, with payload-free windows of about 2 s after its boot
+ * and up to its 30 s idle update period after a failed connection restarts
+ * ZMK's advertising. A minute covers both. */
 #define STALE_AFTER_MS 60000
 #define REFRESH_MS 500
 #define MARGIN_PX 12
@@ -51,7 +53,9 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
  * keycode releases only (&vkey and layer keys do not count) and reads 0 1-6 s
  * after the last one, which brings the sprite back to SPEED_BASE. A WPM from
  * a payload older than WPM_MAX_AGE_MS counts as 0: the observer keeps the last
- * value when payloads stop, and the broadcaster refreshes every 200 ms. */
+ * value when payloads stop. The age assumes the broadcaster's
+ * BEACON_STATUS_BROADCAST_INTERVAL_MS (200 ms in canon) stays well under it;
+ * near or above it the sprite would pulse between fast and SPEED_BASE. */
 #define SPRITE_SPEED_BASE_PCT 100
 #define SPRITE_SPEED_PER_WPM_PCT 2
 #define SPRITE_SPEED_MAX_PCT 300
