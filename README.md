@@ -58,12 +58,17 @@ largest integer factor that fits between the top edge and the digits (a
 90x90 px GIF shows at 2x on the 280x240 panel). It never stops and always
 plays at 150 % of the GIF's own tempo, with no link to the keyboard.
 
-A faster tempo costs smoothness: decoding a GIF frame takes about 11 ms and
-drawing the 2x sprite about 105 ms, so the screen shows about 7 frames a
-second at 100 % and about 3.5 at about 2.8x (measured with a raised catch-up
-limit), skipping GIF
-frames to keep the tempo (hardware 2026-09-28). 150 % is the user's pick of
-that trade: 6 frames a second on the screen, the GIF's tempo exactly 1.5x.
+The sprite draws itself: the player scales the decoded frame straight into
+the display buffer by nearest neighbour (`src/sprite.c`), and the panel's SPI
+runs at 32 MHz. Hardware 2026-09-28 with the 2.2x sprite above the HP bar: a
+render, flush included, takes about 43 ms, so the screen shows about 15
+frames a second, every step of a 10-step-a-second GIF played at 150 %;
+decoding costs about 11 ms a GIF frame. For comparison, LVGL's own image
+transform took 105 ms a render of a 2x sprite (6 frames a second at 150 %)
+and the 16 MHz SPI clock 63 ms (10). When drawing falls behind, the player
+skips GIF frames to keep the tempo. 32 MHz is above the ST7789V data sheet's
+write cycle, as 16 MHz already was; should the panel show noise, set
+`mipi-max-frequency` in the shield overlay back to 20 MHz (16 MHz effective).
 
 `CONFIG_BEACON_SPRITE_FILL=y` lets the sprite fill the space above the
 readings instead: scaled by the largest factor of its proportions that fits
@@ -100,9 +105,10 @@ Limits:
 | `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery from the status payload. |
 | `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms. |
 | `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes and the active layer's index and name are used. |
-| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above, and the sprite's fixed tempo. |
-| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo factor, one invalidation per changed frame and an endless loop. |
-| `src/hp_bar.c` | `CONFIG_BEACON_READINGS_HP_BAR`: the HP bar reading, `HP` and a bar in a box, showing the one level the screen maps the batteries to; a sibling of the sprite, not a part of it. |
+| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): places the readings style along the bottom and the sprite above it, and feeds the readings the observer's state every 500 ms. |
+| `src/readings.h` | The readings style interface: where it starts, create, show. `src/readings_digits.c` is the digits (the default, and the fallback of `BEACON_READINGS_NONE` without a sprite). |
+| `src/hp_bar.c` | `CONFIG_BEACON_READINGS_HP_BAR`: the HP bar readings, `HP` and a bar in a box along the bottom, and the mapping of both halves' batteries to its one level; a sibling of the sprite, not a part of it. |
+| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo factor, one invalidation per changed frame, an endless loop, and its own nearest-neighbour draw into the display buffer. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
 | `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_FILL`, the `BEACON_READINGS` choice, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
 

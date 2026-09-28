@@ -154,29 +154,47 @@ Japanese.
   block). The stock `lv_gif` has none of this and invalidates every frame;
   about half the consecutive canvases of the test GIF were identical, which
   the player's FNV-1a hash skips.
-- **The stretched `lv_image` must not report an extra draw area**:
-  `LV_IMAGE_ALIGN_STRETCH` scales around pivot (0,0), and lv_image's own
-  `LV_EVENT_REFR_EXT_DRAW_SIZE` handler transforms the already stretched size
-  again, claiming about one object size on every side. `lv_obj_invalidate()`
-  and `lv_obj_invalidate_area()` both widen to that area, so every changed
-  frame redrew the whole panel: hardware 2026-09-27, about 67,000 px and
-  152 ms a frame (18 ms per 16,800-px flush, SPIM at 16 MHz: 20 MHz in the
-  overlay is not an nRF frequency), 5 renders a second. `src/sprite.c` sets
-  the claim back to 0 in a callback that runs after the class handler. After
-  that fix, same day: 106 ms a render of the 2x sprite box (about 35 ms of it
-  flush, the rest LVGL's software transform), 209 renders in 30 s of play at
-  100 %, the observer unchanged at 262-273 payloads a minute. The player keeps
-  the tempo by merging frames when drawing falls behind, up to a ceiling set
-  by `CATCHUP_MAX` (see the CPU budget below).
-- **The sprite's CPU budget is spent at 100 %** (hardware 2026-09-28): a
-  gifdec decode costs about 11 ms a frame and a render of the 2x box about
-  105 ms, so 20 GIF frames a second plus 7 renders fill the second. A faster
-  tempo takes renders away: with `CATCHUP_MAX` 16, 300 % and 500 % requested
-  both reached about 2.8x at 3.5 renders a second; the committed 8 caps near
-  2.1x at about 5 (model, not measured). The tempo is a fixed 150 % (the user's pick after
-  a WPM-driven tempo, 2026-09-27/28). Faster and smoother needs cheaper frames
-  (pre-composited frames in flash instead of gifdec) or a cheaper draw (an own
-  2x blit into an RGB565 buffer; RAM is the limit), not a higher factor.
+- **The screen is two siblings** (`src/prospector_screen.c`): a battery
+  readings style along the bottom (`src/readings.h`, a three-call table; the
+  `BEACON_READINGS` Kconfig choice picks `readings_digits.c` or `hp_bar.c`,
+  and `BEACON_READINGS_NONE` shows the digits only when the build has no
+  sprite, so a consumer's conf stays valid for CI) and the sprite above it,
+  never over it. The readings keep a 12 px margin: the panel's corners are
+  rounded and a box 2 px from the edge lost its bottom corners (hardware
+  2026-09-28). A filling sprite (`BEACON_SPRITE_FILL`) keeps 2 px. No LVGL
+  theme is installed, so every widget sets its styles itself.
+- **The sprite draws itself** (`src/sprite.c` `blit()`, since 2026-09-28): a
+  plain transparent object whose `LV_EVENT_DRAW_MAIN` handler scales the
+  gifdec canvas by nearest neighbour straight into the layer's RGB565 buffer.
+  That is safe only because of three LVGL facts, all read in this checkout
+  (9.3.0-dev): without an OS, `lv_draw_finalize_task_creation()` dispatches
+  and the sw unit renders each task synchronously, so the screen's fill has
+  landed before the sprite's event; the refresh renders an invalid area in
+  VDB-sized parts and sends the event once per part with `layer->buf_area` /
+  `_clip_area` set to it; and `LV_COLOR_16_SWAP` is applied at flush
+  (`lv_refr.c`, `lv_draw_sw_rgb565_swap()`), so the layer holds native
+  RGB565. Before it, lv_image with `LV_IMAGE_ALIGN_STRETCH` cost 105 ms a
+  render of the 2x box (about 70 ms of it LVGL's software transform,
+  `LV_DRAW_SW_ASM_NONE`) once its `LV_EVENT_REFR_EXT_DRAW_SIZE` claim of an
+  extra object size on every side had been zeroed (152 ms and the whole
+  panel before that, hardware 2026-09-27). Invalidating only the frames'
+  touched rectangles instead of the whole box changed nothing: the test
+  GIF's frames cover 65-76 % of the canvas and two consecutive ones nearly
+  all of it.
+- **The panel's SPI runs at 32 MHz** (`mipi-max-frequency` in the shield
+  overlay; SPIM3 is the one nRF52840 instance that can): a render of the 2.2x
+  sprite box above the HP bar, flush included, takes about 43 ms against 63
+  at 16 MHz (20 MHz in the overlay rounded down), hardware 2026-09-28, the
+  observer unchanged at 256-269 payloads a minute. Above the ST7789V data
+  sheet's 15 MHz write cycle, as 16 MHz already was; set 20 MHz back if the
+  panel ever shows noise.
+- **The sprite's CPU budget** (hardware 2026-09-28): a gifdec decode costs
+  about 11 ms a frame and a render about 43 ms, so at the fixed 150 % (the
+  user's pick after a WPM-driven tempo, 2026-09-27/28) the screen shows about
+  15 frames a second, the GIF's every step. The player keeps the tempo by
+  merging frames when drawing falls behind, up to `CATCHUP_MAX` frames a
+  tick; with the old 105 ms renders and `CATCHUP_MAX` 16, 300 % and 500 %
+  requested both reached about 2.8x at 3.5 renders a second.
 - **The LVGL pool is sized in `Kconfig.defconfig`, not in `prospector.conf`**:
   `LV_Z_MEM_POOL_SIZE` defaults to 90112 (88 KiB) with `BEACON_SPRITE` and to
   49152 without; a `.conf` line, the consumer's included, would fix it for
