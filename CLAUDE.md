@@ -170,7 +170,9 @@ Japanese.
   the tempo by merging frames when drawing falls behind.
 - **The WPM path works end to end** (hardware 2026-09-27): with the
   broadcaster's image on the Imprint Dongle, typing moved the sprite's logged
-  speed to 148 % (WPM 24) and it froze again when typing stopped.
+  speed to 148 % (WPM 24). That build froze the sprite 30 s after the last
+  typed key; since 2026-09-28 it never stops and falls back to 100 % instead
+  (user's choice).
 - **The LVGL pool is sized in `Kconfig.defconfig`, not in `prospector.conf`**:
   `LV_Z_MEM_POOL_SIZE` defaults to 90112 (88 KiB) with `BEACON_SPRITE` and to
   49152 without; a `.conf` line, the consumer's included, would fix it for

@@ -50,15 +50,14 @@ largest integer factor that fits between the top edge and the digits (a
 | Keyboard                                              | Sprite                                                                 |
 | ----------------------------------------------------- | ---------------------------------------------------------------------- |
 | Typed on                                              | The GIF's own tempo plus 2 % per WPM, capped at 300 % (100 WPM and up) |
-| No typed key for about 30-36 s                        | Frozen on the current frame                                            |
-| Not heard for a minute, or not yet since boot         | Frozen                                                                 |
+| Not typed on, or not heard                            | The GIF's own tempo                                                    |
 
-The first 30 s after boot count as typing. WPM is what ZMK computes on the
-Imprint Dongle (`CONFIG_ZMK_WPM`, selected by the broadcaster) from keycode
-releases only, so `&vkey`, layer and mouse keys do not count; it travels in
-byte 24 of the status payload and reads 0 1-6 s after the last typed key.
-The sprite freezes 30 s after the last payload with WPM above 0 (ZMK's default
-idle timeout).
+The sprite never stops. WPM is what ZMK computes on the Imprint Dongle
+(`CONFIG_ZMK_WPM`, selected by the broadcaster) from keycode releases only,
+so `&vkey`, layer and mouse keys do not count; it travels in byte 24 of the
+status payload and reads 0 1-6 s after the last typed key, which brings the
+sprite back to its own tempo. A WPM from a payload older than 5 s counts as
+0.
 
 Limits:
 

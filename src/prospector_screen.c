@@ -44,18 +44,18 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 #define LOG_EVERY_MS 60000
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
-/* Sprite tempo in percent of the GIF's own: SPEED_BASE while the keyboard is
- * heard and in use, plus SPEED_PER_WPM per WPM (50 WPM, an everyday pace,
- * doubles it), capped at SPEED_MAX (100 WPM; beyond that the decoder only
- * outruns the draw). Paused IDLE_MS (ZMK's default CONFIG_ZMK_IDLE_TIMEOUT)
- * after the last payload that carried WPM > 0; boot counts as activity. ZMK's
- * WPM counts keycode releases only (&vkey and layer keys do not count) and
- * reads 0 1-6 s after the last one, so the sprite stops 31-36 s after the
- * last typed key. */
+/* Sprite tempo in percent of the GIF's own: always at least SPEED_BASE (the
+ * user wants it moving, keyboard heard or not; 2026-09-28), plus SPEED_PER_WPM
+ * per WPM (50 WPM, an everyday pace, doubles it), capped at SPEED_MAX
+ * (100 WPM; beyond that the decoder only outruns the draw). ZMK's WPM counts
+ * keycode releases only (&vkey and layer keys do not count) and reads 0 1-6 s
+ * after the last one, which brings the sprite back to SPEED_BASE. A WPM from
+ * a payload older than WPM_MAX_AGE_MS counts as 0: the observer keeps the last
+ * value when payloads stop, and the broadcaster refreshes every 200 ms. */
 #define SPRITE_SPEED_BASE_PCT 100
 #define SPRITE_SPEED_PER_WPM_PCT 2
 #define SPRITE_SPEED_MAX_PCT 300
-#define SPRITE_IDLE_MS 30000
+#define SPRITE_WPM_MAX_AGE_MS 5000
 /* Every character a label can show; the sprite box ends where their ink begins. */
 #define LABEL_CHARS "0123456789%-"
 #endif
@@ -110,19 +110,10 @@ static void refresh(lv_timer_t *timer) {
     const bool right_changed = show(&right_side, fresh, now.right);
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
-    /* Uptime of the last payload with WPM > 0 (when it arrived, not when this
-     * refresh saw it: the observer keeps the last WPM after payloads stop);
-     * 0 = boot. */
-    static int64_t typed_ms;
-    uint16_t speed = 0;
+    const unsigned int wpm = now.received && age_ms <= SPRITE_WPM_MAX_AGE_MS ? now.wpm : 0;
 
-    if (fresh && now.wpm > 0) {
-        typed_ms = now.last_ms;
-    }
-    if (fresh && now_ms - typed_ms <= SPRITE_IDLE_MS) {
-        speed = MIN(SPRITE_SPEED_BASE_PCT + SPRITE_SPEED_PER_WPM_PCT * now.wpm, SPRITE_SPEED_MAX_PCT);
-    }
-    beacon_sprite_set_speed(speed);
+    beacon_sprite_set_speed(
+        MIN(SPRITE_SPEED_BASE_PCT + SPRITE_SPEED_PER_WPM_PCT * wpm, SPRITE_SPEED_MAX_PCT));
 #endif
 
     if (IS_ENABLED(CONFIG_LOG) &&
