@@ -6,9 +6,12 @@
  * ZMK custom status screen for the prospector shield: the battery of each
  * keyboard half and, with CONFIG_BEACON_SPRITE, the GIF sprite (sprite.c).
  *
- * Sprite: above the readings, scaled by a whole factor (the default), or with
- * CONFIG_BEACON_SPRITE_FILL filling the panel inside a MARGIN_PX margin with
- * the readings drawn over it (they are created after it).
+ * Sprite: above the readings, never over them. Scaled by a whole factor and
+ * top-centred (the default), or with CONFIG_BEACON_SPRITE_FILL the largest
+ * size of its proportions that fits between the top edge and the readings,
+ * whole factor or not, standing on them; both inside MARGIN_PX, which that
+ * option shrinks so that the panel is used to its edges (the user's v1,
+ * 2026-09-28).
  *
  * Readings (the BEACON_READINGS choice), one per half, left then right:
  *   digits  "75%" in the bottom corners, Montserrat 48. White: a reading from
@@ -52,7 +55,8 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
  * ZMK's advertising. A minute covers both. */
 #define STALE_AFTER_MS 60000
 #define REFRESH_MS 500
-#define MARGIN_PX 12
+/* The readings' and the sprite's distance from the panel's edges. */
+#define MARGIN_PX (IS_ENABLED(CONFIG_BEACON_SPRITE_FILL) ? 2 : 12)
 /* Logging builds print the screen state on every change and at least this
  * often, so a long run's log shows the display thread alive. */
 #define LOG_EVERY_MS 60000
@@ -70,7 +74,8 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 #if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
 /* The HP box: MARGIN_PX in from the bottom and the sides, one row of the 8x16
  * unscii glyph: "HP", a gap the user asked for (2026-09-28: 8 px read as
- * touching), then the bar to the right edge. Colours after the games' HP bar. */
+ * touching), then the bar to the right edge. Colours after the games' HP bar.
+ * A filling sprite stands on the box's top edge. */
 #define HP_BOX_H 28
 #define HP_BORDER_PX 2
 #define HP_ROW_Y 6
@@ -303,17 +308,15 @@ lv_obj_t *zmk_display_status_screen(void) {
     bool sprite = false;
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
-    /* Created before the readings so that they draw on top of it. */
+    /* Between the top edge and the readings; filling, inside the margin too,
+     * standing on the readings. */
     const bool fill = IS_ENABLED(CONFIG_BEACON_SPRITE_FILL);
-    /* Filling, the sprite keeps the margin the readings keep from the edges:
-     * flush against them it looked cramped to the user (2026-09-28). */
     const int32_t inset = fill ? MARGIN_PX : 0;
-    const int32_t screen_h = lv_display_get_vertical_resolution(NULL);
     const lv_area_t box = {
         .x1 = inset,
         .y1 = inset,
         .x2 = screen_w - 1 - inset,
-        .y2 = (fill ? screen_h - inset : readings_top(screen_h)) - 1,
+        .y2 = readings_top(lv_display_get_vertical_resolution(NULL)) - 1,
     };
     sprite = beacon_sprite_create(screen, &box, SPRITE_SPEED_PCT, fill) != NULL;
 #endif

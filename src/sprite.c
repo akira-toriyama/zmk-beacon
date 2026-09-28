@@ -256,7 +256,7 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     if (fill) {
         /* The largest size of the GIF's proportions inside the box, whole
          * factor or not: STRETCH below scales to the object's size, so a GIF
-         * pixel covers 2 or 3 panel pixels in turn at 2.6x. */
+         * pixel covers 2 or 3 panel pixels in turn at 2.3x. */
         if ((int64_t)box_w * gif->height <= (int64_t)box_h * gif->width) {
             w = box_w;
             h = (int32_t)((int64_t)box_w * gif->height / gif->width);
@@ -307,7 +307,8 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     /* src, then size, then STRETCH: lv_image derives the scale from the
      * object size in set_src() and set_inner_align() only, not on a resize. */
     lv_obj_set_size(img, w, h);
-    lv_obj_set_pos(img, box->x1 + (box_w - w) / 2, box->y1 + (fill ? (box_h - h) / 2 : 0));
+    /* Filling, the sprite stands on the box's bottom edge (the readings). */
+    lv_obj_set_pos(img, box->x1 + (box_w - w) / 2, box->y1 + (fill ? box_h - h : 0));
     lv_image_set_antialias(img, false);
     lv_image_set_inner_align(img, LV_IMAGE_ALIGN_STRETCH);
 

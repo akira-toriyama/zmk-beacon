@@ -65,17 +65,19 @@ limit), skipping GIF
 frames to keep the tempo (hardware 2026-09-28). 150 % is the user's pick of
 that trade: 6 frames a second on the screen, the GIF's tempo exactly 1.5x.
 
-`CONFIG_BEACON_SPRITE_FILL=y` lets the sprite fill the panel instead: centred,
-scaled by the largest factor of its proportions that fits inside a 12 px
-margin, whole or not (about 2.4x for a 90x90 px GIF, a GIF pixel covering 2 or
-3 panel pixels in turn), with the battery readings drawn over it (the
-`BEACON_READINGS` choice above picks their style, or none). Without a GIF the
-option does nothing, so it can stay in a consumer's conf.
+`CONFIG_BEACON_SPRITE_FILL=y` lets the sprite fill the space above the
+readings instead: scaled by the largest factor of its proportions that fits
+between the top edge and the readings, whole or not (about 2.3x for a 90x90 px
+GIF above the HP bar, a GIF pixel covering 2 or 3 panel pixels in turn), and
+standing on them, with the screen's margin down from 12 px to 2 px (the
+`BEACON_READINGS` choice above picks the readings' style, or none). Without a
+GIF the option does nothing, so it can stay in a consumer's conf.
 
 Limits:
 
 - GIF89a with a global colour table only (what LVGL's gifdec opens), at most
-  280x185 px (the box above the digits; 256x216 with `BEACON_SPRITE_FILL`),
+  280x185 px (the box above the digits; 276x208 above the HP bar with
+  `BEACON_SPRITE_FILL`),
   with at least one frame. The build
   rejects anything else, and a GIF whose decoder state (5 bytes per pixel
   plus 16 KiB) does not fit the LVGL pool next to the screen; the error names

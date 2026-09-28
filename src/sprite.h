@@ -18,7 +18,7 @@
  * speed_pct of the GIF's own tempo (100 = its timing, 200 twice as fast; not
  * 0). fill false: scaled by the largest whole factor that fits, top-centred.
  * fill true: the largest size of the GIF's proportions that fits, whole
- * factor or not, centred. NULL: the GIF could not be opened or does not fit
+ * factor or not, bottom-centred. NULL: the GIF could not be opened or does not fit
  * at 1x, and the screen goes on without a sprite. Call once. */
 lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct,
                                bool fill);
