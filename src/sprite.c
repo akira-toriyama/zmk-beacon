@@ -36,12 +36,12 @@
  *   do) divided by the speed, kept in 1/100 ms so that 50 ms at 150 % is
  *   33.33 ms rather than 33. A TICK_MS lv_timer decodes every frame that is
  *   due, at most CATCHUP_MAX per tick (then drops the backlog), and
- *   invalidates at most once per tick: only when the canvas changed (FNV-1a
- *   over its words) and only the panel area of the canvas rectangles the
- *   tick's frames touched (each frame's own and the one its predecessor's
- *   disposal cleared), so the tempo holds while drawing is slower than the
- *   GIF, as long as the frames due per tick stay within CATCHUP_MAX, and a
- *   flush carries only what moved.
+ *   invalidates at most once per tick and only when the canvas changed
+ *   (FNV-1a over its words), so the tempo holds while drawing is slower than
+ *   the GIF, as long as the frames due per tick stay within CATCHUP_MAX. The
+ *   whole box is invalidated: the test GIF's frames cover 65-76 % of the
+ *   canvas and consecutive ones nearly all of it, and invalidating only the
+ *   touched rectangles changed nothing measurable (hardware 2026-09-28).
  * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
  *   and writes RGB565 into the layer's buffer for the clip area. Safe because
  *   LVGL renders every draw task as it is created when it has no OS
@@ -108,11 +108,6 @@ static struct {
     uint32_t frame_at;
     /* The shown frame's delay at 100 %. */
     uint32_t frame_ms;
-    /* The last decoded frame's rectangle: the next decode's disposal may
-     * clear it. Empty (x1 > x2) before the first frame. */
-    lv_area_t frame;
-    /* Canvas pixels touched since the last invalidation; empty as above. */
-    lv_area_t dirty;
     /* The canvas as last drawn. */
     uint32_t hash;
     uint32_t decoded;
@@ -124,18 +119,6 @@ static struct {
     uint32_t renders;
     uint32_t render_us;
 } sprite;
-
-static const lv_area_t empty = {.x1 = INT32_MAX, .y1 = INT32_MAX, .x2 = -1, .y2 = -1};
-
-static void dirty_add(const lv_area_t *area) {
-    if (area->x1 > area->x2 || area->y1 > area->y2) {
-        return;
-    }
-    sprite.dirty.x1 = MIN(sprite.dirty.x1, area->x1);
-    sprite.dirty.y1 = MIN(sprite.dirty.y1, area->y1);
-    sprite.dirty.x2 = MAX(sprite.dirty.x2, area->x2);
-    sprite.dirty.y2 = MAX(sprite.dirty.y2, area->y2);
-}
 
 static uint32_t canvas_hash(void) {
     /* Word access: lv_malloc returns 8-aligned blocks and the canvas follows
@@ -154,23 +137,14 @@ static bool decode_next(void) {
     gd_GIF *gif = sprite.gif;
     const uint32_t before = gif->f_rw_p;
 
-    /* gd_get_frame() first disposes of the previous frame. */
-    dirty_add(&sprite.frame);
     if (gd_get_frame(gif) <= 0) {
         return false;
     }
     if (gif->f_rw_p < before) {
+        /* The trailer sent gifdec back to anim_start. */
         memset(gif->canvas, 0, 4u * gif->width * gif->height);
-        dirty_add(&(lv_area_t){.x1 = 0, .y1 = 0, .x2 = gif->width - 1, .y2 = gif->height - 1});
     }
     gd_render_frame(gif, gif->canvas);
-    sprite.frame = (lv_area_t){
-        .x1 = gif->fx,
-        .y1 = gif->fy,
-        .x2 = gif->fx + gif->fw - 1,
-        .y2 = gif->fy + gif->fh - 1,
-    };
-    dirty_add(&sprite.frame);
 
     uint32_t units = gif->gce.delay;
     if (units < 2) {
@@ -184,25 +158,6 @@ static bool decode_next(void) {
 static uint32_t interval_sub(void) {
     const uint64_t sub = (uint64_t)sprite.frame_ms * SUB_PER_MS * SPEED_FULL_PCT / sprite.speed_pct;
     return (uint32_t)MIN(sub, INT32_MAX);
-}
-
-/* The panel pixels that read the dirty canvas columns c1..c2 run from
- * ceil(c1 * obj_w / src_w) to ceil((c2 + 1) * obj_w / src_w) - 1, the inverse
- * of blit()'s floor(x * src_w / obj_w); rows alike. */
-static void invalidate_dirty(void) {
-    const gd_GIF *gif = sprite.gif;
-    lv_area_t coords;
-    lv_obj_get_coords(sprite.obj, &coords);
-    const int32_t obj_w = lv_area_get_width(&coords);
-    const int32_t obj_h = lv_area_get_height(&coords);
-    const lv_area_t area = {
-        .x1 = coords.x1 + DIV_ROUND_UP(sprite.dirty.x1 * obj_w, gif->width),
-        .y1 = coords.y1 + DIV_ROUND_UP(sprite.dirty.y1 * obj_h, gif->height),
-        .x2 = coords.x1 + DIV_ROUND_UP((sprite.dirty.x2 + 1) * obj_w, gif->width) - 1,
-        .y2 = coords.y1 + DIV_ROUND_UP((sprite.dirty.y2 + 1) * obj_h, gif->height) - 1,
-    };
-
-    lv_obj_invalidate_area(sprite.obj, &area);
 }
 
 static void remove_sprite(const char *why) {
@@ -266,10 +221,8 @@ static void tick(lv_timer_t *timer) {
         if (hash != sprite.hash) {
             sprite.hash = hash;
             sprite.invalidated++;
-            invalidate_dirty();
+            lv_obj_invalidate(sprite.obj);
         }
-        /* Unchanged pixels need no redraw even where a frame touched them. */
-        sprite.dirty = empty;
     }
 
     if (IS_ENABLED(CONFIG_LOG) && now - sprite.logged_at >= LOG_EVERY_MS) {
@@ -383,8 +336,6 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     memset(gif->canvas, 0, 4u * gif->width * gif->height);
     gif->loop_count = 1;
     sprite.gif = gif;
-    sprite.frame = empty;
-    sprite.dirty = empty;
     if (!decode_next()) {
         LOG_ERR("sprite: no frame, or the first frame is malformed");
         gd_close_gif(gif);
@@ -393,7 +344,6 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     }
     gif->loop_count = 0;
     sprite.hash = canvas_hash();
-    sprite.dirty = empty;
 
     /* A plain object that draws nothing of its own (no theme is installed, so
      * the styles are explicit); blit() paints its area. */
@@ -407,8 +357,6 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     lv_obj_set_size(obj, w, h);
     /* Filling, the sprite stands on the box's bottom edge (the readings). */
     lv_obj_set_pos(obj, box->x1 + (box_w - w) / 2, box->y1 + (fill ? box_h - h : 0));
-    /* invalidate_dirty() reads the coordinates before the first refresh. */
-    lv_obj_update_layout(obj);
     lv_obj_add_event_cb(obj, blit, LV_EVENT_DRAW_MAIN, NULL);
 
     sprite.obj = obj;
