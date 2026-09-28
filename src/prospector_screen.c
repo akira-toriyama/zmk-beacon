@@ -7,21 +7,21 @@
  * keyboard half and, with CONFIG_BEACON_SPRITE, the GIF sprite (sprite.c).
  *
  * Sprite: above the readings, never over them. Scaled by a whole factor and
- * top-centred (the default), or with CONFIG_BEACON_SPRITE_FILL the largest
- * size of its proportions that fits between the top edge and the readings,
- * whole factor or not, standing on them; both inside MARGIN_PX, which that
- * option shrinks so that the panel is used to its edges (the user's v1,
- * 2026-09-28).
+ * top-centred, flush with the panel's edges (the default), or with
+ * CONFIG_BEACON_SPRITE_FILL the largest size of its proportions that fits
+ * between the top edge and the readings, whole factor or not, standing on
+ * them, SPRITE_FILL_MARGIN_PX in from the edges (the user's v1, 2026-09-28).
+ * The readings keep MARGIN_PX: the panel's corners are rounded and a box
+ * closer to them loses its own corners (seen on hardware 2026-09-28).
  *
- * Readings (the BEACON_READINGS choice), one per half, left then right:
+ * Readings (the BEACON_READINGS choice):
  *   digits  "75%" in the bottom corners, Montserrat 48. White: a reading from
  *           a payload received in the last minute. "--" white: the payload is
  *           current but that half has no reading. "--" grey: no payload in
  *           the last minute, or none since boot.
- *   HP bar  one battle-screen HP bar, "HP" and a bar in a dark box along the
- *           bottom. Its length is the keyboard's battery: the mean of
- *           the halves with a reading, or the one half that has one. Green,
- *           yellow under HP_YELLOW_BELOW, red under HP_RED_BELOW; the digits'
+ *   HP bar  one battle-screen HP bar (hp_bar.c) along the bottom. Its length
+ *           is the keyboard's battery as hp_level() maps it: the mean of the
+ *           halves with a reading, or the one half that has one. The digits'
  *           "--" is an empty track, and their grey is a grey "HP".
  *   none    no readings while a sprite shows; the digits when the build has
  *           no sprite or the GIF is rejected, so the conf stays valid for CI.
@@ -41,6 +41,9 @@
 #include <zmk/display/status_screen.h>
 
 #include "status_observer.h"
+#if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
+#include "hp_bar.h"
+#endif
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
 #include "sprite.h"
 #endif
@@ -55,8 +58,9 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
  * ZMK's advertising. A minute covers both. */
 #define STALE_AFTER_MS 60000
 #define REFRESH_MS 500
-/* The readings' and the sprite's distance from the panel's edges. */
-#define MARGIN_PX (IS_ENABLED(CONFIG_BEACON_SPRITE_FILL) ? 2 : 12)
+/* The readings' distance from the panel's edges, and a filling sprite's. */
+#define MARGIN_PX 12
+#define SPRITE_FILL_MARGIN_PX 2
 /* Logging builds print the screen state on every change and at least this
  * often, so a long run's log shows the display thread alive. */
 #define LOG_EVERY_MS 60000
@@ -71,22 +75,7 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 #define SPRITE_SPEED_PCT 150
 #endif
 
-#if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
-/* The HP box: MARGIN_PX in from the bottom and the sides, one row of the 8x16
- * unscii glyph: "HP", a gap the user asked for (2026-09-28: 8 px read as
- * touching), then the bar to the right edge. Colours after the games' HP bar.
- * A filling sprite stands on the box's top edge. */
-#define HP_BOX_H 28
-#define HP_BORDER_PX 2
-#define HP_ROW_Y 6
-#define HP_GLYPH_H 16
-#define HP_LABEL_X 8
-#define HP_BAR_X 48
-#define HP_BAR_H 12
-#define HP_BAR_RIGHT_PAD 10
-#define HP_YELLOW_BELOW 50
-#define HP_RED_BELOW 20
-#else
+#if !IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
 /* Every character a digits label can show; the sprite box ends where their ink
  * begins. */
 #define LABEL_CHARS "0123456789%-"
@@ -97,28 +86,11 @@ static bool has_reading(uint8_t level) {
 }
 
 #if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
-static struct {
-    lv_obj_t *label;
-    lv_obj_t *bar;
-    /* 0 = no reading. */
-    uint8_t shown;
-    bool dim;
-} hp;
+/* What the bar shows, for the log; 0 = no reading. */
+static uint8_t hp_shown;
 
-static lv_color_t hp_color(uint8_t level) {
-    if (level < HP_RED_BELOW) {
-        return lv_color_hex(0xF85838);
-    }
-    if (level < HP_YELLOW_BELOW) {
-        return lv_color_hex(0xF8E038);
-    }
-    return lv_color_hex(0x58D080);
-}
-
-static lv_color_t hp_label_color(bool dim) {
-    return dim ? lv_color_hex(0x606060) : lv_color_hex(0xF8C048);
-}
-
+/* The keyboard's battery as one level: the mean of the halves with a reading,
+ * or the one half that has one (the user's pick, 2026-09-28). */
 static uint8_t hp_level(const struct beacon_status *now, bool fresh) {
     const bool left = fresh && has_reading(now->left);
     const bool right = fresh && has_reading(now->right);
@@ -130,21 +102,8 @@ static uint8_t hp_level(const struct beacon_status *now, bool fresh) {
 }
 
 static bool show_hp(const struct beacon_status *now, bool fresh) {
-    const uint8_t level = hp_level(now, fresh);
-    bool changed = false;
-
-    if (level != hp.shown) {
-        hp.shown = level;
-        lv_bar_set_value(hp.bar, level, LV_ANIM_OFF);
-        lv_obj_set_style_bg_color(hp.bar, hp_color(level), LV_PART_INDICATOR);
-        changed = true;
-    }
-    if (hp.dim != !fresh) {
-        hp.dim = !fresh;
-        lv_obj_set_style_text_color(hp.label, hp_label_color(hp.dim), 0);
-        changed = true;
-    }
-    return changed;
+    hp_shown = hp_level(now, fresh);
+    return beacon_hp_bar_show(hp_shown, fresh);
 }
 #else
 struct side {
@@ -200,7 +159,7 @@ static void refresh(lv_timer_t *timer) {
 
     if (IS_ENABLED(CONFIG_LOG) && (changed || now_ms - logged_ms >= LOG_EVERY_MS)) {
         logged_ms = now_ms;
-        LOG_INF("screen HP %u%% (left %u right %u, %s, payload %d ms ago)", hp.shown, now.left,
+        LOG_INF("screen HP %u%% (left %u right %u, %s, payload %d ms ago)", hp_shown, now.left,
                 now.right, fresh ? "fresh" : "stale",
                 now.received ? (int)MIN(age_ms, INT32_MAX) : -1);
     }
@@ -217,53 +176,7 @@ static void refresh(lv_timer_t *timer) {
 #endif
 }
 
-#if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
-static lv_obj_t *make_hp_box(lv_obj_t *parent, int32_t width) {
-    lv_obj_t *box = lv_obj_create(parent);
-    lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(box, width, HP_BOX_H);
-    lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -MARGIN_PX);
-    lv_obj_set_style_bg_color(box, lv_color_hex(0x282828), 0);
-    lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(box, lv_color_hex(0xE0E0E0), 0);
-    lv_obj_set_style_border_opa(box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(box, HP_BORDER_PX, 0);
-    lv_obj_set_style_radius(box, 8, 0);
-    lv_obj_set_style_pad_all(box, 0, 0);
-    return box;
-}
-
-static lv_obj_t *make_hp_text(lv_obj_t *box, const char *text, lv_color_t color, int32_t x,
-                              int32_t y) {
-    lv_obj_t *label = lv_label_create(box);
-    lv_obj_set_style_text_font(label, &lv_font_unscii_16, 0);
-    lv_obj_set_style_text_color(label, color, 0);
-    lv_label_set_text_static(label, text);
-    lv_obj_set_pos(label, x, y);
-    return label;
-}
-
-/* Positions are inside the box's border (pad 0). */
-static void make_hp(lv_obj_t *parent, int32_t width) {
-    lv_obj_t *box = make_hp_box(parent, width);
-
-    hp.dim = true;
-    hp.shown = 0;
-    hp.label = make_hp_text(box, "HP", hp_label_color(hp.dim), HP_LABEL_X, HP_ROW_Y);
-
-    hp.bar = lv_bar_create(box);
-    lv_bar_set_range(hp.bar, 0, 100);
-    lv_bar_set_value(hp.bar, 0, LV_ANIM_OFF);
-    lv_obj_set_size(hp.bar, width - 2 * HP_BORDER_PX - HP_BAR_X - HP_BAR_RIGHT_PAD, HP_BAR_H);
-    lv_obj_set_pos(hp.bar, HP_BAR_X, HP_ROW_Y + (HP_GLYPH_H - HP_BAR_H) / 2);
-    lv_obj_set_style_bg_color(hp.bar, lv_color_hex(0x404848), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(hp.bar, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(hp.bar, HP_BAR_H / 2, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(hp.bar, hp_color(0), LV_PART_INDICATOR);
-    lv_obj_set_style_bg_opa(hp.bar, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(hp.bar, HP_BAR_H / 2, LV_PART_INDICATOR);
-}
-#else
+#if !IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
 static void make_digits(struct side *side, lv_obj_t *parent, lv_align_t align, int32_t x) {
     side->label = lv_label_create(parent);
     side->dim = true;
@@ -279,7 +192,7 @@ static void make_digits(struct side *side, lv_obj_t *parent, lv_align_t align, i
 /* The first row the readings can ink; a sprite above them ends there. */
 static int32_t readings_top(int32_t screen_h) {
 #if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
-    return screen_h - MARGIN_PX - HP_BOX_H;
+    return screen_h - MARGIN_PX - BEACON_HP_BAR_H;
 #else
     /* lv_draw_label puts a glyph's top at label_top + (line_height -
      * base_line) - box_h - ofs_y, and the labels sit line_height + MARGIN_PX
@@ -308,10 +221,10 @@ lv_obj_t *zmk_display_status_screen(void) {
     bool sprite = false;
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
-    /* Between the top edge and the readings; filling, inside the margin too,
+    /* Between the top edge and the readings; filling, inside its own margin,
      * standing on the readings. */
     const bool fill = IS_ENABLED(CONFIG_BEACON_SPRITE_FILL);
-    const int32_t inset = fill ? MARGIN_PX : 0;
+    const int32_t inset = fill ? SPRITE_FILL_MARGIN_PX : 0;
     const lv_area_t box = {
         .x1 = inset,
         .y1 = inset,
@@ -325,7 +238,7 @@ lv_obj_t *zmk_display_status_screen(void) {
         return screen;
     }
 #if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
-    make_hp(screen, screen_w - 2 * MARGIN_PX);
+    beacon_hp_bar_create(screen, screen_w - 2 * MARGIN_PX, MARGIN_PX);
 #else
     make_digits(&left_side, screen, LV_ALIGN_BOTTOM_LEFT, MARGIN_PX);
     make_digits(&right_side, screen, LV_ALIGN_BOTTOM_RIGHT, -MARGIN_PX);

@@ -7,6 +7,7 @@
 if(CONFIG_SHIELD_PROSPECTOR)
   target_sources(app PRIVATE src/backlight_init.c src/status_observer.c)
   target_sources_ifdef(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM app PRIVATE src/prospector_screen.c)
+  target_sources_ifdef(CONFIG_BEACON_READINGS_HP_BAR app PRIVATE src/hp_bar.c)
 endif()
 
 target_sources_ifdef(CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD app PRIVATE src/bootloader_on_1200_baud.c)

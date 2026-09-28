@@ -70,9 +70,9 @@ config BEACON_SPRITE_FILL
       With a sprite (BEACON_SPRITE_GIF) it is scaled by the largest factor of
       its proportions that fits between the top edge and the readings, whole
       or not (a GIF pixel then covers 2 or 3 panel pixels in turn; a 90x90 px
-      GIF shows at about 2.3x above the HP bar on 280x240), and stands on the
-      readings. The screen's margin shrinks from 12 px to 2 px so that the
-      panel is used to its edges. Without a sprite the readings show as
+      GIF shows at about 2.2x above the HP bar on 280x240), 2 px in from the
+      edges, standing on the readings, which keep their 12 px margin (the
+      panel's corners are rounded). Without a sprite the readings show as
       usual, so a consumer can keep the option in its conf while CI and the
       release build without a GIF.
 

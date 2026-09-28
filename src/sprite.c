@@ -256,7 +256,7 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     if (fill) {
         /* The largest size of the GIF's proportions inside the box, whole
          * factor or not: STRETCH below scales to the object's size, so a GIF
-         * pixel covers 2 or 3 panel pixels in turn at 2.3x. */
+         * pixel covers 2 or 3 panel pixels in turn at 2.2x. */
         if ((int64_t)box_w * gif->height <= (int64_t)box_h * gif->width) {
             w = box_w;
             h = (int32_t)((int64_t)box_w * gif->height / gif->width);

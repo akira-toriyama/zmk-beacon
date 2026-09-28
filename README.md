@@ -67,16 +67,17 @@ that trade: 6 frames a second on the screen, the GIF's tempo exactly 1.5x.
 
 `CONFIG_BEACON_SPRITE_FILL=y` lets the sprite fill the space above the
 readings instead: scaled by the largest factor of its proportions that fits
-between the top edge and the readings, whole or not (about 2.3x for a 90x90 px
-GIF above the HP bar, a GIF pixel covering 2 or 3 panel pixels in turn), and
-standing on them, with the screen's margin down from 12 px to 2 px (the
-`BEACON_READINGS` choice above picks the readings' style, or none). Without a
-GIF the option does nothing, so it can stay in a consumer's conf.
+between the top edge and the readings, whole or not (about 2.2x for a 90x90 px
+GIF above the HP bar, a GIF pixel covering 2 or 3 panel pixels in turn), 2 px
+in from the edges and standing on the readings, which keep their 12 px margin
+(the panel's corners are rounded; a box closer to them loses its own corners).
+The `BEACON_READINGS` choice above picks the readings' style, or none. Without
+a GIF the option does nothing, so it can stay in a consumer's conf.
 
 Limits:
 
 - GIF89a with a global colour table only (what LVGL's gifdec opens), at most
-  280x185 px (the box above the digits; 276x208 above the HP bar with
+  280x185 px (the box above the digits; 276x198 above the HP bar with
   `BEACON_SPRITE_FILL`),
   with at least one frame. The build
   rejects anything else, and a GIF whose decoder state (5 bytes per pixel
@@ -101,6 +102,7 @@ Limits:
 | `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes and the active layer's index and name are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the battery screen above, and the sprite's fixed tempo. |
 | `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo factor, one invalidation per changed frame and an endless loop. |
+| `src/hp_bar.c` | `CONFIG_BEACON_READINGS_HP_BAR`: the HP bar reading, `HP` and a bar in a box, showing the one level the screen maps the batteries to; a sibling of the sprite, not a part of it. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
 | `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_FILL`, the `BEACON_READINGS` choice, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
 
