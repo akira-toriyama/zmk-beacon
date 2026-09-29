@@ -12,15 +12,13 @@ indent_size = 2
 
 [*.{sh,bash}]
 indent_style = space
+indent_size = 2
+
+# C sources and the shield's devicetree files.
+[*.{c,h,overlay,keymap,dtsi}]
+indent_style = space
 indent_size = 4
 
-[Makefile]
-indent_style = tab
-
-# Markdown は行末の二空白が改行の意味を持つため trim しない
+# Markdown: two trailing spaces are a line break.
 [*.md]
-trim_trailing_whitespace = false
-
-# devicetree / ZMK keymap / C ヘッダは既存の書式を尊重し indent を強制しない
-[*.{keymap,dtsi,overlay,conf,h}]
 trim_trailing_whitespace = false
