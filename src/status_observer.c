@@ -49,7 +49,7 @@ LOG_MODULE_REGISTER(beacon_observer, LOG_LEVEL_INF);
 BUILD_ASSERT(IS_ENABLED(CONFIG_BT_OBSERVER), "the status observer needs CONFIG_BT_OBSERVER=y");
 
 #define SCAN_RETRY_MS 1000
-#define STATS_PERIOD_MS 60000
+#define LOG_PERIOD_MS 60000
 /* A larger difference in one payload is the keyboard's counter starting over
  * (a reboot: the Imprint Dongle reflashed under a running observer read as
  * 182 presses, hardware 2026-09-29), not typing: payloads come every
@@ -106,9 +106,9 @@ static void log_stats(struct k_work *work) {
     k_spin_unlock(&status_lock, key);
 
     LOG_INF("%ld status payloads in %d s; so far %u keystrokes, %u counter restarts (last jump %u)",
-            (long)atomic_set(&payload_count, 0), STATS_PERIOD_MS / 1000, keystrokes, restarts,
+            (long)atomic_set(&payload_count, 0), LOG_PERIOD_MS / 1000, keystrokes, restarts,
             jump);
-    k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+    k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
 }
 
 static bool find_payload(struct bt_data *data, void *user_data) {
@@ -197,7 +197,7 @@ static int status_observer_init(void) {
 
     k_work_schedule(&start_scan_work, K_NO_WAIT);
     if (IS_ENABLED(CONFIG_LOG)) {
-        k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+        k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
     }
     return 0;
 }

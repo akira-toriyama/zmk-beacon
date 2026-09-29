@@ -78,7 +78,7 @@ BUILD_ASSERT(CONFIG_BT_EXT_ADV_MAX_ADV_SET >= 2,
              "CONFIG_BT_EXT_ADV_MAX_ADV_SET must be 2: ZMK's own advertising takes one set");
 
 #define RETRY_MS 500
-#define STATS_PERIOD_MS 60000
+#define LOG_PERIOD_MS 60000
 #define STACK_SIZE 1536
 #define SLOT_COUNT 2
 
@@ -219,8 +219,8 @@ static void log_stats(struct k_work *work) {
             adv != NULL ? "advertising" : "not advertising", (long)atomic_set(&updates_ok, 0),
             (long)atomic_set(&updates_err, 0), (long)atomic_get(&start_failures),
             (unsigned int)atomic_get(&battery[0]), (unsigned int)atomic_get(&battery[1]),
-            (unsigned long)atomic_get(&keystrokes), STATS_PERIOD_MS / 1000);
-    k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+            (unsigned long)atomic_get(&keystrokes), LOG_PERIOD_MS / 1000);
+    k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
 }
 
 static int on_commit(void) {
@@ -248,7 +248,7 @@ static int status_broadcaster_init(void) {
                        K_LOWEST_APPLICATION_THREAD_PRIO, NULL);
     k_thread_name_set(&bcast_q.thread, "beacon_bcast");
     if (IS_ENABLED(CONFIG_LOG)) {
-        k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+        k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
     }
     return settings_register_with_cprio(&commit_handler, 1);
 }

@@ -59,15 +59,15 @@
  *   never steps back.
  * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
  *   and writes RGB565 into the layer's buffer for the clip area. That is
- *   safe under three conditions, which the screen keeps: LVGL has no OS
- *   (LV_USE_OS == LV_OS_NONE, asserted below), so lv_draw_finalize_task_creation()
- *   dispatches and the sw unit renders each draw task synchronously, one per
- *   task created; the sprite is the screen's first child, so the only task
- *   before its event is the screen's fill, which has therefore landed; and
- *   nothing drawn before the sprite renders through a layer (opa_layered,
- *   transform, blend mode, bitmap mask, or an lv_bar indicator shorter than
- *   its radius), whose blend task is queued one task late and would land on
- *   top of the sprite. The objects after the sprite draw over it as usual.
+ *   safe under three conditions: LVGL has no OS (LV_USE_OS == LV_OS_NONE,
+ *   asserted below), so lv_draw_finalize_task_creation() dispatches and the
+ *   sw unit renders each draw task synchronously, one per task created; the
+ *   sprite is the screen's first child (beacon_sprite_create() moves it
+ *   there), so the only task before its event is the screen's fill, which
+ *   has therefore landed; and the screen does not render through a layer
+ *   (opa_layered, a transform, a blend mode, a bitmap mask), whose blend task
+ *   is queued one task late and would land on top of the sprite. The
+ *   screen's other children draw over the sprite as usual.
  *   The refresh renders an invalid area in VDB-sized parts and sends the
  *   event once per part with layer->buf_area / _clip_area set to it. The
  *   layer holds native RGB565: LV_COLOR_16_SWAP is applied at flush
@@ -133,7 +133,7 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
 #define DELAY_MIN_UNITS 10
 #define SUB_PER_MS 100
 #define SPEED_FULL_PCT 100
-#define LOG_EVERY_MS 60000
+#define LOG_PERIOD_MS 60000
 
 static const uint8_t sprite_gif[] = {
 #include <beacon_sprite_gif.inc>
@@ -258,7 +258,7 @@ static void log_stats(void) {
             "lvgl pool %u allocated, %u max, of %d",
             sprite.decoded, sprite.presses, sprite.stepped, sprite.dropped, sprite.invalidated,
             sprite.renders, sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0,
-            LOG_EVERY_MS / 1000, SPEED_PCT, (unsigned int)heap.allocated_bytes,
+            LOG_PERIOD_MS / 1000, SPEED_PCT, (unsigned int)heap.allocated_bytes,
             (unsigned int)heap.max_allocated_bytes, CONFIG_LV_Z_MEM_POOL_SIZE);
     sprite.decoded = 0;
     sprite.presses = 0;
@@ -339,7 +339,7 @@ static void tick(lv_timer_t *timer) {
         }
     }
 
-    if (IS_ENABLED(CONFIG_LOG) && now - sprite.logged_at >= LOG_EVERY_MS) {
+    if (IS_ENABLED(CONFIG_LOG) && now - sprite.logged_at >= LOG_PERIOD_MS) {
         sprite.logged_at = now;
         log_stats();
     }
@@ -420,7 +420,7 @@ static void count_render(lv_event_t *e) {
     }
 }
 
-void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
+void beacon_sprite_create(lv_obj_t *screen, const lv_area_t *box) {
     const int32_t box_w = lv_area_get_width(box);
     const int32_t box_h = lv_area_get_height(box);
     const size_t pool_before = IS_ENABLED(CONFIG_LOG) ? pool_allocated() : 0;
@@ -461,8 +461,10 @@ void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
 
     /* A plain object that draws nothing of its own; blit() paints its area.
      * LVGL's defaults already draw nothing, and the explicit styles keep it
-     * so should a theme ever be installed. */
-    lv_obj_t *obj = lv_obj_create(parent);
+     * so should a theme ever be installed. The first child, whatever the
+     * screen held before: blit()'s second condition (header). */
+    lv_obj_t *obj = lv_obj_create(screen);
+    lv_obj_move_to_index(obj, 0);
     lv_obj_remove_flag(obj, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(obj, 0, 0);

@@ -8,10 +8,10 @@
  * above it, filling the space between the panel's top edge and the bar,
  * SPRITE_INSET_PX in from the edges and standing on the bar.
  *
- * The sprite must stay the screen's first child and nothing drawn before it
- * may render through a layer: sprite.c's blit() writes into the display
- * buffer during its own draw event and relies on every earlier draw task
- * having landed (the conditions are in sprite.c).
+ * The screen must not render through a layer (no opa_layered, transform,
+ * blend mode or bitmap mask on it): sprite.c's blit() writes into the display
+ * buffer during the sprite's own draw event, as the screen's first child, and
+ * relies on the screen's fill having landed (the conditions are in sprite.c).
  *
  * LVGL is not thread-safe here (LV_USE_OS=0) and runs on ZMK's display work
  * queue, so the HP bar is refreshed from an lv_timer, which runs on that
@@ -51,7 +51,7 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 #define SPRITE_BOX_H (BEACON_HP_BAR_TOP(SCREEN_H) - SPRITE_INSET_PX)
 /* Logging builds print the screen state on every change and at least this
  * often, so a long run's log shows the display thread alive. */
-#define LOG_EVERY_MS 60000
+#define LOG_PERIOD_MS 60000
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
 /* CMakeLists.txt passes the GIF's size; sprite.c scales it up, never down.
@@ -77,7 +77,7 @@ static void refresh(lv_timer_t *timer) {
 
     const bool changed = beacon_hp_bar_show(&now, fresh);
 
-    if (IS_ENABLED(CONFIG_LOG) && (changed || now_ms - logged_ms >= LOG_EVERY_MS)) {
+    if (IS_ENABLED(CONFIG_LOG) && (changed || now_ms - logged_ms >= LOG_PERIOD_MS)) {
         logged_ms = now_ms;
         LOG_INF("screen left %u right %u (%s, payload %d ms ago, %u keystrokes)", now.left,
                 now.right, fresh ? "fresh" : "stale", now.received ? (int)MIN(age_ms, INT32_MAX) : -1,
@@ -93,7 +93,6 @@ lv_obj_t *zmk_display_status_screen(void) {
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
-    /* The screen's first child, see above. */
     const lv_area_t box = {
         .x1 = SPRITE_INSET_PX,
         .y1 = SPRITE_INSET_PX,
