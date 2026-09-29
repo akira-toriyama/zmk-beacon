@@ -55,10 +55,9 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_BT_OBSERVER), "the status observer needs CONFIG_B
 #define STATS_PERIOD_MS 60000
 /* A larger difference in one payload is the keyboard's counter starting over
  * (a reboot: the Imprint Dongle reflashed under a running observer read as
- * 182 presses, hardware 2026-09-29), not typing: payloads come every 200 ms
- * (BEACON_STATUS_BROADCAST_INTERVAL_MS; revisit this with it) and the
- * occasional lost one leaves no room for 33 presses. Such a payload only
- * sets the new reference. */
+ * 182 presses, hardware 2026-09-29), not typing: payloads come every
+ * BEACON_PAYLOAD_INTERVAL_MS and the occasional lost one leaves no room for
+ * that many presses. Such a payload only sets the new reference. */
 #define KEYS_DELTA_MAX 32
 
 static const uint8_t payload_prefix[] = {BEACON_PAYLOAD_PREFIX_INIT};

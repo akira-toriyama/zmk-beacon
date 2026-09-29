@@ -96,26 +96,14 @@ config BEACON_STATUS_BROADCAST
       half's battery, the highest active layer and its name, and a count of
       key presses; src/status_payload.h) as manufacturer data in a legacy,
       non-connectable, non-scannable advertising set next to ZMK's own
-      connectable one. The Prospector Dongle's observer (the prospector
-      shield) reads it.
+      connectable one, refreshed every BEACON_PAYLOAD_INTERVAL_MS
+      (src/status_payload.h) and right after a key press. The Prospector
+      Dongle's observer (the prospector shield) reads it.
 
       The consumer's config must also set CONFIG_BT_EXT_ADV_MAX_ADV_SET=2:
       with BT_EXT_ADV the host takes ZMK's legacy advertising from the same
       pool of sets, and the build fails on a pool of 1. BT_EXT_ADV costs
       about 34 KB of flash and 11 KB of RAM on nRF52840 and switches the host
       to the extended HCI commands (canon imprint_dongle, 2026-09-26).
-
-config BEACON_STATUS_BROADCAST_INTERVAL_MS
-    int "Advertising interval of the status set (ms)"
-    depends on BEACON_STATUS_BROADCAST
-    range 20 10240
-    default 200
-    help
-      The payload is refreshed once per interval and right after a key
-      press, so a scanner sees a new battery or layer value after at most two
-      intervals and a new key count after at most one (plus the advertiser's
-      random delay of up to 10 ms). The sprite's KEY_GRACE_MS and the
-      observer's KEYS_DELTA_MAX (src/sprite.c, src/status_observer.c) are
-      tuned to the default of 200 ms; revisit them with a different value.
 
 endmenu

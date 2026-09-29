@@ -119,11 +119,11 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
  * decode per frame due, and the tempo ceiling is CATCHUP_MAX frames a cycle. A
  * higher limit raises the ceiling and costs renders. */
 #define CATCHUP_MAX 8
-/* The tempo resumes this long after the last key press arrived, frames still
- * owed dropped: the user's pick (2026-09-29; 1000 first), so that the sprite
- * never stands still between the last step and the tempo. It equals the
- * consumer's advertising interval (BEACON_STATUS_BROADCAST_INTERVAL_MS 200),
- * which shapes the look (header); revisit it with the interval. */
+/* The tempo resumes this long after the last key press arrived, the frames
+ * still queued dropped: a pick of its own (the user's) that equals
+ * BEACON_PAYLOAD_INTERVAL_MS (status_payload.h), so the queue never outlives
+ * the presses of one payload and the sprite never stands still between the
+ * last step and the tempo. */
 #define KEY_GRACE_MS 200
 /* Frames a key press owes: the user's pick (2026-09-29, after 1, 2 and 4). */
 #define FRAMES_PER_PRESS 8

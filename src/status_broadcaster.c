@@ -7,7 +7,7 @@
  * Dongle): the payload of status_payload.h on a second advertising set next
  * to ZMK's own connectable one. Legacy PDU, non-connectable, non-scannable
  * (ADV_NONCONN_IND), so the Prospector Dongle's observer receives it with a
- * plain scan; refreshed every CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS.
+ * plain scan; refreshed every BEACON_PAYLOAD_INTERVAL_MS.
  * Measured on hardware 2026-09-27 as the t-eray spike (projects t-eray): the
  * halves reconnected as before, no advertising error in 5 reboots and a half
  * power cycle, the Prospector Dongle received 255-269 payloads a minute.
@@ -93,9 +93,9 @@ static const struct bt_data ad[] = {
     BT_DATA(BT_DATA_MANUFACTURER_DATA, payload, sizeof(payload)),
 };
 
-static const struct bt_le_adv_param adv_param = BT_LE_ADV_PARAM_INIT(
-    BT_LE_ADV_OPT_NONE, BT_GAP_MS_TO_ADV_INTERVAL(CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS),
-    BT_GAP_MS_TO_ADV_INTERVAL(CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS), NULL);
+static const struct bt_le_adv_param adv_param =
+    BT_LE_ADV_PARAM_INIT(BT_LE_ADV_OPT_NONE, BT_GAP_MS_TO_ADV_INTERVAL(BEACON_PAYLOAD_INTERVAL_MS),
+                         BT_GAP_MS_TO_ADV_INTERVAL(BEACON_PAYLOAD_INTERVAL_MS), NULL);
 
 K_THREAD_STACK_DEFINE(bcast_stack, STACK_SIZE);
 static struct k_work_q bcast_q;
@@ -185,7 +185,7 @@ static int start_set(void) {
     }
 
     atomic_set(&advertising, 1);
-    LOG_INF("advertising every %d ms", CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS);
+    LOG_INF("advertising every %d ms", BEACON_PAYLOAD_INTERVAL_MS);
     return 0;
 }
 
@@ -207,8 +207,7 @@ static void tick(struct k_work *work) {
         atomic_inc(err ? &updates_err : &updates_ok);
     }
 
-    k_work_reschedule_for_queue(&bcast_q, &tick_work,
-                                K_MSEC(CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS));
+    k_work_reschedule_for_queue(&bcast_q, &tick_work, K_MSEC(BEACON_PAYLOAD_INTERVAL_MS));
 }
 
 static void log_stats(struct k_work *work);
