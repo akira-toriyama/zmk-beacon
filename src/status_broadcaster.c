@@ -8,9 +8,6 @@
  * to ZMK's own connectable one. Legacy PDU, non-connectable, non-scannable
  * (ADV_NONCONN_IND), so the Prospector Dongle's observer receives it with a
  * plain scan; refreshed every BEACON_PAYLOAD_INTERVAL_MS.
- * Measured on hardware 2026-09-27 as the t-eray spike (projects t-eray): the
- * halves reconnected as before, no advertising error in 5 reboots and a half
- * power cycle, the Prospector Dongle received 255-269 payloads a minute.
  *
  * - CONFIG_BT_EXT_ADV: the host then shares one pool of
  *   CONFIG_BT_EXT_ADV_MAX_ADV_SET sets between ZMK's legacy bt_le_adv_start()

@@ -40,18 +40,15 @@ config BEACON_SPRITE_GIF
       Absolute path of a GIF89a file with a global colour table (the only
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
       the status screen plays it above the HP bar, scaled to fill the space
-      between the panel's top edge and the bar, at three quarters of the
-      GIF's own tempo while nobody types; while the keyboard is typed on it
-      runs on the key presses instead (eight frames queued per press, stepped
-      one per render and skipped as presses pile up), and 0.2 s after the
-      last press arrived the frames still queued are dropped and the tempo
-      resumes (src/sprite.c, src/prospector_screen.c). Empty: no sprite, which
-      is what CI and the release build.
+      between the panel's top edge and the bar: at its own tempo while nobody
+      types, and stepped by the key presses the keyboard's broadcaster counts
+      while it is typed on (src/sprite.c). Empty: no sprite, which is what CI
+      and the release build.
 
-      The decoder keeps 5 bytes per pixel plus 16 KiB in the LVGL pool for
-      the whole run; the build fails when that does not fit
-      CONFIG_LV_Z_MEM_POOL_SIZE (the prospector shield's default grows with a
-      sprite, boards/shields/prospector/Kconfig.defconfig). Local builds:
+      The build fails when the GIF does not fit that space at 1x, or when its
+      decoder's share of the LVGL pool, kept for the whole run, does not fit
+      CONFIG_LV_Z_MEM_POOL_SIZE next to the screen (CMakeLists.txt; the
+      prospector shield's default grows with a sprite). Local builds:
       scripts/build.sh --sprite <gif> [--sprite-name <text>].
 
 config BEACON_SPRITE
@@ -63,22 +60,24 @@ config BEACON_SPRITE
     imply SYS_HEAP_RUNTIME_STATS if LOG
     help
       Set when BEACON_SPRITE_GIF names a file. LV_GIF_CACHE_DECODE_DATA is a
-      correctness requirement here, not a speed option (src/sprite.c). With
-      logging on, the sprite's minute line reports the LVGL pool's allocated
-      and peak bytes, the numbers the pool size is chosen from.
+      correctness requirement here, not a speed option (src/sprite.c).
+      LV_USE_IMAGE only lets LVGL's lv_gif.c, which LV_USE_GIF compiles,
+      build: the sprite draws itself. With logging on, the sprite's minute
+      line reports the LVGL pool's allocated and peak bytes, the numbers the
+      pool size is chosen from.
 
 config BEACON_SPRITE_NAME
     string "Name of the sprite, shown under the HP bar (empty = none)"
     default ""
     depends on BEACON_SPRITE
     help
-      The text is a second row of the HP bar's box, at the left in unscii 16,
-      and the box grows from 28 to 46 px, so the sprite's space loses 18 rows
-      (a 90x90 px GIF filling it shows at 2x, 180x180, instead of about 2.2x).
-      15 glyphs fit; a longer name is cut. Printable ASCII only: the font has
-      no other glyphs, a double quote or a backslash would need Kconfig
-      escaping, and "??" would be a C trigraph in autoconf.h. Empty: no second
-      row, the screen of CI and the release build, which have no sprite.
+      The name is a second row of the HP bar's box, at the left in unscii
+      16: the box grows by that row and the sprite's space above it shrinks
+      (src/hp_bar.h). 15 glyphs fit; a longer name is cut. Printable ASCII
+      only: the font has no other glyphs, a double quote or a backslash would
+      need Kconfig escaping, and "??" would be a C trigraph in autoconf.h.
+      Empty: no second row, the screen of CI and the release build, which
+      have no sprite.
 
       Like the GIF, the name is a personal file's and never goes into a
       repository: a local build passes it (scripts/build.sh --sprite <gif>
@@ -104,6 +103,6 @@ config BEACON_STATUS_BROADCAST
       with BT_EXT_ADV the host takes ZMK's legacy advertising from the same
       pool of sets, and the build fails on a pool of 1. BT_EXT_ADV costs
       about 34 KB of flash and 11 KB of RAM on nRF52840 and switches the host
-      to the extended HCI commands (canon imprint_dongle, 2026-09-26).
+      to the extended HCI commands.
 
 endmenu

@@ -46,11 +46,6 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 /* Logging builds print the screen state on every change and at least this
  * often, so a long run's log shows the display thread alive. */
 #define LOG_EVERY_MS 60000
-/* Sprite tempo while nobody types, in percent of the GIF's own: the user's
- * pick (2026-09-29, after 100 and 50 the same day; 150 with no keyboard link
- * from 09-28). Key presses step the sprite frame by frame instead (sprite.c),
- * and the player keeps the tempo by merging frames when drawing falls behind. */
-#define SPRITE_SPEED_PCT 75
 
 static void refresh(lv_timer_t *timer) {
     ARG_UNUSED(timer);
@@ -88,7 +83,7 @@ lv_obj_t *zmk_display_status_screen(void) {
         .x2 = screen_w - 1 - SPRITE_INSET_PX,
         .y2 = BEACON_HP_BAR_TOP(lv_display_get_vertical_resolution(NULL)) - 1,
     };
-    beacon_sprite_create(screen, &box, SPRITE_SPEED_PCT);
+    beacon_sprite_create(screen, &box);
 #endif
 
     beacon_hp_bar_create(screen, screen_w);

@@ -32,40 +32,31 @@
  * - Inherited from gifdec, not handled: disposal 3 (restore to previous) is a
  *   no-op, and a frame without its own GCE reuses the previous frame's delay,
  *   transparency and disposal. Such GIFs show trails or holes on the device.
- * - Timing: the GCE delay (10 ms units; 0 and 1 read as 100 ms, as browsers
- *   do) divided by the speed, kept in 1/100 ms so that 50 ms at 150 % is
- *   33.33 ms rather than 33. A TICK_MS lv_timer decodes every frame that is
- *   due, at most CATCHUP_MAX per tick (then drops the backlog), and
- *   invalidates at most once per tick and only when the canvas changed
+ * - Tempo: a frame shows for its GCE delay (10 ms units; 0 and 1 read as
+ *   100 ms, as browsers do) at SPEED_PCT, counted in 1/SUB_PER_MS ms so that
+ *   a fraction of a millisecond is not lost on every frame. Every TICK_MS
+ *   the frames due are decoded, CATCHUP_MAX at most (the backlog beyond is
+ *   dropped), and the box is invalidated once when the canvas changed
  *   (FNV-1a over its words), so the tempo holds while drawing is slower than
- *   the GIF, as long as the frames due per tick stay within CATCHUP_MAX. The
- *   whole box is invalidated: the test GIF's frames cover 65-76 % of the
- *   canvas and consecutive ones nearly all of it, and invalidating only the
- *   touched rectangles changed nothing measurable (hardware 2026-09-28).
- * - Keystrokes (canon task t-7c05): while the keyboard is typed on (the
- *   observer's key_ms within KEY_GRACE_MS, status_observer.h) the tempo
- *   stops, and every press the observer counted owes the sprite
- *   FRAMES_PER_PRESS frames that change the canvas, each at most
- *   STEP_DECODE_MAX decodes (the test GIF alternates a painted frame with one
- *   that paints nothing). The frames due are stepped once per render: the
- *   tick steps only once the display has rendered the last step
- *   (LV_EVENT_RENDER_READY clears render_pending), one frame at a time while
- *   the queue holds one press's worth or less (so a lone press shows every
- *   frame), and as many as drain the queue in about DRAIN_RENDERS renders
- *   beyond that (so the sprite runs faster and skips frames as presses pile
- *   up), within DECODES_PER_TICK decodes a tick. The queue holds
- *   FRAMES_QUEUE_MAX frames; a burst beyond that (the observer already drops
- *   a keyboard reboot's counter restart above KEYS_DELTA_MAX) loses the
- *   rest. KEY_GRACE_MS after the last press arrived the frames still due are
- *   dropped and the tempo resumes from the shown frame: frame_at moves to
- *   the present on every typing tick, so nothing falls due meanwhile. With
- *   KEY_GRACE_MS equal to the advertising interval (the user's pick on
- *   hardware) that is the look: a lone press shows three or four of its
- *   frames before the tempo takes over, and while presses keep coming the
- *   queue never holds more than the presses of the last payload, so the
- *   sprite runs at the display's pace, skipping frames in proportion to how
- *   fast the keys come. gifdec only moves forward, so a press never steps
- *   back.
+ *   the GIF. The whole box, not the frames' rectangles: the test GIF's frames
+ *   cover 65-76 % of the canvas and consecutive ones nearly all of it, and
+ *   invalidating only the touched rectangles changed nothing measurable
+ *   (hardware 2026-09-28).
+ * - Key presses (status_observer.h keystrokes and key_ms): while the last
+ *   press arrived less than KEY_GRACE_MS ago the tempo stops, and each press
+ *   queues FRAMES_PER_PRESS frames that change the canvas (at most
+ *   STEP_DECODE_MAX decodes each: the test GIF alternates a painted frame
+ *   with one that paints nothing), FRAMES_QUEUE_MAX in all. The queue steps
+ *   only once LV_EVENT_RENDER_READY has cleared render_pending: a frame
+ *   stepped before the display drew the last one is never seen. A step is
+ *   one frame while the queue holds a press's worth or less, so a lone press
+ *   shows its frames one by one, and enough to drain the queue in
+ *   DRAIN_RENDERS renders beyond that, so the sprite runs faster and skips
+ *   frames as presses pile up; DECODES_PER_TICK bounds a step. When the
+ *   grace expires the frames still queued are dropped and the tempo resumes
+ *   from the shown frame (frame_at follows the present while typing, so
+ *   nothing falls due meanwhile). gifdec only moves forward, so a press
+ *   never steps back.
  * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
  *   and writes RGB565 into the layer's buffer for the clip area. That is
  *   safe under three conditions, which the screen keeps: LVGL has no OS
@@ -115,9 +106,11 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
              "blit() writes into the layer buffer directly; with an OS the screen's fill could land later");
 
 #define TICK_MS 10
-/* The tick cannot run while LVGL renders, so a cycle is one render plus one
- * decode per frame due, and the tempo ceiling is CATCHUP_MAX frames a cycle. A
- * higher limit raises the ceiling and costs renders. */
+/* Tempo while nobody types, in percent of the GIF's own: the user's pick. */
+#define SPEED_PCT 75
+/* Frames a tick decodes at most to keep the tempo: the tick cannot run during
+ * a render, so this is the tempo's ceiling in frames per render, and a higher
+ * one costs renders. */
 #define CATCHUP_MAX 8
 /* The tempo resumes this long after the last key press arrived, the frames
  * still queued dropped: a pick of its own (the user's) that equals
@@ -125,18 +118,18 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
  * the presses of one payload and the sprite never stands still between the
  * last step and the tempo. */
 #define KEY_GRACE_MS 200
-/* Frames a key press owes: the user's pick (2026-09-29, after 1, 2 and 4). */
+/* Frames a key press queues: the user's pick. */
 #define FRAMES_PER_PRESS 8
-/* Frames owed to presses and not yet stepped, at most: four presses. */
+/* Frames queued at most, four presses' worth; a burst beyond loses the rest. */
 #define FRAMES_QUEUE_MAX (4 * FRAMES_PER_PRESS)
-/* A queue above one press's worth is drained in about this many renders
- * (each about 65 ms with the test GIF: 2 decodes and a render): two frames a
- * render from two presses, up to six from a full queue. */
+/* A queue above one press's worth drains in about this many renders (a render
+ * and its decodes took about 65 ms with the test GIF). */
 #define DRAIN_RENDERS 6
-/* Decodes per visible frame at most, looking for one that changes the canvas. */
+/* Decodes per stepped frame at most, looking for one that changes the canvas. */
 #define STEP_DECODE_MAX 8
-/* Decodes a typing tick may spend (about 90 ms): a frame stops at this bound
- * even before its canvas changed, and the display thread outranks BT RX. */
+/* Decodes a step may spend (about 90 ms at 11 ms a decode): a frame stops at
+ * this bound even before its canvas changed, and the display thread outranks
+ * BT RX. */
 #define DECODES_PER_TICK 8
 #define DELAY_UNIT_MS 10
 #define DELAY_MIN_UNITS 10
@@ -154,7 +147,6 @@ static struct {
     gd_GIF *gif;
     lv_obj_t *obj;
     lv_timer_t *timer;
-    uint16_t speed_pct;
     /* lv_tick in 1/SUB_PER_MS ms: when the shown frame became due. */
     uint32_t frame_at;
     /* The shown frame's delay at 100 %. */
@@ -233,7 +225,7 @@ static bool step_frame(unsigned int *decodes, unsigned int budget) {
 }
 
 static uint32_t interval_sub(void) {
-    const uint64_t sub = (uint64_t)sprite.frame_ms * SUB_PER_MS * SPEED_FULL_PCT / sprite.speed_pct;
+    const uint64_t sub = (uint64_t)sprite.frame_ms * SUB_PER_MS * SPEED_FULL_PCT / SPEED_PCT;
     return (uint32_t)MIN(sub, INT32_MAX);
 }
 
@@ -256,14 +248,14 @@ static void log_stats(void) {
             "speed %u%%, lvgl pool %u allocated, %u max, of %d",
             sprite.decoded, sprite.stepped, sprite.invalidated, sprite.renders,
             sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_EVERY_MS / 1000,
-            sprite.speed_pct, (unsigned int)heap.allocated_bytes,
+            SPEED_PCT, (unsigned int)heap.allocated_bytes,
             (unsigned int)heap.max_allocated_bytes, CONFIG_LV_Z_MEM_POOL_SIZE);
 #else
     LOG_INF("sprite %u decoded, %u key steps, %u invalidated, %u renders of %u ms in %d s, "
             "speed %u%%",
             sprite.decoded, sprite.stepped, sprite.invalidated, sprite.renders,
             sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_EVERY_MS / 1000,
-            sprite.speed_pct);
+            SPEED_PCT);
 #endif
     sprite.decoded = 0;
     sprite.stepped = 0;
@@ -417,7 +409,7 @@ static void count_render(lv_event_t *e) {
     }
 }
 
-void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct) {
+void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
     const int32_t box_w = lv_area_get_width(box);
     const int32_t box_h = lv_area_get_height(box);
 
@@ -473,7 +465,6 @@ void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed
     beacon_status_get(&status);
 
     sprite.obj = obj;
-    sprite.speed_pct = MAX(speed_pct, 1);
     sprite.keys_seen = status.keystrokes;
     sprite.frame_at = lv_tick_get() * SUB_PER_MS;
     sprite.logged_at = lv_tick_get();
