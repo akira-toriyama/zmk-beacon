@@ -59,9 +59,13 @@ dongle's serial port is silent unless it runs a `--logging` image.
 | Flash either dongle, no double-tap | canon: `./scripts/flash-dongle.sh <image.uf2>` (any directory; named `<device>.uf2` or `<device>-*.uf2`; `--dry-run` checks only) | last line `DONE <device> ... sha256=<the build summary's 12 hex>`, exit 0 |
 | Find the dongles | canon: `python3 scripts/dongle.py list` | each dongle with its `/dev/cu.*` port and `port free` |
 | Read the logs | canon: `python3 scripts/dongle.py log prospector imprint_dongle --seconds 130 [--grep RE] [--out FILE]` | the lines below, each after a timestamp and the device |
+| See the Prospector's screen | canon: `python3 scripts/dongle.py shot --out <scratch>/shot.png`, then Read the PNG | stdout the PNG's path, stderr `280x240 in N bands, CRC-32 ok` |
 
 - `dongle.py log` uses 115200 only, follows a dongle through a reboot (started
   before a flash, it catches the boot log) and drops key-event lines unless `--raw`.
+  `shot` sets 2400, then 115200 (the dump: [src/screen_dump.c](src/screen_dump.c)),
+  refuses a port another process holds (stop the log reader) and a path in any
+  git work tree: a sprite build's picture shows the personal GIF.
 - `--logging` keeps the boot log in a 4 KiB CDC ring until the port opens (70 s
   after boot it still held the whole boot log; ZMK's 1 KiB cut it, hardware
   2026-09-29). A late opener gets the oldest 4 KiB first: check the uptime stamps.
@@ -94,7 +98,8 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   observer's grow alike (50 and 50 in a minute, 2026-09-29).
 - Once: `scanning`, `battery left L right R` (on change), `sprite WxH as WxH
   (N.NNx) from a N byte GIF, N bytes of the lvgl pool` (measured),
-  `advertising every 200 ms`, `<uart>: 1200 baud touch, rebooting into the bootloader`.
+  `advertising every 200 ms`, `<uart>: 1200 baud touch, rebooting into the bootloader`,
+  `screen dump: N bands, N bytes in N ms` (after each `shot`).
 
 ## Invariants
 
@@ -102,10 +107,12 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   Any program that sets the rate (a serial monitor, `stty`) reboots the
   Prospector Dongle, and canon's Imprint Dongle, into the UF2 bootloader
   ([src/bootloader_on_1200_baud.c](src/bootloader_on_1200_baud.c): why a warm
-  reboot after `bootmode_set()`). The option selects `RETENTION_BOOT_MODE` (a
-  board without retention fails at Kconfig) but depends on `USB_CDC_ACM`: without
-  it canon's `=y` is dropped with only a `was assigned the value 'y'` warning,
-  so after a ZMK bump grep `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y` in canon's
+  reboot after `bootmode_set()`); 2400 starts a screen dump, through the one rate
+  callback per device that the class driver keeps and that file owns. The option
+  selects `RETENTION_BOOT_MODE` (a board without retention fails at Kconfig) but
+  depends on `USB_CDC_ACM`: without it canon's `=y` is dropped with only a `was
+  assigned the value 'y'` warning, so after a ZMK bump grep
+  `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y` in canon's
   `build/imprint_dongle/zephyr/.config`.
 - **Never have both dongles in the bootloader at once, nor enter it while
   canon's `flash-watch.sh` / `flash-reset.sh` run**: both mount as `XIAO-SENSE`,
