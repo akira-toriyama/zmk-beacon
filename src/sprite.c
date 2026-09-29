@@ -6,12 +6,12 @@
  * The status screen's GIF sprite: the file named by CONFIG_BEACON_SPRITE_GIF,
  * embedded at build time (CMakeLists.txt), decoded with LVGL's gifdec into
  * its ARGB8888 canvas, and drawn by blit() straight into the display buffer,
- * scaled by nearest neighbour. An own player and an own draw rather than
- * lv_gif and lv_image: the widget invalidates on every frame even when
- * nothing changed (half the frames of the test GIF), has no tempo control,
- * plays once when the GIF has no NETSCAPE loop block, and its software
- * transform (LV_DRAW_SW_ASM_NONE, per-pixel ARGB8888 blending) cost about 70
- * of the 105 ms a render of the 2x box took (hardware 2026-09-27/28).
+ * scaled by nearest neighbour to fill its box. An own player and an own draw
+ * rather than lv_gif and lv_image: the widget invalidates on every frame even
+ * when nothing changed (half the frames of the test GIF), has no tempo
+ * control, plays once when the GIF has no NETSCAPE loop block, and its
+ * software transform (LV_DRAW_SW_ASM_NONE, per-pixel ARGB8888 blending) cost
+ * about 70 of the 105 ms a render of the 2x box took (hardware 2026-09-27/28).
  *
  * - LV_GIF_CACHE_DECODE_DATA=y is required (Kconfig selects it): in this LVGL
  *   checkout the other read_image_data() rejects every frame's last LZW token
@@ -89,8 +89,7 @@
  * - Display work queue only (LV_USE_OS=0): creation from
  *   zmk_display_status_screen(), the timer and the draw event.
  * - gd_get_frame() < 0 (malformed data) or no frame at all: the sprite is
- *   removed and its pool memory freed; the screen hears of it through the
- *   object's LV_EVENT_DELETE.
+ *   removed and its pool memory freed; the rest of the screen stays.
  */
 
 #include <stdint.h>
@@ -172,7 +171,7 @@ static struct {
     uint32_t stepped;
     uint32_t invalidated;
     uint32_t logged_at;
-    /* Every screen render (readings included) and its time, flush included;
+    /* Every screen render (the HP bar's included) and its time, flush included;
      * logging builds only. */
     uint32_t render_start;
     uint32_t renders;
@@ -418,8 +417,7 @@ static void count_render(lv_event_t *e) {
     }
 }
 
-lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct,
-                               bool fill) {
+void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct) {
     const int32_t box_w = lv_area_get_width(box);
     const int32_t box_h = lv_area_get_height(box);
 
@@ -427,29 +425,22 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     if (gif == NULL) {
         LOG_ERR("sprite: GIF rejected or no pool memory for it (%u byte file)",
                 (unsigned int)sizeof(sprite_gif));
-        return NULL;
+        return;
     }
+    /* The largest size of the GIF's proportions inside the box, whole factor
+     * or not (a GIF pixel then covers two or three panel pixels in turn). */
     int32_t w, h;
-    if (fill) {
-        /* The largest size of the GIF's proportions inside the box, whole
-         * factor or not: a GIF pixel covers 2 or 3 panel pixels in turn at
-         * 2.2x. */
-        if ((int64_t)box_w * gif->height <= (int64_t)box_h * gif->width) {
-            w = box_w;
-            h = (int32_t)((int64_t)box_w * gif->height / gif->width);
-        } else {
-            h = box_h;
-            w = (int32_t)((int64_t)box_h * gif->width / gif->height);
-        }
+    if ((int64_t)box_w * gif->height <= (int64_t)box_h * gif->width) {
+        w = box_w;
+        h = (int32_t)((int64_t)box_w * gif->height / gif->width);
     } else {
-        const int32_t scale = MIN(box_w / gif->width, box_h / gif->height);
-        w = gif->width * scale;
-        h = gif->height * scale;
+        h = box_h;
+        w = (int32_t)((int64_t)box_h * gif->width / gif->height);
     }
     if (w < gif->width || h < gif->height) {
         LOG_ERR("sprite %ux%u does not fit %dx%d", gif->width, gif->height, box_w, box_h);
         gd_close_gif(gif);
-        return NULL;
+        return;
     }
 
     memset(gif->canvas, 0, 4u * gif->width * gif->height);
@@ -459,7 +450,7 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
         LOG_ERR("sprite: no frame, or the first frame is malformed");
         gd_close_gif(gif);
         sprite.gif = NULL;
-        return NULL;
+        return;
     }
     gif->loop_count = 0;
     sprite.hash = canvas_hash();
@@ -475,8 +466,7 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     lv_obj_set_style_shadow_width(obj, 0, 0);
     lv_obj_set_style_pad_all(obj, 0, 0);
     lv_obj_set_size(obj, w, h);
-    /* Filling, the sprite stands on the box's bottom edge (the readings). */
-    lv_obj_set_pos(obj, box->x1 + (box_w - w) / 2, box->y1 + (fill ? box_h - h : 0));
+    lv_obj_set_pos(obj, box->x1 + (box_w - w) / 2, box->y1 + box_h - h);
     lv_obj_add_event_cb(obj, blit, LV_EVENT_DRAW_MAIN, NULL);
 
     struct beacon_status status;
@@ -499,5 +489,4 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
             gif->width, gif->height, w, h, h / gif->height, h * 100 / gif->height % 100,
             (unsigned int)sizeof(sprite_gif),
             (unsigned int)(sizeof(gd_GIF) + 5u * gif->width * gif->height + LZW_CACHE_BYTES));
-    return obj;
 }

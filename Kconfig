@@ -39,15 +39,14 @@ config BEACON_SPRITE_GIF
     help
       Absolute path of a GIF89a file with a global colour table (the only
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
-      the status screen plays it above the battery readings, scaled by the
-      largest whole factor that fits (or filling the space above them, see
-      BEACON_SPRITE_FILL), at three quarters of the GIF's own tempo while
-      nobody types; while the keyboard is typed on it runs on the key presses
-      instead (eight frames queued per press, stepped one per render and
-      skipped as presses pile up), and 0.2 s after the last press arrived the
-      frames still queued are dropped and the tempo resumes (src/sprite.c,
-      src/prospector_screen.c). Empty: no sprite, which is what CI and the
-      release build.
+      the status screen plays it above the HP bar, scaled to fill the space
+      between the panel's top edge and the bar, at three quarters of the
+      GIF's own tempo while nobody types; while the keyboard is typed on it
+      runs on the key presses instead (eight frames queued per press, stepped
+      one per render and skipped as presses pile up), and 0.2 s after the
+      last press arrived the frames still queued are dropped and the tempo
+      resumes (src/sprite.c, src/prospector_screen.c). Empty: no sprite, which
+      is what CI and the release build.
 
       The decoder keeps 5 bytes per pixel plus 16 KiB in the LVGL pool for
       the whole run; the build fails when that does not fit
@@ -68,34 +67,18 @@ config BEACON_SPRITE
       logging on, the sprite's minute line reports the LVGL pool's allocated
       and peak bytes, the numbers the pool size is chosen from.
 
-config BEACON_SPRITE_FILL
-    bool "Let the sprite fill the space above the battery readings"
-    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
-    help
-      With a sprite (BEACON_SPRITE_GIF) it is scaled by the largest factor of
-      its proportions that fits between the top edge and the readings, whole
-      or not (a GIF pixel then covers 2 or 3 panel pixels in turn; a 90x90 px
-      GIF shows at about 2.2x above the HP bar on 280x240, 2x when the bar
-      carries a sprite name), 2 px in from the edges, standing on the
-      readings, which keep their 12 px margin (the panel's corners are
-      rounded). Without a sprite the readings show as usual, so a consumer
-      can keep the option in its conf while CI and the release build without
-      a GIF.
-
 config BEACON_SPRITE_NAME
     string "Name of the sprite, shown under the HP bar (empty = none)"
     default ""
     depends on BEACON_SPRITE
     help
-      With the HP bar (BEACON_READINGS_HP_BAR) the text is a second row of
-      its box, at the left in unscii 16, and the box grows from 28 to 46 px,
-      so the sprite's space loses 18 rows (a 90x90 px GIF filling it shows at
-      2x, 180x180, instead of about 2.2x). 15 glyphs fit; a longer name is
-      cut. Printable ASCII only: the font has no other glyphs, a double quote
-      or a backslash would need Kconfig escaping, and "??" would be a C
-      trigraph in autoconf.h. The digits show no name. Empty: no second row
-      and a 28 px box, the screen of CI and the release build, which have no
-      sprite.
+      The text is a second row of the HP bar's box, at the left in unscii 16,
+      and the box grows from 28 to 46 px, so the sprite's space loses 18 rows
+      (a 90x90 px GIF filling it shows at 2x, 180x180, instead of about 2.2x).
+      15 glyphs fit; a longer name is cut. Printable ASCII only: the font has
+      no other glyphs, a double quote or a backslash would need Kconfig
+      escaping, and "??" would be a C trigraph in autoconf.h. Empty: no second
+      row, the screen of CI and the release build, which have no sprite.
 
       Like the GIF, the name is a personal file's and never goes into a
       repository: a local build passes it (scripts/build.sh --sprite <gif>
@@ -103,41 +86,6 @@ config BEACON_SPRITE_NAME
       configure step, whose command line west prints, shows only the
       fragment's path; canon derives it from the GIF's file name with its
       assets/sprite-name.sh).
-
-choice BEACON_READINGS
-    prompt "Battery readings"
-    default BEACON_READINGS_DIGITS
-    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
-
-config BEACON_READINGS_DIGITS
-    bool "Digits in the bottom corners"
-    help
-      Each half's battery as a percentage in Montserrat 48, the left half
-      bottom-left, the right half bottom-right; "--" without a reading, grey
-      without a payload in the last minute.
-
-config BEACON_READINGS_HP_BAR
-    bool "One HP bar at the bottom"
-    select LV_USE_BAR
-    select LV_FONT_UNSCII_16
-    help
-      A battle-screen HP bar, "HP" and a bar with its value on it ("65/100")
-      in one dark box along the bottom. Its length is the keyboard's
-      battery: the mean of the halves with a reading, or the one half that
-      has one. Green from 50 %, yellow from 20 %, red below; an empty track
-      and "--/100" without a reading, all grey without a payload in the last
-      minute. With BEACON_SPRITE_NAME the name is a second row of the box.
-      Text in unscii 16, a 16 px pixel font.
-
-config BEACON_READINGS_NONE
-    bool "None while a sprite shows"
-    help
-      No readings while a sprite shows, and the sprite may use the whole
-      panel. Without a sprite (CI, the release build), or when the sprite
-      stops on malformed GIF data, the digits show, so the conf stays valid
-      for those builds.
-
-endchoice
 
 config BEACON_STATUS_BROADCAST
     bool "Broadcast the keyboard's status on a second advertising set"

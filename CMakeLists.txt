@@ -6,15 +6,7 @@
 
 if(CONFIG_SHIELD_PROSPECTOR)
   target_sources(app PRIVATE src/backlight_init.c src/status_observer.c)
-  if(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM)
-    target_sources(app PRIVATE src/prospector_screen.c)
-    # The readings style (src/readings.h). The digits also serve
-    # BEACON_READINGS_NONE, which shows them when the build has no sprite.
-    target_sources_ifdef(CONFIG_BEACON_READINGS_HP_BAR app PRIVATE src/hp_bar.c)
-    if(CONFIG_BEACON_READINGS_DIGITS OR CONFIG_BEACON_READINGS_NONE)
-      target_sources(app PRIVATE src/readings_digits.c)
-    endif()
-  endif()
+  target_sources_ifdef(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM app PRIVATE src/prospector_screen.c src/hp_bar.c)
 endif()
 
 target_sources_ifdef(CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD app PRIVATE src/bootloader_on_1200_baud.c)
@@ -29,36 +21,24 @@ target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broad
 # for the battery screen's widgets and the draw tasks: on hardware 2026-09-27
 # the pool peaked at 63,376 B with a 58,515 B decoder allocation, so the screen
 # took under 5 KB. The size limit is the sprite box prospector_screen.c
-# computes at run time: the panel (280x240) down to the readings' top (the
-# digits: 240 - 12 margin - 9 base line - 34 digit ink = 185 rows with
-# Montserrat 48, hp_bar.c: 240 - 12 - 28 = 200, or 182 with a sprite name,
-# whose row makes the box 46 px, BEACON_READINGS_NONE: the panel's 240), less
-# BEACON_SPRITE_FILL's 2 px inset at each edge. A GIF that passes here but not
-# sprite.c's fit check would boot without a sprite; change both together, and
-# the box heights together with hp_bar.c.
+# computes at run time: the panel (280x240) down to the HP bar's top
+# (240 - 12 margin - 28 = 200, or 182 with a sprite name, whose row makes the
+# box 46 px), less the 2 px inset at the top and sides. A GIF that passes here
+# but not sprite.c's fit check would boot without a sprite; change both
+# together, and the box heights together with hp_bar.h.
 if(CONFIG_BEACON_SPRITE)
   set(sprite_gif "${CONFIG_BEACON_SPRITE_GIF}")
   set(sprite_gd_gif_bytes 2048)
   set(sprite_lzw_cache_bytes 16384)
   set(sprite_reserve_bytes 8192)
-  if(CONFIG_BEACON_READINGS_HP_BAR)
-    if("${CONFIG_BEACON_SPRITE_NAME}" STREQUAL "")
-      set(sprite_readings_top 200)
-    else()
-      set(sprite_readings_top 182)
-    endif()
-  elseif(CONFIG_BEACON_READINGS_NONE)
-    set(sprite_readings_top 240)
+  if("${CONFIG_BEACON_SPRITE_NAME}" STREQUAL "")
+    set(sprite_hp_bar_top 200)
   else()
-    set(sprite_readings_top 185)
+    set(sprite_hp_bar_top 182)
   endif()
-  if(CONFIG_BEACON_SPRITE_FILL)
-    set(sprite_inset 2)
-  else()
-    set(sprite_inset 0)
-  endif()
+  set(sprite_inset 2)
   math(EXPR sprite_max_w "280 - 2 * ${sprite_inset}")
-  math(EXPR sprite_max_h "${sprite_readings_top} - ${sprite_inset}")
+  math(EXPR sprite_max_h "${sprite_hp_bar_top} - ${sprite_inset}")
 
   if(NOT IS_ABSOLUTE "${sprite_gif}")
     message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF must be an absolute path, got '${sprite_gif}'")
@@ -93,7 +73,7 @@ if(CONFIG_BEACON_SPRITE)
   if(sprite_w EQUAL 0 OR sprite_h EQUAL 0 OR sprite_w GREATER sprite_max_w OR sprite_h GREATER sprite_max_h)
     message(FATAL_ERROR
             "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} is ${sprite_w}x${sprite_h}; the sprite box above the "
-            "readings is ${sprite_max_w}x${sprite_max_h}")
+            "HP bar is ${sprite_max_w}x${sprite_max_h}")
   endif()
 
   math(EXPR sprite_need

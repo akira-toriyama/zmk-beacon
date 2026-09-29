@@ -3,15 +3,13 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * The HP bar readings (BEACON_READINGS_HP_BAR): one battle-screen HP bar in a
- * dark box along the bottom: "HP", the bar with its value ("65/100") on it
- * and, with a sprite name (CONFIG_BEACON_SPRITE_NAME), the name on a second
- * row; the layout the user picked from twelve trials (2026-09-28/29, canon
- * t-er81). The bar's length and the value are the keyboard's battery as
- * hp_level() maps it: the mean of the halves with a reading, or the one half
- * that has one (the user's pick, 2026-09-28). Green, yellow under
- * YELLOW_BELOW, red under RED_BELOW. The digits' "--" is an empty track with
- * "--/100" on it; their grey is a grey "HP", value and name.
+ * The HP bar (hp_bar.h): one battle-screen HP bar in a dark box along the
+ * bottom: "HP", the bar with its value ("65/100") on it and, with a sprite
+ * name (CONFIG_BEACON_SPRITE_NAME), the name on a second row; the layout the
+ * user picked from twelve trials (canon t-er81). The bar's length and the
+ * value are the keyboard's battery as hp_level() maps it. Green, yellow under
+ * YELLOW_BELOW, red under RED_BELOW; without a reading an empty track with
+ * "--/100" on it, and a grey "HP", value and name without a fresh payload.
  *
  * Every text is unscii 16: a 16 px cell on a 17 px line (base line 0).
  * Capitals and digits ink rows y+1..y+14 of a label at y (most 12 px wide,
@@ -19,29 +17,16 @@
  * and "," ";" "_" reach row y+16.
  * "HP" and the bar share ROW_Y (an 8 px gap read as touching on hardware,
  * 2026-09-28); the value is white, centred on the bar, its digits' ink one
- * row above and below the 12 px bar. The name row exists only with a name
- * and makes the box BOX_H_NAMED instead of BOX_H_BARE; CMakeLists.txt sizes
- * the sprite box from the same two heights, change both together. No LVGL
- * theme is installed (LV_USE_THEME_* off), so every style is set here.
+ * row above and below the bar. The name is the box's second row (NAME_Y; the
+ * reason BEACON_HP_BAR_BOX_H depends on it). No LVGL theme is installed
+ * (LV_USE_THEME_* off), so every style is set here.
  */
 
 #include <lvgl.h>
 
-#include "readings.h"
+#include "hp_bar.h"
 
-/* The symbol depends on BEACON_SPRITE, so a build without a sprite has no
- * definition at all. */
-#ifdef CONFIG_BEACON_SPRITE_NAME
-#define NAME CONFIG_BEACON_SPRITE_NAME
-#else
-#define NAME ""
-#endif
-/* sizeof counts the terminator: 1 is the empty string. */
-#define NAMED (sizeof(NAME) > 1)
-
-#define BOX_H_BARE 28
-#define BOX_H_NAMED 46
-#define BOX_H (NAMED ? BOX_H_NAMED : BOX_H_BARE)
+#define NAMED (sizeof(BEACON_HP_BAR_NAME) > 1)
 #define BORDER_PX 2
 #define ROW_Y 6
 #define NAME_Y 24
@@ -120,8 +105,8 @@ static void set_value(uint8_t level) {
 static lv_obj_t *make_box(lv_obj_t *parent, int32_t width) {
     lv_obj_t *box = lv_obj_create(parent);
     lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(box, width, BOX_H);
-    lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -BEACON_READINGS_MARGIN_PX);
+    lv_obj_set_size(box, width, BEACON_HP_BAR_BOX_H);
+    lv_obj_align(box, LV_ALIGN_BOTTOM_MID, 0, -BEACON_HP_BAR_MARGIN_PX);
     lv_obj_set_style_bg_color(box, lv_color_hex(0x282828), 0);
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(box, lv_color_hex(0xE0E0E0), 0);
@@ -132,13 +117,9 @@ static lv_obj_t *make_box(lv_obj_t *parent, int32_t width) {
     return box;
 }
 
-static int32_t top(int32_t screen_h) {
-    return screen_h - BEACON_READINGS_MARGIN_PX - BOX_H;
-}
-
 /* Positions are inside the box's border (pad 0). */
-static void create(lv_obj_t *parent, int32_t screen_w) {
-    const int32_t width = screen_w - 2 * BEACON_READINGS_MARGIN_PX;
+void beacon_hp_bar_create(lv_obj_t *parent, int32_t screen_w) {
+    const int32_t width = screen_w - 2 * BEACON_HP_BAR_MARGIN_PX;
     const int32_t bar_w = width - 2 * BORDER_PX - BAR_X - BAR_RIGHT_PAD;
     lv_obj_t *box = make_box(parent, width);
 
@@ -180,12 +161,12 @@ static void create(lv_obj_t *parent, int32_t screen_w) {
         lv_obj_set_style_text_color(hp.name, name_color(hp.dim), 0);
         lv_label_set_long_mode(hp.name, LV_LABEL_LONG_MODE_CLIP);
         lv_obj_set_width(hp.name, NAME_GLYPHS * GLYPH_W);
-        lv_label_set_text_static(hp.name, NAME);
+        lv_label_set_text_static(hp.name, BEACON_HP_BAR_NAME);
         lv_obj_set_pos(hp.name, LABEL_X, NAME_Y);
     }
 }
 
-static bool show(const struct beacon_status *now, bool fresh) {
+bool beacon_hp_bar_show(const struct beacon_status *now, bool fresh) {
     const uint8_t level = hp_level(now, fresh);
     bool changed = false;
 
@@ -207,9 +188,3 @@ static bool show(const struct beacon_status *now, bool fresh) {
     }
     return changed;
 }
-
-const struct beacon_readings beacon_readings_hp_bar = {
-    .top = top,
-    .create = create,
-    .show = show,
-};
