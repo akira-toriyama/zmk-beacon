@@ -10,6 +10,7 @@ if(CONFIG_SHIELD_PROSPECTOR)
 endif()
 
 target_sources_ifdef(CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD app PRIVATE src/bootloader_on_1200_baud.c)
+target_sources_ifdef(CONFIG_BEACON_SCREEN_DUMP app PRIVATE src/screen_dump.c)
 target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broadcaster.c)
 
 # The sprite GIF is embedded from CONFIG_BEACON_SPRITE_GIF into the build tree

@@ -36,6 +36,23 @@ config BEACON_BOOTLOADER_ON_1200_BAUD
       selected rather than depended on, so a board without it fails the
       Kconfig step instead of silently building without the entry.
 
+config BEACON_SCREEN_DUMP
+    bool "Send the screen to the host on a 2400 baud touch"
+    depends on BEACON_BOOTLOADER_ON_1200_BAUD && ZMK_DISPLAY && LV_COLOR_DEPTH_16
+    select UART_INTERRUPT_DRIVEN
+    select CRC
+    help
+      When the host sets the CDC ACM port to 2400 baud, render the whole
+      screen once more and send it over that port as RGB565 bands closed by
+      a CRC-32 (the format: src/screen_dump.c), which canon's
+      "scripts/dongle.py shot" turns into a PNG. The screen stands still
+      while the bands go out, and a logging image drops the log lines of
+      that time: the dump has the port to itself.
+
+      It uses the 1200 baud entry's rate callback (the CDC ACM class driver
+      keeps one per device), hence the dependency. The prospector shield
+      turns this on by default.
+
 config BEACON_SPRITE_GIF
     string "GIF sprite embedded in the image (absolute path, empty = none)"
     default ""
