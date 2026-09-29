@@ -14,7 +14,12 @@
 #   ./scripts/build.sh --clean            # delete the workspace and exit
 #
 # Options (local builds only: CI and releases build the plain image):
-#   --logging         USB CDC logging (CONFIG_ZMK_USB_LOGGING=y).
+#   --logging         USB CDC logging: CONFIG_ZMK_USB_LOGGING=y, a 4 KiB CDC ring
+#                     buffer that holds the boot log until the host opens the
+#                     port (ZMK's 1 KiB default keeps about 1 KB of it), and ZMK
+#                     at INFO level (CONFIG_ZMK_LOGGING_MINIMAL=y; this module's
+#                     own lines are INFO either way). For ZMK's DEBUG add
+#                     --kconfig CONFIG_ZMK_LOGGING_MINIMAL=n.
 #   --sprite <gif>    embed a GIF sprite (CONFIG_BEACON_SPRITE_GIF). Sprite GIFs
 #                     are personal files: copied into the workspace only, never
 #                     into a repository, CI or a release, and never printed by
@@ -69,8 +74,15 @@ TAG=""
 KCONFIG=()
 SHIELDS=()
 
+# Under CONFIG_ZMK_USB_LOGGING ZMK defaults to a 1 KiB CDC ring and ZMK at DEBUG
+# (zmk app/Kconfig). With 1 KiB a capture started after boot ended after about
+# 1 KB of the boot log; with 4 KiB a port opened 70 s after boot returned all of
+# it (hardware 2026-09-29). The ring is allocated twice (RX and TX, Zephyr
+# cdc_acm.c): 6 KiB more RAM.
 LOGGING_CONF=(
   CONFIG_ZMK_USB_LOGGING=y
+  CONFIG_USB_CDC_ACM_RINGBUF_SIZE=4096
+  CONFIG_ZMK_LOGGING_MINIMAL=y
 )
 
 die() {
