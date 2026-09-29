@@ -62,9 +62,9 @@ dongle's serial port is silent unless it runs a `--logging` image.
 
 - `dongle.py log` uses 115200 only, follows a dongle through a reboot (started
   before a flash, it catches the boot log) and drops key-event lines unless `--raw`.
-- `--logging` keeps the boot log in a 4 KiB CDC ring until the port opens: a
-  port opened 70 s after boot returned the whole boot log (hardware
-  2026-09-29); ZMK's 1 KiB default cut captures after about 1 KB.
+- `--logging` keeps the boot log in a 4 KiB CDC ring until the port opens (70 s
+  after boot it still held the whole boot log; ZMK's 1 KiB cut it, hardware
+  2026-09-29). A late opener gets the oldest 4 KiB first: check the uptime stamps.
 - Per build directory (`$ZMK_WS/ws/build/<image name>/`; canon:
   `~/.cache/zmk-canon/cfgrepo/build/<image name>/`): `build.log` (west's output,
   FLASH/RAM at its end), `zephyr/.config`, `zephyr/zephyr.dts`, `zephyr/zmk.map`
@@ -76,9 +76,9 @@ dongle's serial port is silent unless it runs a `--logging` image.
 Log lines; the periodic ones come every 60 s, the first a minute after boot:
 
 - Observer (Prospector Dongle): `N status payloads in 60 s; so far N keystrokes,
-  N counter restarts (last jump N)`. 275-280 payloads a minute with the passive
-  scan (sprite logging image at 3721e16, hardware 2026-09-29; 239-269 with the
-  active scan before it), 300 at most (one per `BEACON_PAYLOAD_INTERVAL_MS`). A restart is
+  N counter restarts (last jump N)`. 264-280 payloads a minute with the passive
+  scan (sprite logging images, hardware 2026-09-29; 239-269 with the active scan
+  before it), 300 at most (one per `BEACON_PAYLOAD_INTERVAL_MS`). A restart is
   the keyboard rebooting (a reflashed Imprint Dongle jumped 182, 2026-09-29).
 - Screen (Prospector Dongle): `screen left L right R (fresh, payload N ms ago, N
   keystrokes)` on every HP bar change and once a minute; `stale` (grey) after 60 s.
