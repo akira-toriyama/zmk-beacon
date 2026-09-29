@@ -3,27 +3,20 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * The status screen's GIF sprite (CONFIG_BEACON_SPRITE). Display work queue
- * only: LVGL is not thread-safe here (LV_USE_OS=0).
+ * The status screen's GIF sprite (CONFIG_BEACON_SPRITE, sprite.c). Display
+ * work queue only: LVGL is not thread-safe here (LV_USE_OS=0).
  */
 
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-
 #include <lvgl.h>
 
-/* Creates the sprite inside parent, in box (parent coordinates), playing at
- * speed_pct of the GIF's own tempo (100 = its timing, 200 twice as fast; not
- * 0) while nobody types; while the keyboard is typed on, every key press the
- * observer counts (status_observer.h) queues eight frames instead, stepped
- * one per render and skipped as they pile up, and the tempo resumes 0.2 s
- * after the last press arrived, frames still queued dropped. fill
- * false: scaled by the
- * largest whole factor that fits, top-centred. fill true: the largest size
- * of the GIF's proportions that fits, whole factor or not, bottom-centred.
- * NULL: the GIF could not be opened or does not fit at 1x, and the screen
- * goes on without a sprite. Call once. */
-lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t speed_pct,
-                               bool fill);
+/* Creates the sprite as the first child of screen (an lv_obj_create(NULL)
+ * screen: blit()'s conditions, sprite.c), in box (screen coordinates), which
+ * must hold the GIF at 1x: scaled to the largest size of the GIF's
+ * proportions that fits, centred, standing on the box's bottom edge. It plays
+ * at SPEED_PCT of the GIF's own tempo (sprite.c) while nobody types and steps
+ * on the key presses the observer counts (status_observer.h) otherwise. A GIF that cannot be opened
+ * (no pool memory for it) or whose first frame is malformed logs why and
+ * shows nothing; malformed data later removes the sprite. Call once. */
+void beacon_sprite_create(lv_obj_t *screen, const lv_area_t *box);

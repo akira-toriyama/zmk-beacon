@@ -11,8 +11,8 @@
  * unwired on the beekeeb pre-soldered unit and it has no ambient light sensor)
  * and without a shield-level CDC ACM node: the xiao_ble board already defines
  * board_cdc_acm_uart, and every okay zephyr,cdc-acm-uart instance becomes one
- * more USB serial port. One port is what the 1200 baud bootloader entry and
- * canon's scripts/flash-prospector.sh expect.
+ * more USB serial port. Keep one: canon's scripts/dongle.py opens a device's
+ * first port, and two ports broke canon's earlier flash script (canon #219).
  */
 
 / {
@@ -90,6 +90,9 @@
     pinctrl-names = "default", "sleep";
 };
 
+/* SPIM3 is the only nRF52840 SPI instance that runs 32 MHz: spi0-2, the
+ * board's xiao_spi included, stop at 8 MHz (nrf52840.dtsi max-frequency),
+ * and the SPI drivers clamp mipi-max-frequency to that without an error. */
 &spi3 {
     status = "okay";
     pinctrl-0 = <&spi3_default>;

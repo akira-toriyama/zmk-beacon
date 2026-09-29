@@ -6,11 +6,9 @@
  * Status broadcaster for the keyboard's split central (canon's Imprint
  * Dongle): the payload of status_payload.h on a second advertising set next
  * to ZMK's own connectable one. Legacy PDU, non-connectable, non-scannable
- * (ADV_NONCONN_IND), so the Prospector Dongle's observer receives it with a
- * plain scan; refreshed every CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS.
- * Measured on hardware 2026-09-27 as the t-eray spike (projects t-eray): the
- * halves reconnected as before, no advertising error in 5 reboots and a half
- * power cycle, the Prospector Dongle received 255-269 payloads a minute.
+ * (ADV_NONCONN_IND) with the payload in its AD, so the Prospector Dongle's
+ * observer receives it with a passive scan; refreshed every
+ * BEACON_PAYLOAD_INTERVAL_MS.
  *
  * - CONFIG_BT_EXT_ADV: the host then shares one pool of
  *   CONFIG_BT_EXT_ADV_MAX_ADV_SET sets between ZMK's legacy bt_le_adv_start()
@@ -80,7 +78,7 @@ BUILD_ASSERT(CONFIG_BT_EXT_ADV_MAX_ADV_SET >= 2,
              "CONFIG_BT_EXT_ADV_MAX_ADV_SET must be 2: ZMK's own advertising takes one set");
 
 #define RETRY_MS 500
-#define STATS_PERIOD_MS 60000
+#define LOG_PERIOD_MS 60000
 #define STACK_SIZE 1536
 #define SLOT_COUNT 2
 
@@ -93,9 +91,9 @@ static const struct bt_data ad[] = {
     BT_DATA(BT_DATA_MANUFACTURER_DATA, payload, sizeof(payload)),
 };
 
-static const struct bt_le_adv_param adv_param = BT_LE_ADV_PARAM_INIT(
-    BT_LE_ADV_OPT_NONE, BT_GAP_MS_TO_ADV_INTERVAL(CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS),
-    BT_GAP_MS_TO_ADV_INTERVAL(CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS), NULL);
+static const struct bt_le_adv_param adv_param =
+    BT_LE_ADV_PARAM_INIT(BT_LE_ADV_OPT_NONE, BT_GAP_MS_TO_ADV_INTERVAL(BEACON_PAYLOAD_INTERVAL_MS),
+                         BT_GAP_MS_TO_ADV_INTERVAL(BEACON_PAYLOAD_INTERVAL_MS), NULL);
 
 K_THREAD_STACK_DEFINE(bcast_stack, STACK_SIZE);
 static struct k_work_q bcast_q;
@@ -185,7 +183,7 @@ static int start_set(void) {
     }
 
     atomic_set(&advertising, 1);
-    LOG_INF("advertising every %d ms", CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS);
+    LOG_INF("advertising every %d ms", BEACON_PAYLOAD_INTERVAL_MS);
     return 0;
 }
 
@@ -207,8 +205,7 @@ static void tick(struct k_work *work) {
         atomic_inc(err ? &updates_err : &updates_ok);
     }
 
-    k_work_reschedule_for_queue(&bcast_q, &tick_work,
-                                K_MSEC(CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS));
+    k_work_reschedule_for_queue(&bcast_q, &tick_work, K_MSEC(BEACON_PAYLOAD_INTERVAL_MS));
 }
 
 static void log_stats(struct k_work *work);
@@ -222,8 +219,8 @@ static void log_stats(struct k_work *work) {
             adv != NULL ? "advertising" : "not advertising", (long)atomic_set(&updates_ok, 0),
             (long)atomic_set(&updates_err, 0), (long)atomic_get(&start_failures),
             (unsigned int)atomic_get(&battery[0]), (unsigned int)atomic_get(&battery[1]),
-            (unsigned long)atomic_get(&keystrokes), STATS_PERIOD_MS / 1000);
-    k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+            (unsigned long)atomic_get(&keystrokes), LOG_PERIOD_MS / 1000);
+    k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
 }
 
 static int on_commit(void) {
@@ -251,7 +248,7 @@ static int status_broadcaster_init(void) {
                        K_LOWEST_APPLICATION_THREAD_PRIO, NULL);
     k_thread_name_set(&bcast_q.thread, "beacon_bcast");
     if (IS_ENABLED(CONFIG_LOG)) {
-        k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+        k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
     }
     return settings_register_with_cprio(&commit_handler, 1);
 }

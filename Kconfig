@@ -1,9 +1,7 @@
 # Copyright (c) 2026 akira-toriyama
 # SPDX-License-Identifier: MIT
 #
-# Module-wide options. Every symbol carries the BEACON_ prefix so the module
-# can share a manifest with prospector-zmk-module (PROSPECTOR_*, ZMK_STATUS_ADV_*)
-# while canon migrates from it.
+# Module-wide options, all BEACON_*.
 
 menu "Beacon"
 
@@ -19,7 +17,8 @@ config BEACON_BACKLIGHT_BRIGHTNESS
 
 config BEACON_BOOTLOADER_ON_1200_BAUD
     bool "Enter the UF2 bootloader on a 1200 baud touch"
-    depends on USB_CDC_ACM && RETENTION_BOOT_MODE
+    depends on USB_CDC_ACM
+    select RETENTION_BOOT_MODE
     select CDC_ACM_DTE_RATE_CALLBACK_SUPPORT
     help
       When the host sets any CDC ACM port of the device to 1200 baud (for
@@ -32,6 +31,11 @@ config BEACON_BOOTLOADER_ON_1200_BAUD
       reboots the device. The prospector shield turns this on by default
       because the unit has no key for &bootloader and no touch input.
 
+      The boot mode needs the board's retention support (RETENTION, a
+      zephyr,boot-mode retention area; ZMK's xiao_ble board has both). It is
+      selected rather than depended on, so a board without it fails the
+      Kconfig step instead of silently building without the entry.
+
 config BEACON_SPRITE_GIF
     string "GIF sprite embedded in the image (absolute path, empty = none)"
     default ""
@@ -39,21 +43,19 @@ config BEACON_SPRITE_GIF
     help
       Absolute path of a GIF89a file with a global colour table (the only
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
-      the status screen plays it above the battery readings, scaled by the
-      largest whole factor that fits (or filling the space above them, see
-      BEACON_SPRITE_FILL), at three quarters of the GIF's own tempo while
-      nobody types; while the keyboard is typed on it runs on the key presses
-      instead (eight frames queued per press, stepped one per render and
-      skipped as presses pile up), and 0.2 s after the last press arrived the
-      frames still queued are dropped and the tempo resumes (src/sprite.c,
-      src/prospector_screen.c). Empty: no sprite, which is what CI and the
-      release build.
+      the status screen plays it above the HP bar, scaled to fill the space
+      between the panel's top edge and the bar: at SPEED_PCT of its own tempo
+      (src/sprite.c) while nobody types, and stepped by the key presses the
+      keyboard's broadcaster counts
+      while it is typed on (src/sprite.c). Empty: no sprite, which is what CI
+      and the release build.
 
-      The decoder keeps 5 bytes per pixel plus 16 KiB in the LVGL pool for
-      the whole run; the build fails when that does not fit
-      CONFIG_LV_Z_MEM_POOL_SIZE (the prospector shield's default grows with a
-      sprite, boards/shields/prospector/Kconfig.defconfig). Local builds:
-      scripts/build.sh --sprite <gif> [--sprite-name <text>].
+      The build fails when the GIF does not fit that space at 1x
+      (src/prospector_screen.c), or when its decoder's share of the LVGL
+      pool, kept for the whole run, does not fit CONFIG_LV_Z_MEM_POOL_SIZE
+      next to the screen (CMakeLists.txt; the prospector shield's default
+      grows with a sprite). Local builds: scripts/build.sh --sprite <gif>
+      [--sprite-name <text>].
 
 config BEACON_SPRITE
     bool
@@ -61,41 +63,32 @@ config BEACON_SPRITE
     select LV_USE_IMAGE
     select LV_USE_GIF
     select LV_GIF_CACHE_DECODE_DATA
-    imply SYS_HEAP_RUNTIME_STATS if LOG
+    select SYS_HEAP_RUNTIME_STATS if LOG
     help
       Set when BEACON_SPRITE_GIF names a file. LV_GIF_CACHE_DECODE_DATA is a
-      correctness requirement here, not a speed option (src/sprite.c). With
-      logging on, the sprite's minute line reports the LVGL pool's allocated
-      and peak bytes, the numbers the pool size is chosen from.
-
-config BEACON_SPRITE_FILL
-    bool "Let the sprite fill the space above the battery readings"
-    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
-    help
-      With a sprite (BEACON_SPRITE_GIF) it is scaled by the largest factor of
-      its proportions that fits between the top edge and the readings, whole
-      or not (a GIF pixel then covers 2 or 3 panel pixels in turn; a 90x90 px
-      GIF shows at about 2.2x above the HP bar on 280x240, 2x when the bar
-      carries a sprite name), 2 px in from the edges, standing on the
-      readings, which keep their 12 px margin (the panel's corners are
-      rounded). Without a sprite the readings show as usual, so a consumer
-      can keep the option in its conf while CI and the release build without
-      a GIF.
+      correctness requirement here, not a speed option (src/sprite.c).
+      LV_USE_IMAGE only lets LVGL's lv_gif.c, which LV_USE_GIF compiles,
+      build: the sprite draws itself. With logging on, the sprite's minute
+      line reports the LVGL pool's allocated and peak bytes, the numbers the
+      pool size is chosen from.
 
 config BEACON_SPRITE_NAME
     string "Name of the sprite, shown under the HP bar (empty = none)"
     default ""
-    depends on BEACON_SPRITE
     help
-      With the HP bar (BEACON_READINGS_HP_BAR) the text is a second row of
-      its box, at the left in unscii 16, and the box grows from 28 to 46 px,
-      so the sprite's space loses 18 rows (a 90x90 px GIF filling it shows at
-      2x, 180x180, instead of about 2.2x). 15 glyphs fit; a longer name is
-      cut. Printable ASCII only: the font has no other glyphs, a double quote
-      or a backslash would need Kconfig escaping, and "??" would be a C
-      trigraph in autoconf.h. The digits show no name. Empty: no second row
-      and a 28 px box, the screen of CI and the release build, which have no
-      sprite.
+      The name is a second row of the HP bar's box, at the left in unscii
+      16: the box grows by that row and the sprite's space above it shrinks
+      (src/hp_bar.h). 15 glyphs fit; a longer name is cut. Printable ASCII
+      only: the font has no other glyphs, a double quote or a backslash would
+      need Kconfig escaping, and "??" would be a C trigraph in autoconf.h.
+      Empty: no second row, the screen of CI and the release build, which
+      have no sprite. The HP bar shows the name only with a sprite
+      (src/hp_bar.h).
+
+      No dependency on purpose: kconfig.py prints the value of any assigned
+      symbol whose value did not take, so a dependency on BEACON_SPRITE
+      would print the name in every build where the sprite ends up off (a
+      display-off --kconfig, another shield).
 
       Like the GIF, the name is a personal file's and never goes into a
       repository: a local build passes it (scripts/build.sh --sprite <gif>
@@ -103,41 +96,6 @@ config BEACON_SPRITE_NAME
       configure step, whose command line west prints, shows only the
       fragment's path; canon derives it from the GIF's file name with its
       assets/sprite-name.sh).
-
-choice BEACON_READINGS
-    prompt "Battery readings"
-    default BEACON_READINGS_DIGITS
-    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
-
-config BEACON_READINGS_DIGITS
-    bool "Digits in the bottom corners"
-    help
-      Each half's battery as a percentage in Montserrat 48, the left half
-      bottom-left, the right half bottom-right; "--" without a reading, grey
-      without a payload in the last minute.
-
-config BEACON_READINGS_HP_BAR
-    bool "One HP bar at the bottom"
-    select LV_USE_BAR
-    select LV_FONT_UNSCII_16
-    help
-      A battle-screen HP bar, "HP" and a bar with its value on it ("65/100")
-      in one dark box along the bottom. Its length is the keyboard's
-      battery: the mean of the halves with a reading, or the one half that
-      has one. Green from 50 %, yellow from 20 %, red below; an empty track
-      and "--/100" without a reading, all grey without a payload in the last
-      minute. With BEACON_SPRITE_NAME the name is a second row of the box.
-      Text in unscii 16, a 16 px pixel font.
-
-config BEACON_READINGS_NONE
-    bool "None while a sprite shows"
-    help
-      No readings while a sprite shows, and the sprite may use the whole
-      panel. Without a sprite (CI, the release build), or when the sprite
-      stops on malformed GIF data, the digits show, so the conf stays valid
-      for those builds.
-
-endchoice
 
 config BEACON_STATUS_BROADCAST
     bool "Broadcast the keyboard's status on a second advertising set"
@@ -148,26 +106,14 @@ config BEACON_STATUS_BROADCAST
       half's battery, the highest active layer and its name, and a count of
       key presses; src/status_payload.h) as manufacturer data in a legacy,
       non-connectable, non-scannable advertising set next to ZMK's own
-      connectable one. The Prospector Dongle's observer (the prospector
-      shield) reads it.
+      connectable one, refreshed every BEACON_PAYLOAD_INTERVAL_MS
+      (src/status_payload.h) and right after a key press. The Prospector
+      Dongle's observer (the prospector shield) reads it.
 
       The consumer's config must also set CONFIG_BT_EXT_ADV_MAX_ADV_SET=2:
       with BT_EXT_ADV the host takes ZMK's legacy advertising from the same
       pool of sets, and the build fails on a pool of 1. BT_EXT_ADV costs
       about 34 KB of flash and 11 KB of RAM on nRF52840 and switches the host
-      to the extended HCI commands (canon imprint_dongle, 2026-09-26).
-
-config BEACON_STATUS_BROADCAST_INTERVAL_MS
-    int "Advertising interval of the status set (ms)"
-    depends on BEACON_STATUS_BROADCAST
-    range 20 10240
-    default 200
-    help
-      The payload is refreshed once per interval and right after a key
-      press, so a scanner sees a new battery or layer value after at most two
-      intervals and a new key count after at most one (plus the advertiser's
-      random delay of up to 10 ms). The sprite's KEY_GRACE_MS and the
-      observer's KEYS_DELTA_MAX (src/sprite.c, src/status_observer.c) are
-      tuned to the default of 200 ms; revisit them with a different value.
+      to the extended HCI commands.
 
 endmenu

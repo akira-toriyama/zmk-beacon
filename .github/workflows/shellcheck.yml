@@ -3,7 +3,9 @@ name: ShellCheck
 # Static check of the shell scripts (scripts/build.sh). shellcheck ships with
 # the GitHub Ubuntu runner, so there is nothing to install.
 on:
+  # push only on main: a PR branch is checked once, through pull_request.
   push:
+    branches: [main]
     paths:
       - "**/*.sh"
       - "**/*.bash"
@@ -12,6 +14,7 @@ on:
     paths:
       - "**/*.sh"
       - "**/*.bash"
+      - ".github/workflows/shellcheck.yml"
   workflow_dispatch:
 
 permissions:

@@ -7,18 +7,15 @@
  * which status_broadcaster.c sends from canon's Imprint Dongle. This file owns
  * the Bluetooth bring-up: CONFIG_ZMK_BLE=n compiles out ZMK's bt_enable()
  * callers (ble.c, and split/bluetooth/peripheral.c through ZMK_SPLIT_BLE) and
- * with them the connectable advertisement, so the device never advertises.
- * The active scan transmits SCAN_REQs only, from a fresh non-resolvable
- * private address.
+ * with them the connectable advertisement, so the device never advertises,
+ * and the scan is passive, so it transmits nothing at all.
  *
  * Only the prefix, the version byte, both halves' battery bytes and the
  * keystroke counter are read. 0 = no reading. No charging state is carried.
  *
- * - ACTIVE scan: the broadcaster puts the payload in the AD of a
- *   non-connectable PDU, which a passive scan would receive too. The scan
- *   stays active so that a keyboard still on prospector-zmk-module v2.2.3
- *   (same layout, carried in ZMK's scan response) is heard as well; passive
- *   is a follow-up once no such keyboard remains (canon task t-xe2q).
+ * - Passive scan: the broadcaster sends the payload in the AD of a
+ *   non-connectable, non-scannable ADV_NONCONN_IND (status_broadcaster.c),
+ *   so there is no scan response to ask for.
  * - No duplicate filter: every BT_LE_SCAN_* helper sets FILTER_DUPLICATE, and
  *   the controller then reports each address and PDU type once, so later
  *   payload changes would never arrive. The parameters are spelled out here.
@@ -52,19 +49,18 @@ LOG_MODULE_REGISTER(beacon_observer, LOG_LEVEL_INF);
 BUILD_ASSERT(IS_ENABLED(CONFIG_BT_OBSERVER), "the status observer needs CONFIG_BT_OBSERVER=y");
 
 #define SCAN_RETRY_MS 1000
-#define STATS_PERIOD_MS 60000
+#define LOG_PERIOD_MS 60000
 /* A larger difference in one payload is the keyboard's counter starting over
  * (a reboot: the Imprint Dongle reflashed under a running observer read as
- * 182 presses, hardware 2026-09-29), not typing: payloads come every 200 ms
- * (BEACON_STATUS_BROADCAST_INTERVAL_MS; revisit this with it) and the
- * occasional lost one leaves no room for 33 presses. Such a payload only
- * sets the new reference. */
+ * 182 presses, hardware 2026-09-29), not typing: payloads come every
+ * BEACON_PAYLOAD_INTERVAL_MS and the occasional lost one leaves no room for
+ * that many presses. Such a payload only sets the new reference. */
 #define KEYS_DELTA_MAX 32
 
 static const uint8_t payload_prefix[] = {BEACON_PAYLOAD_PREFIX_INIT};
 
 static const struct bt_le_scan_param scan_param = {
-    .type = BT_LE_SCAN_TYPE_ACTIVE,
+    .type = BT_LE_SCAN_TYPE_PASSIVE,
     .options = BT_LE_SCAN_OPT_NONE,
     .interval = BT_GAP_SCAN_FAST_WINDOW,
     .window = BT_GAP_SCAN_FAST_WINDOW,
@@ -72,8 +68,12 @@ static const struct bt_le_scan_param scan_param = {
 
 static struct k_spinlock status_lock;
 static struct beacon_status status;
-/* The counter byte of the last payload; under status_lock. */
+/* Under status_lock: the counter byte of the last payload, and the counter
+ * restarts dropped so far (a difference above KEYS_DELTA_MAX) with the last
+ * one's difference, for the minute line. */
 static uint8_t last_keys;
+static uint32_t key_restarts;
+static uint8_t key_restart_jump;
 
 /* Valid payloads since the last stats line (logging builds only). */
 static atomic_t payload_count;
@@ -99,11 +99,16 @@ static K_WORK_DELAYABLE_DEFINE(stats_work, log_stats);
 
 static void log_stats(struct k_work *work) {
     ARG_UNUSED(work);
-    struct beacon_status now;
-    beacon_status_get(&now);
-    LOG_INF("%ld status payloads in %d s, %u keystrokes so far", (long)atomic_set(&payload_count, 0),
-            STATS_PERIOD_MS / 1000, now.keystrokes);
-    k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+    k_spinlock_key_t key = k_spin_lock(&status_lock);
+    const uint32_t keystrokes = status.keystrokes;
+    const uint32_t restarts = key_restarts;
+    const uint8_t jump = key_restart_jump;
+    k_spin_unlock(&status_lock, key);
+
+    LOG_INF("%ld status payloads in %d s; so far %u keystrokes, %u counter restarts (last jump %u)",
+            (long)atomic_set(&payload_count, 0), LOG_PERIOD_MS / 1000, keystrokes, restarts,
+            jump);
+    k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
 }
 
 static bool find_payload(struct bt_data *data, void *user_data) {
@@ -142,7 +147,10 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     /* The first payload only sets the reference: what came before it is
      * unknown. Modulo 256, as the keyboard counts. */
     const uint8_t delta = status.received ? (uint8_t)(keys - last_keys) : 0;
-    if (delta != 0 && delta <= KEYS_DELTA_MAX) {
+    if (delta > KEYS_DELTA_MAX) {
+        key_restarts++;
+        key_restart_jump = delta;
+    } else if (delta != 0) {
         status.keystrokes += delta;
         status.key_ms = now_ms;
     }
@@ -189,7 +197,7 @@ static int status_observer_init(void) {
 
     k_work_schedule(&start_scan_work, K_NO_WAIT);
     if (IS_ENABLED(CONFIG_LOG)) {
-        k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
+        k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
     }
     return 0;
 }
