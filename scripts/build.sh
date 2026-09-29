@@ -20,10 +20,10 @@
 #                     at INFO level (CONFIG_ZMK_LOGGING_MINIMAL=y; this module's
 #                     own lines are INFO either way). For ZMK's DEBUG add
 #                     --kconfig CONFIG_ZMK_LOGGING_MINIMAL=n.
-#   --sprite <gif>    embed a GIF sprite (CONFIG_BEACON_SPRITE_GIF). Sprite GIFs
-#                     are personal files: copied into the workspace only, never
-#                     into a repository, CI or a release, and never printed by
-#                     path.
+#   --sprite <gif>    embed a GIF sprite (CONFIG_BEACON_SPRITE_GIF); the prospector
+#                     shield only. Sprite GIFs are personal files: copied into
+#                     the workspace only, never into a repository, CI or a
+#                     release, and never printed by path.
 #   --sprite-name <text>
 #                     the sprite's name under the HP bar (CONFIG_BEACON_SPRITE_NAME,
 #                     needs --sprite): printable ASCII without a double quote, a
@@ -31,14 +31,17 @@
 #                     length is printed.
 #   --kconfig CONFIG_NAME=VALUE
 #                     one more Kconfig line, merged after the sprite and logging
-#                     lines. Repeatable. CONFIG_BEACON_SPRITE_* go only through
-#                     --sprite and --sprite-name.
+#                     lines. Repeatable; the images carry -kconfig.
+#                     CONFIG_BEACON_SPRITE_* go only through --sprite and
+#                     --sprite-name, and nothing that turns the display off
+#                     combines with --sprite.
 #   --tag <name>      appended to the build directory and the image name.
 #   --update          west update before building: moves zmk@main and its modules.
 #   --clean           delete the workspace and exit.
 #
-# Images: firmware/<shield>[-sprite][-logging][-<tag>].uf2 (git-ignored), copied
-# once every target of the run has built. The run ends with one line per image
+# Images: firmware/<shield>[-sprite][-logging][-kconfig][-<tag>].uf2
+# (git-ignored), copied once every target of the run has built. No message
+# prints an argument that could be the GIF's path or the sprite's name. The run ends with one line per image
 # (sha256, FLASH and RAM use) and the revisions it built from.
 #
 # Workspace under $ZMK_WS (default ~/.cache/zmk-beacon), kept between runs so
@@ -118,10 +121,14 @@ while [ $# -gt 0 ]; do
       exit 0
       ;;
     # A value glued to an option, or a stray argument, can be the GIF's path
-    # or the name: printed only up to a '=' or a space, or not at all.
-    -*[=\ ]*) die 2 "unknown option ${arg%%[= ]*}... (an option's value is the next argument; see --help)" ;;
-    -*) die 2 "unknown option $arg (see --help)" ;;
-    *:*) SHIELDS+=("$arg") ;;
+    # or the sprite's name: never printed.
+    -*) die 2 "an unknown option (not printed: an option's value is the next argument; see --help)" ;;
+    *:*)
+      case "$arg" in
+        :* | *: | *[!A-Za-z0-9_/:-]* | *:*:*) die 2 "a <board>:<shield> argument needs both parts, letters, digits, '_', '-' and '/' (not printed)" ;;
+      esac
+      SHIELDS+=("$arg")
+      ;;
     *[!A-Za-z0-9_-]*) die 2 "an argument that is no shield name (not printed; a GIF goes after --sprite)" ;;
     *) SHIELDS+=("$arg") ;;
   esac
@@ -145,6 +152,10 @@ for kv in ${KCONFIG[@]+"${KCONFIG[@]}"}; do
   case "$kv" in
     *$'\n'*) die 2 "--kconfig takes one line" ;;
     CONFIG_BEACON_SPRITE_*) die 2 "--kconfig: CONFIG_BEACON_SPRITE_* go only through --sprite and --sprite-name" ;;
+    CONFIG_ZMK_DISPLAY=* | CONFIG_ZMK_DISPLAY_*)
+      # The sprite needs the custom status screen.
+      if [ -n "$SPRITE" ]; then die 2 "--kconfig: ${kv%%=*} does not combine with --sprite"; fi
+      ;;
     CONFIG_?*=?*) ;;
     *) die 2 "--kconfig takes CONFIG_NAME=VALUE, not ${kv%%=*}..." ;;
   esac
@@ -178,11 +189,17 @@ else
     while IFS="$(printf '\t')" read -r b s; do
       if [ "$s" = "$arg" ]; then board="$b"; break; fi
     done < <(_build_pairs)
-    [ -n "$board" ] || die 1 "shield $arg is not in build.yaml (pass <board>:<shield> to build it anyway)"
+    # Not printed: a forgotten --sprite-name leaves the name here.
+    [ -n "$board" ] || die 1 "a shield argument is not in build.yaml (not printed; pass <board>:<shield> to build it anyway)"
     TARGETS+=("$board	$arg")
   done
 fi
 [ ${#TARGETS[@]} -gt 0 ] || die 1 "no build targets (check build.yaml)"
+if [ -n "$SPRITE" ]; then
+  for row in "${TARGETS[@]}"; do
+    [ "${row##*	}" = prospector ] || die 2 "--sprite builds the prospector shield only, and this run has another target"
+  done
+fi
 
 # The one place that names the images: <shield>$SUFFIX is the build directory
 # and the image, in the container and here. Kconfig fragments merge in list
@@ -199,7 +216,10 @@ if [ "$LOGGING" -eq 1 ]; then
   SUFFIX="$SUFFIX-logging"
   FRAGMENTS+=(/workspace/kconfig/logging.conf)
 fi
-if [ ${#KCONFIG[@]} -gt 0 ]; then FRAGMENTS+=(/workspace/kconfig/extra.conf); fi
+if [ ${#KCONFIG[@]} -gt 0 ]; then
+  SUFFIX="$SUFFIX-kconfig"
+  FRAGMENTS+=(/workspace/kconfig/extra.conf)
+fi
 if [ -n "$TAG" ]; then SUFFIX="$SUFFIX-$TAG"; fi
 FRAGMENT_LIST=""
 if [ ${#FRAGMENTS[@]} -gt 0 ]; then FRAGMENT_LIST="$(IFS=';' && echo "${FRAGMENTS[*]}")"; fi
@@ -208,6 +228,9 @@ if ! docker info >/dev/null 2>&1; then
   die 1 "the Docker daemon is not running (open -a Docker)"
 fi
 
+# Taken with the snapshot below, not after the build: a commit or an edit
+# during a long build must not name a tree the image was not built from.
+beacon_rev="$(git -C "$REPO" describe --always --dirty 2>/dev/null || true)"
 mkdir -p "$TOP/config" "$MOD"
 # `/.git` without a trailing slash: in a git worktree .git is a file.
 rsync -a --delete --exclude '/.git' --exclude '/.claude/' --exclude '/firmware/' "$REPO"/ "$MOD"/
@@ -313,5 +336,4 @@ for row in "${TARGETS[@]}"; do
   echo "  firmware/$name.uf2  $sha  $mem"
 done
 zmk_rev="$(git -C "$TOP/zmk" log -1 --format='%h %cs' 2>/dev/null || true)"
-beacon_rev="$(git -C "$REPO" describe --always --dirty 2>/dev/null || true)"
 echo "revisions: zmk ${zmk_rev:-?}, zmk-beacon ${beacon_rev:-?}"

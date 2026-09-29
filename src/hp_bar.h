@@ -18,9 +18,9 @@
 
 #include "status_observer.h"
 
-/* CONFIG_BEACON_SPRITE_NAME depends on BEACON_SPRITE: a build without a sprite
- * has no definition at all. */
-#ifdef CONFIG_BEACON_SPRITE_NAME
+/* CONFIG_BEACON_SPRITE_NAME is defined in every build (Kconfig says why); the
+ * name shows only with a sprite. */
+#ifdef CONFIG_BEACON_SPRITE
 #define BEACON_HP_BAR_NAME CONFIG_BEACON_SPRITE_NAME
 #else
 #define BEACON_HP_BAR_NAME ""

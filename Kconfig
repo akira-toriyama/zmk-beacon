@@ -44,8 +44,9 @@ config BEACON_SPRITE_GIF
       Absolute path of a GIF89a file with a global colour table (the only
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
       the status screen plays it above the HP bar, scaled to fill the space
-      between the panel's top edge and the bar: at its own tempo while nobody
-      types, and stepped by the key presses the keyboard's broadcaster counts
+      between the panel's top edge and the bar: at SPEED_PCT of its own tempo
+      (src/sprite.c) while nobody types, and stepped by the key presses the
+      keyboard's broadcaster counts
       while it is typed on (src/sprite.c). Empty: no sprite, which is what CI
       and the release build.
 
@@ -74,7 +75,6 @@ config BEACON_SPRITE
 config BEACON_SPRITE_NAME
     string "Name of the sprite, shown under the HP bar (empty = none)"
     default ""
-    depends on BEACON_SPRITE
     help
       The name is a second row of the HP bar's box, at the left in unscii
       16: the box grows by that row and the sprite's space above it shrinks
@@ -82,7 +82,13 @@ config BEACON_SPRITE_NAME
       only: the font has no other glyphs, a double quote or a backslash would
       need Kconfig escaping, and "??" would be a C trigraph in autoconf.h.
       Empty: no second row, the screen of CI and the release build, which
-      have no sprite.
+      have no sprite. The HP bar shows the name only with a sprite
+      (src/hp_bar.h).
+
+      No dependency on purpose: kconfig.py prints the value of any assigned
+      symbol whose value did not take, so a dependency on BEACON_SPRITE
+      would print the name in every build where the sprite ends up off (a
+      display-off --kconfig, another shield).
 
       Like the GIF, the name is a personal file's and never goes into a
       repository: a local build passes it (scripts/build.sh --sprite <gif>
