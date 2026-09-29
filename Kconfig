@@ -17,7 +17,8 @@ config BEACON_BACKLIGHT_BRIGHTNESS
 
 config BEACON_BOOTLOADER_ON_1200_BAUD
     bool "Enter the UF2 bootloader on a 1200 baud touch"
-    depends on USB_CDC_ACM && RETENTION_BOOT_MODE
+    depends on USB_CDC_ACM
+    select RETENTION_BOOT_MODE
     select CDC_ACM_DTE_RATE_CALLBACK_SUPPORT
     help
       When the host sets any CDC ACM port of the device to 1200 baud (for
@@ -29,6 +30,11 @@ config BEACON_BOOTLOADER_ON_1200_BAUD
       Any program that sets the port to 1200 baud, a serial monitor included,
       reboots the device. The prospector shield turns this on by default
       because the unit has no key for &bootloader and no touch input.
+
+      The boot mode needs the board's retention support (RETENTION, a
+      zephyr,boot-mode retention area; ZMK's xiao_ble board has both). It is
+      selected rather than depended on, so a board without it fails the
+      Kconfig step instead of silently building without the entry.
 
 config BEACON_SPRITE_GIF
     string "GIF sprite embedded in the image (absolute path, empty = none)"
