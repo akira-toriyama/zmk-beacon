@@ -126,8 +126,10 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
 /* Decodes per stepped frame at most, looking for one that changes the canvas. */
 #define STEP_DECODE_MAX 8
 /* Decodes a step may spend (about 90 ms at 11 ms a decode): a frame stops at
- * this bound even before its canvas changed, and the display thread outranks
- * BT RX. */
+ * this bound even before its canvas changed. It bounds how long a tick keeps
+ * the display work queue (preemptible, ZMK_DISPLAY_DEDICATED_THREAD_PRIORITY)
+ * from rendering; the scan is not delayed, since BT RX runs cooperative at
+ * K_PRIO_COOP(CONFIG_BT_RX_PRIO) and preempts it. */
 #define DECODES_PER_TICK 8
 #define DELAY_UNIT_MS 10
 #define DELAY_MIN_UNITS 10
@@ -435,7 +437,8 @@ void beacon_sprite_create(lv_obj_t *screen, const lv_area_t *box) {
     const size_t pool_gif = IS_ENABLED(CONFIG_LOG) ? pool_allocated() - pool_before : 0;
 
     /* The largest size of the GIF's proportions inside the box, whole factor
-     * or not (a GIF pixel then covers two or three panel pixels in turn). The
+     * or not (a GIF pixel then covers the scale's floor or ceiling in panel
+     * pixels in turn: 2 or 3 at 2.2x). The
      * box holds the GIF at 1x (a BUILD_ASSERT in prospector_screen.c), so w
      * and h are at least the GIF's, which blit() relies on. */
     int32_t w, h;

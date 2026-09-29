@@ -95,7 +95,7 @@ Limits:
 | --- | --- |
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
 | `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery and the key press count from the status payload. |
-| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms and right after a key press. |
+| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press refreshes the payload for the next advertising event. |
 | `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name and the key press counter are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that the GIF fits. |
 | `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with `CONFIG_BEACON_SPRITE_NAME`, the name on a second row; and the mapping of both halves' batteries to its one level. |
@@ -174,7 +174,7 @@ compile the broadcaster out.
 ./scripts/build.sh              # every target in build.yaml -> firmware/prospector.uf2
 ./scripts/build.sh --logging    # firmware/prospector-logging.uf2: the log on the serial port
 ./scripts/build.sh --sprite ~/a.gif --sprite-name "A"  # firmware/prospector-sprite.uf2 (local only)
-./scripts/build.sh --kconfig CONFIG_LV_USE_SYSMON=y --kconfig CONFIG_LV_USE_PERF_MONITOR=y --tag perf  # firmware/prospector-perf.uf2
+./scripts/build.sh --kconfig CONFIG_LV_USE_SYSMON=y --kconfig CONFIG_LV_USE_PERF_MONITOR=y --tag perf  # firmware/prospector-kconfig-perf.uf2
 ./scripts/build.sh --update     # refresh zmk@main and its modules first
 ```
 

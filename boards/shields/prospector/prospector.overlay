@@ -90,6 +90,9 @@
     pinctrl-names = "default", "sleep";
 };
 
+/* SPIM3 is the only nRF52840 SPI instance that runs 32 MHz: spi0-2, the
+ * board's xiao_spi included, stop at 8 MHz (nrf52840.dtsi max-frequency),
+ * and the SPI drivers clamp mipi-max-frequency to that without an error. */
 &spi3 {
     status = "okay";
     pinctrl-0 = <&spi3_default>;

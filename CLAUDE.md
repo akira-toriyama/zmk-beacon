@@ -1,8 +1,7 @@
 # CLAUDE.md
 
-Claude Code notes: what breaks, where the reasoning lives (each source file's
-header), and how to build, flash and read the devices. Usage: [README.md](README.md).
-Committed text is English.
+Claude Code notes: what breaks, where the reasoning lives (source headers), how to
+build, flash and read the devices. Usage: [README.md](README.md). English only.
 
 ## What this repository is
 
@@ -28,9 +27,8 @@ Committed text is English.
 - `./scripts/build.sh [shield | board:shield] [--logging] [--sprite <gif>
   [--sprite-name <text>]] [--kconfig CONFIG_X=V]... [--tag <name>] [--update]`
   (flags: its header). Docker, workspace `$ZMK_WS` (default `~/.cache/zmk-beacon`),
-  images `firmware/<shield>[-sprite][-logging][-<tag>].uf2`, then one line per
-  image (sha256 prefix, FLASH, RAM) and the revisions (zmk SHA and date,
-  `git describe --always --dirty` here). `--update` moves zmk@main.
+  images `firmware/<shield>[-sprite][-logging][-kconfig][-<tag>].uf2`, then a
+  summary (sha256 prefix, FLASH, RAM, revisions). `--update` moves zmk@main.
 - The west topdir is never the module root: `$RUNNER_TEMP/ws` in CI, `$ZMK_WS/ws`
   locally, the repository passed as `-DZMK_EXTRA_MODULES` (as ZMK's
   `build-user-config.yml` does). Never `west init` inside the repository.
@@ -51,9 +49,8 @@ Committed text is English.
 
 ## Debugging and device operations
 
-This repository builds the Prospector Dongle's image only. The device tools are
-canon's `scripts/` (sessions usually start there; the headers document every
-flag). A dongle's serial port is silent unless it runs a `--logging` image.
+The device tools are canon's `scripts/` (their headers document every flag). A
+dongle's serial port is silent unless it runs a `--logging` image.
 
 | Goal | Command | Healthy result |
 | --- | --- | --- |
@@ -68,9 +65,6 @@ flag). A dongle's serial port is silent unless it runs a `--logging` image.
 - `--logging` keeps the boot log in a 4 KiB CDC ring until the port opens: a
   port opened 70 s after boot returned the whole boot log (hardware
   2026-09-29); ZMK's 1 KiB default cut captures after about 1 KB.
-- Listener order after a ZMK bump, in an `imprint_dongle` build directory:
-  `grep -A1 '^ \.event_subscription$' zephyr/zmk.map | grep -o '([a-z_]*\.c\.obj)' | head -1`
-  prints `(status_broadcaster.c.obj)` (2026-09-29).
 - Per build directory (`$ZMK_WS/ws/build/<image name>/`; canon:
   `~/.cache/zmk-canon/cfgrepo/build/<image name>/`): `build.log` (west's output,
   FLASH/RAM at its end), `zephyr/.config`, `zephyr/zephyr.dts`, `zephyr/zmk.map`
@@ -82,9 +76,9 @@ flag). A dongle's serial port is silent unless it runs a `--logging` image.
 Log lines; the periodic ones come every 60 s, the first a minute after boot:
 
 - Observer (Prospector Dongle): `N status payloads in 60 s; so far N keystrokes,
-  N counter restarts (last jump N)`. 239-269 payloads a minute on hardware
-  (2026-09-27/29, with the active scan used until 2026-09-29; the passive scan is
-  unmeasured), 300 at most (one per `BEACON_PAYLOAD_INTERVAL_MS`). A restart is
+  N counter restarts (last jump N)`. 275-280 payloads a minute with the passive
+  scan (sprite logging image at 3721e16, hardware 2026-09-29; 239-269 with the
+  active scan before it), 300 at most (one per `BEACON_PAYLOAD_INTERVAL_MS`). A restart is
   the keyboard rebooting (a reflashed Imprint Dongle jumped 182, 2026-09-29).
 - Screen (Prospector Dongle): `screen left L right R (fresh, payload N ms ago, N
   keystrokes)` on every HP bar change and once a minute; `stale` (grey) after 60 s.
@@ -108,8 +102,11 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   Any program that sets the rate (a serial monitor, `stty`) reboots the
   Prospector Dongle, and canon's Imprint Dongle, into the UF2 bootloader
   ([src/bootloader_on_1200_baud.c](src/bootloader_on_1200_baud.c): why a warm
-  reboot after `bootmode_set()`). The option selects `RETENTION_BOOT_MODE`, so a
-  board without retention fails at Kconfig instead of losing the entry.
+  reboot after `bootmode_set()`). The option selects `RETENTION_BOOT_MODE` (a
+  board without retention fails at Kconfig) but depends on `USB_CDC_ACM`: without
+  it canon's `=y` is dropped with only a `was assigned the value 'y'` warning,
+  so after a ZMK bump grep `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y` in canon's
+  `build/imprint_dongle/zephyr/.config`.
 - **Never have both dongles in the bootloader at once, nor enter it while
   canon's `flash-watch.sh` / `flash-reset.sh` run**: both mount as `XIAO-SENSE`,
   and those scripts copy `imprint_dongle.uf2` onto any `XIAO-SENSE` mount.
@@ -130,8 +127,10 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   in the consumer a `BUILD_ASSERT` fails.
 - Keep the broadcaster's listener ahead of ZMK's: it counts a press before a
   hold-tap or a combo captures it because ZMK calls listeners in link order and
-  the module's objects link first (zmk.map, 2026-09-29; re-raised presses:
-  [src/status_broadcaster.c](src/status_broadcaster.c)).
+  the module's objects link first (re-raised presses:
+  [src/status_broadcaster.c](src/status_broadcaster.c)). After a ZMK bump, in an
+  `imprint_dongle` build directory, `grep -A1 '^ \.event_subscription$' zephyr/zmk.map
+  | grep -o '([a-z_]*\.c\.obj)' | head -1` prints `(status_broadcaster.c.obj)` (2026-09-29).
 - Remove or rename a Kconfig symbol together with the canon change that stops
   setting it: Kconfig aborts on an assignment to an undefined symbol (canon's
   `config/prospector.conf` and `BEACON_SPRITE_FILL`, 2026-09-29).
@@ -158,7 +157,7 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   fixes one size for both. More pool takes a logging sprite build (89.61% RAM)
   over 90%. [CMakeLists.txt](CMakeLists.txt) refuses a GIF whose decoder does not
   fit, [src/prospector_screen.c](src/prospector_screen.c) one larger than the box.
-- The panel's SPI runs at 32 MHz with high drive on the SPIM pins (overlay),
+- The panel's SPI runs at 32 MHz on SPIM3 with high drive on its pins (overlay),
   above the ST7789V data sheet's 15 MHz write cycle, as 16 MHz already was: a
   render takes about 43 ms against 63 at 16 MHz (hardware 2026-09-28). If the
   panel shows noise, set `mipi-max-frequency` back to 20 MHz (16 MHz effective).
@@ -178,7 +177,8 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   west prints the whole cmake command line when the configure step fails
   (reproduced 2026-09-29). The script prints only the GIF's size and the name's
   length, `--kconfig` refuses `CONFIG_BEACON_SPRITE_*`, and no message echoes a
-  path or a value.
+  path or a value. `BEACON_SPRITE_NAME` has no Kconfig dependency, so kconfig.py
+  never prints it (its help says why).
 - CI and `release.yml` build without a sprite or a name, so no release carries
   either. canon keeps the GIF in its ignored `assets/` and derives the name from
   the file name (`assets/sprite-name.sh` there).

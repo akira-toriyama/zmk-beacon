@@ -16,9 +16,10 @@
 
 #define BEACON_PAYLOAD_LEN 26
 
-/* The broadcaster sends the payload this often, and right after a key press;
- * the observer's KEYS_DELTA_MAX and the sprite's KEY_GRACE_MS are chosen
- * against it. */
+/* The broadcaster advertises the payload this often and refreshes it right
+ * after a key press; a refresh goes on air at the next advertising event, so a
+ * press adds no payload. The observer's KEYS_DELTA_MAX and the sprite's
+ * KEY_GRACE_MS are chosen against it. */
 #define BEACON_PAYLOAD_INTERVAL_MS 200
 
 /* [0..3]: company id 0xFFFF, then the magic AB CD. */
