@@ -21,6 +21,15 @@ struct beacon_status {
     uint8_t right;
     /* k_uptime_get() of the last valid payload. */
     int64_t last_ms;
+    /* Key presses on the keyboard since the first payload, accumulated from
+     * the payload's 8-bit counter (status_payload.h) as the difference between
+     * consecutive payloads, so a lost payload drops no press. A keyboard that
+     * rebooted restarts its counter: a difference above KEYS_DELTA_MAX
+     * (status_observer.c) is taken for that and not counted, a smaller one
+     * reads as that many presses once. */
+    uint32_t keystrokes;
+    /* k_uptime_get() of the last payload that raised keystrokes. */
+    int64_t key_ms;
 };
 
 void beacon_status_get(struct beacon_status *out);

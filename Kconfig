@@ -41,8 +41,12 @@ config BEACON_SPRITE_GIF
       kind LVGL's gifdec opens). The build embeds its bytes in the image and
       the status screen plays it above the battery readings, scaled by the
       largest whole factor that fits (or filling the space above them, see
-      BEACON_SPRITE_FILL), always at a fixed 150 % of the GIF's own tempo
-      (src/prospector_screen.c). Empty: no sprite, which is what CI and the
+      BEACON_SPRITE_FILL), at three quarters of the GIF's own tempo while
+      nobody types; while the keyboard is typed on it runs on the key presses
+      instead (eight frames queued per press, stepped one per render and
+      skipped as presses pile up), and 0.2 s after the last press arrived the
+      frames still queued are dropped and the tempo resumes (src/sprite.c,
+      src/prospector_screen.c). Empty: no sprite, which is what CI and the
       release build.
 
       The decoder keeps 5 bytes per pixel plus 16 KiB in the LVGL pool for
@@ -141,10 +145,11 @@ config BEACON_STATUS_BROADCAST
     select BT_EXT_ADV
     help
       On the keyboard's split central, advertise the status payload (each
-      half's battery, the highest active layer and its name;
-      src/status_payload.h) as manufacturer data in a legacy, non-connectable,
-      non-scannable advertising set next to ZMK's own connectable one. The
-      Prospector Dongle's observer (the prospector shield) reads it.
+      half's battery, the highest active layer and its name, and a count of
+      key presses; src/status_payload.h) as manufacturer data in a legacy,
+      non-connectable, non-scannable advertising set next to ZMK's own
+      connectable one. The Prospector Dongle's observer (the prospector
+      shield) reads it.
 
       The consumer's config must also set CONFIG_BT_EXT_ADV_MAX_ADV_SET=2:
       with BT_EXT_ADV the host takes ZMK's legacy advertising from the same
@@ -158,7 +163,11 @@ config BEACON_STATUS_BROADCAST_INTERVAL_MS
     range 20 10240
     default 200
     help
-      The payload is refreshed once per interval, so a scanner sees a new
-      battery or layer value after at most one interval.
+      The payload is refreshed once per interval and right after a key
+      press, so a scanner sees a new battery or layer value after at most two
+      intervals and a new key count after at most one (plus the advertiser's
+      random delay of up to 10 ms). The sprite's KEY_GRACE_MS and the
+      observer's KEYS_DELTA_MAX (src/sprite.c, src/status_observer.c) are
+      tuned to the default of 200 ms; revisit them with a different value.
 
 endmenu

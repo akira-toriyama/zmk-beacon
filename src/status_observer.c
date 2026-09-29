@@ -11,8 +11,8 @@
  * The active scan transmits SCAN_REQs only, from a fresh non-resolvable
  * private address.
  *
- * Only the prefix, the version byte and both halves' battery bytes are read.
- * 0 = no reading. No charging state is carried.
+ * Only the prefix, the version byte, both halves' battery bytes and the
+ * keystroke counter are read. 0 = no reading. No charging state is carried.
  *
  * - ACTIVE scan: the broadcaster puts the payload in the AD of a
  *   non-connectable PDU, which a passive scan would receive too. The scan
@@ -53,6 +53,13 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_BT_OBSERVER), "the status observer needs CONFIG_B
 
 #define SCAN_RETRY_MS 1000
 #define STATS_PERIOD_MS 60000
+/* A larger difference in one payload is the keyboard's counter starting over
+ * (a reboot: the Imprint Dongle reflashed under a running observer read as
+ * 182 presses, hardware 2026-09-29), not typing: payloads come every 200 ms
+ * (BEACON_STATUS_BROADCAST_INTERVAL_MS; revisit this with it) and the
+ * occasional lost one leaves no room for 33 presses. Such a payload only
+ * sets the new reference. */
+#define KEYS_DELTA_MAX 32
 
 static const uint8_t payload_prefix[] = {BEACON_PAYLOAD_PREFIX_INIT};
 
@@ -65,6 +72,8 @@ static const struct bt_le_scan_param scan_param = {
 
 static struct k_spinlock status_lock;
 static struct beacon_status status;
+/* The counter byte of the last payload; under status_lock. */
+static uint8_t last_keys;
 
 /* Valid payloads since the last stats line (logging builds only). */
 static atomic_t payload_count;
@@ -90,8 +99,10 @@ static K_WORK_DELAYABLE_DEFINE(stats_work, log_stats);
 
 static void log_stats(struct k_work *work) {
     ARG_UNUSED(work);
-    LOG_INF("%ld status payloads in %d s", (long)atomic_set(&payload_count, 0),
-            STATS_PERIOD_MS / 1000);
+    struct beacon_status now;
+    beacon_status_get(&now);
+    LOG_INF("%ld status payloads in %d s, %u keystrokes so far", (long)atomic_set(&payload_count, 0),
+            STATS_PERIOD_MS / 1000, now.keystrokes);
     k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
 }
 
@@ -123,13 +134,23 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     /* payload points into buf, valid only during this callback. */
     const uint8_t left = payload[BEACON_PAYLOAD_OFFSET_LEFT];
     const uint8_t right = payload[BEACON_PAYLOAD_OFFSET_RIGHT];
+    const uint8_t keys = payload[BEACON_PAYLOAD_OFFSET_KEYSTROKES];
+    const int64_t now_ms = k_uptime_get();
 
     k_spinlock_key_t key = k_spin_lock(&status_lock);
     const bool changed = !status.received || status.left != left || status.right != right;
+    /* The first payload only sets the reference: what came before it is
+     * unknown. Modulo 256, as the keyboard counts. */
+    const uint8_t delta = status.received ? (uint8_t)(keys - last_keys) : 0;
+    if (delta != 0 && delta <= KEYS_DELTA_MAX) {
+        status.keystrokes += delta;
+        status.key_ms = now_ms;
+    }
+    last_keys = keys;
     status.received = true;
     status.left = left;
     status.right = right;
-    status.last_ms = k_uptime_get();
+    status.last_ms = now_ms;
     k_spin_unlock(&status_lock, key);
 
     if (IS_ENABLED(CONFIG_LOG)) {

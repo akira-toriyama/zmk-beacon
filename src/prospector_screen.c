@@ -55,9 +55,11 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 /* Logging builds print the screen state on every change and at least this
  * often, so a long run's log shows the display thread alive. */
 #define LOG_EVERY_MS 60000
-/* Sprite tempo in percent of the GIF's own: the user's pick (2026-09-28). The
- * player keeps it by merging frames when drawing falls behind (sprite.c). */
-#define SPRITE_SPEED_PCT 150
+/* Sprite tempo while nobody types, in percent of the GIF's own: the user's
+ * pick (2026-09-29, after 100 and 50 the same day; 150 with no keyboard link
+ * from 09-28). Key presses step the sprite frame by frame instead (sprite.c),
+ * and the player keeps the tempo by merging frames when drawing falls behind. */
+#define SPRITE_SPEED_PCT 75
 
 #if IS_ENABLED(CONFIG_BEACON_READINGS_HP_BAR)
 #define READINGS (&beacon_readings_hp_bar)
@@ -79,8 +81,9 @@ static void refresh(lv_timer_t *timer) {
 
     if (IS_ENABLED(CONFIG_LOG) && (changed || now_ms - logged_ms >= LOG_EVERY_MS)) {
         logged_ms = now_ms;
-        LOG_INF("screen left %u right %u (%s, payload %d ms ago)", now.left, now.right,
-                fresh ? "fresh" : "stale", now.received ? (int)MIN(age_ms, INT32_MAX) : -1);
+        LOG_INF("screen left %u right %u (%s, payload %d ms ago, %u keystrokes)", now.left,
+                now.right, fresh ? "fresh" : "stale", now.received ? (int)MIN(age_ms, INT32_MAX) : -1,
+                now.keystrokes);
     }
 }
 

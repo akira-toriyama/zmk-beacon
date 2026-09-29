@@ -38,6 +38,22 @@
  * - The payload goes out from the first start, with 0 for a half that has not
  *   reported yet (the observer shows "--" for 0). ZMK raises the battery event
  *   once per half after every (re)connect and with 0 on disconnect.
+ * - Keystrokes: every key press on either half counts once, at the press
+ *   (zmk_position_state_changed, which the split central raises for the
+ *   halves' keys), and kicks the tick, so the new count is on air at the next
+ *   advertising event, at most one interval (plus the controller's random
+ *   delay of up to 10 ms) after the press instead of up to two. This
+ *   listener is linked before ZMK's own (a module's sources precede
+ *   app/ in zmk.map, checked 2026-09-29), so it sees a press before a hold-tap
+ *   or a combo captures or consumes it; combo.c release_pressed_keys()
+ *   re-raises the second and later captured presses from the first listener
+ *   (ZMK_EVENT_RAISE), which the (position, timestamp) memory below skips
+ *   (the timestamp is stamped once in split/central.c and copied on every
+ *   re-raise). A press during the tick's own set_data queues one more run (a
+ *   running work item may be resubmitted, zephyr kernel/work.c
+ *   submit_to_queue_locked()). Until the set advertises the kick is skipped:
+ *   creating the set must not overlap ZMK's first bt_le_adv_start() (above),
+ *   and a failed start retries at RETRY_MS, not at typing rate.
  */
 
 #include <string.h>
@@ -53,6 +69,7 @@
 
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
+#include <zmk/events/position_state_changed.h>
 #include <zmk/keymap.h>
 
 #include "status_payload.h"
@@ -85,8 +102,37 @@ static struct k_work_q bcast_q;
 
 static struct bt_le_ext_adv *adv;
 
-/* Written by the battery listener on ZMK's event thread, read on bcast_q. */
+/* Written by the listener on ZMK's event thread, read on bcast_q. */
 static atomic_t battery[SLOT_COUNT];
+/* Key presses since boot; the payload carries the low byte. */
+static atomic_t keystrokes;
+/* Set once the set advertises: from then on a press may kick the tick. */
+static atomic_t advertising;
+
+/* The last presses counted, so that a re-raised one is not counted again
+ * (header). Combos capture a few presses at most, even with an undecided
+ * hold-tap holding some back first (canon: 2-key combos); every position
+ * event runs on the system work queue, so no lock. The timestamp is a
+ * millisecond: two presses of one key in the same millisecond (a link stall
+ * delivering press, release, press together) count once. */
+#define SEEN_PRESSES 8
+static struct {
+    uint32_t position;
+    int64_t timestamp;
+} seen[SEEN_PRESSES];
+static unsigned int seen_next;
+
+static bool seen_before(const struct zmk_position_state_changed *pos) {
+    for (unsigned int i = 0; i < SEEN_PRESSES; i++) {
+        if (seen[i].timestamp == pos->timestamp && seen[i].position == pos->position) {
+            return true;
+        }
+    }
+    seen[seen_next].position = pos->position;
+    seen[seen_next].timestamp = pos->timestamp;
+    seen_next = (seen_next + 1) % SEEN_PRESSES;
+    return false;
+}
 
 /* Counters for the stats line (logging builds only). */
 static atomic_t updates_ok;
@@ -96,6 +142,7 @@ static atomic_t start_failures;
 static void fill_payload(void) {
     payload[BEACON_PAYLOAD_OFFSET_LEFT] = (uint8_t)atomic_get(&battery[0]);
     payload[BEACON_PAYLOAD_OFFSET_RIGHT] = (uint8_t)atomic_get(&battery[1]);
+    payload[BEACON_PAYLOAD_OFFSET_KEYSTROKES] = (uint8_t)atomic_get(&keystrokes);
 
     zmk_keymap_layer_index_t index = zmk_keymap_highest_layer_active();
     const char *name = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(index));
@@ -137,6 +184,7 @@ static int start_set(void) {
         return err;
     }
 
+    atomic_set(&advertising, 1);
     LOG_INF("advertising every %d ms", CONFIG_BEACON_STATUS_BROADCAST_INTERVAL_MS);
     return 0;
 }
@@ -169,11 +217,12 @@ static K_WORK_DELAYABLE_DEFINE(stats_work, log_stats);
 
 static void log_stats(struct k_work *work) {
     ARG_UNUSED(work);
-    LOG_INF("%s, %ld updates ok, %ld failed, %ld start failures, battery %u/%u, in %d s",
+    LOG_INF("%s, %ld updates ok, %ld failed, %ld start failures, battery %u/%u, %lu keystrokes, "
+            "in %d s",
             adv != NULL ? "advertising" : "not advertising", (long)atomic_set(&updates_ok, 0),
             (long)atomic_set(&updates_err, 0), (long)atomic_get(&start_failures),
             (unsigned int)atomic_get(&battery[0]), (unsigned int)atomic_get(&battery[1]),
-            STATS_PERIOD_MS / 1000);
+            (unsigned long)atomic_get(&keystrokes), STATS_PERIOD_MS / 1000);
     k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
 }
 
@@ -210,15 +259,26 @@ static int status_broadcaster_init(void) {
 /* After ZMK's bt_enable() at APPLICATION 50. */
 SYS_INIT(status_broadcaster_init, APPLICATION, 90);
 
-static int battery_listener(const zmk_event_t *eh) {
-    const struct zmk_peripheral_battery_state_changed *ev =
+static int event_listener(const zmk_event_t *eh) {
+    const struct zmk_peripheral_battery_state_changed *bat =
         as_zmk_peripheral_battery_state_changed(eh);
+    if (bat != NULL) {
+        if (bat->source < SLOT_COUNT) {
+            atomic_set(&battery[bat->source], bat->state_of_charge);
+        }
+        return ZMK_EV_EVENT_BUBBLE;
+    }
 
-    if (ev != NULL && ev->source < SLOT_COUNT) {
-        atomic_set(&battery[ev->source], ev->state_of_charge);
+    const struct zmk_position_state_changed *pos = as_zmk_position_state_changed(eh);
+    if (pos != NULL && pos->state && !seen_before(pos)) {
+        atomic_inc(&keystrokes);
+        if (atomic_get(&advertising)) {
+            k_work_reschedule_for_queue(&bcast_q, &tick_work, K_NO_WAIT);
+        }
     }
     return ZMK_EV_EVENT_BUBBLE;
 }
 
-ZMK_LISTENER(beacon_broadcaster, battery_listener);
+ZMK_LISTENER(beacon_broadcaster, event_listener);
 ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_peripheral_battery_state_changed);
+ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_position_state_changed);

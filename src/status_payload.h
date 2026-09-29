@@ -36,3 +36,13 @@
 #define BEACON_PAYLOAD_OFFSET_LAYER 6
 #define BEACON_PAYLOAD_OFFSET_LAYER_NAME 15
 #define BEACON_PAYLOAD_LAYER_NAME_LEN 4
+
+/* Keystrokes: key presses on either half, any key, counted modulo 256. The
+ * observer takes the difference between consecutive payloads, so a lost
+ * payload loses no press and a payload that replaced one not yet on air
+ * carries both. The module's wpm_value byte: a broadcaster before this field
+ * sends 0 there (no steps, batteries as before, which is why the version byte
+ * stays 0x22), except the images of 2026-09-27/28 (adec978 to 3500c22) and a
+ * keyboard still on the module, which send a WPM whose changes would read as
+ * presses; neither has been in use since (canon task t-7c05). */
+#define BEACON_PAYLOAD_OFFSET_KEYSTROKES 24
