@@ -3,35 +3,70 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * The HP bar readings (BEACON_READINGS_HP_BAR): one battle-screen HP bar,
- * "HP" and a bar in a dark box along the bottom. Its length
- * is the keyboard's battery as hp_level() maps it: the mean of the halves
- * with a reading, or the one half that has one (the user's pick, 2026-09-28).
- * Green, yellow under YELLOW_BELOW, red under RED_BELOW; the digits' "--" is
- * an empty track, and their grey is a grey "HP". One row of the 8x16 unscii
- * glyph: "HP", a gap (8 px read as touching on hardware, 2026-09-28), then the
- * bar to the right edge. No LVGL theme is installed (LV_USE_THEME_* off), so
- * every style is set here.
+ * The HP bar readings (BEACON_READINGS_HP_BAR): one battle-screen HP bar in a
+ * dark box along the bottom: "HP", the bar with its value ("65/100") on it
+ * and, with a sprite name (CONFIG_BEACON_SPRITE_NAME), the name on a second
+ * row; the layout the user picked from twelve trials (2026-09-28/29, canon
+ * t-er81). The bar's length and the value are the keyboard's battery as
+ * hp_level() maps it: the mean of the halves with a reading, or the one half
+ * that has one (the user's pick, 2026-09-28). Green, yellow under
+ * YELLOW_BELOW, red under RED_BELOW. The digits' "--" is an empty track with
+ * "--/100" on it; their grey is a grey "HP", value and name.
+ *
+ * Every text is unscii 16: a 16 px cell on a 17 px line (base line 0).
+ * Capitals and digits ink rows y+1..y+14 of a label at y (most 12 px wide,
+ * K M N W 4 are 14, X Y and "/" the full 16); a descender (g, j, p, q, y)
+ * and "," ";" "_" reach row y+16.
+ * "HP" and the bar share ROW_Y (an 8 px gap read as touching on hardware,
+ * 2026-09-28); the value is white, centred on the bar, its digits' ink one
+ * row above and below the 12 px bar. The name row exists only with a name
+ * and makes the box BOX_H_NAMED instead of BOX_H_BARE; CMakeLists.txt sizes
+ * the sprite box from the same two heights, change both together. No LVGL
+ * theme is installed (LV_USE_THEME_* off), so every style is set here.
  */
 
 #include <lvgl.h>
 
 #include "readings.h"
 
-#define BOX_H 28
+/* The symbol depends on BEACON_SPRITE, so a build without a sprite has no
+ * definition at all. */
+#ifdef CONFIG_BEACON_SPRITE_NAME
+#define NAME CONFIG_BEACON_SPRITE_NAME
+#else
+#define NAME ""
+#endif
+/* sizeof counts the terminator: 1 is the empty string. */
+#define NAMED (sizeof(NAME) > 1)
+
+#define BOX_H_BARE 28
+#define BOX_H_NAMED 46
+#define BOX_H (NAMED ? BOX_H_NAMED : BOX_H_BARE)
 #define BORDER_PX 2
 #define ROW_Y 6
+#define NAME_Y 24
+#define GLYPH_W 16
 #define GLYPH_H 16
 #define LABEL_X 8
 #define BAR_X 48
 #define BAR_H 12
 #define BAR_RIGHT_PAD 10
+/* "100/100" is the widest value. */
+#define VALUE_CHARS 7
+#define VALUE_W (VALUE_CHARS * GLYPH_W)
+/* Whole cells from LABEL_X that stay inside the 252 px content width; a
+ * longer name is cut after them, off the border's corner. */
+#define NAME_GLYPHS 15
 #define YELLOW_BELOW 50
 #define RED_BELOW 20
 
 static struct {
     lv_obj_t *label;
     lv_obj_t *bar;
+    lv_obj_t *value;
+    /* NULL without a name. */
+    lv_obj_t *name;
+    char value_text[VALUE_CHARS + 1];
     /* 0 = no reading. */
     uint8_t shown;
     bool dim;
@@ -65,6 +100,23 @@ static lv_color_t label_color(bool dim) {
     return dim ? lv_color_hex(0x606060) : lv_color_hex(0xF8C048);
 }
 
+static lv_color_t value_color(bool dim) {
+    return dim ? lv_color_hex(0x909090) : lv_color_white();
+}
+
+static lv_color_t name_color(bool dim) {
+    return dim ? lv_color_hex(0x606060) : lv_color_hex(0xE0E0E0);
+}
+
+static void set_value(uint8_t level) {
+    if (level == 0) {
+        lv_snprintf(hp.value_text, sizeof(hp.value_text), "--/100");
+    } else {
+        lv_snprintf(hp.value_text, sizeof(hp.value_text), "%u/100", level);
+    }
+    lv_label_set_text_static(hp.value, hp.value_text);
+}
+
 static lv_obj_t *make_box(lv_obj_t *parent, int32_t width) {
     lv_obj_t *box = lv_obj_create(parent);
     lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
@@ -87,6 +139,7 @@ static int32_t top(int32_t screen_h) {
 /* Positions are inside the box's border (pad 0). */
 static void create(lv_obj_t *parent, int32_t screen_w) {
     const int32_t width = screen_w - 2 * BEACON_READINGS_MARGIN_PX;
+    const int32_t bar_w = width - 2 * BORDER_PX - BAR_X - BAR_RIGHT_PAD;
     lv_obj_t *box = make_box(parent, width);
 
     hp.dim = true;
@@ -100,7 +153,7 @@ static void create(lv_obj_t *parent, int32_t screen_w) {
     hp.bar = lv_bar_create(box);
     lv_bar_set_range(hp.bar, 0, 100);
     lv_bar_set_value(hp.bar, 0, LV_ANIM_OFF);
-    lv_obj_set_size(hp.bar, width - 2 * BORDER_PX - BAR_X - BAR_RIGHT_PAD, BAR_H);
+    lv_obj_set_size(hp.bar, bar_w, BAR_H);
     lv_obj_set_pos(hp.bar, BAR_X, ROW_Y + (GLYPH_H - BAR_H) / 2);
     lv_obj_set_style_bg_color(hp.bar, lv_color_hex(0x404848), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(hp.bar, LV_OPA_COVER, LV_PART_MAIN);
@@ -108,6 +161,28 @@ static void create(lv_obj_t *parent, int32_t screen_w) {
     lv_obj_set_style_bg_color(hp.bar, bar_color(0), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(hp.bar, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(hp.bar, BAR_H / 2, LV_PART_INDICATOR);
+
+    /* Created after the bar, so it draws over it. */
+    hp.value = lv_label_create(box);
+    lv_obj_set_style_text_font(hp.value, &lv_font_unscii_16, 0);
+    lv_obj_set_style_text_color(hp.value, value_color(hp.dim), 0);
+    lv_obj_set_style_text_align(hp.value, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(hp.value, VALUE_W);
+    lv_obj_set_pos(hp.value, BAR_X + (bar_w - VALUE_W) / 2, ROW_Y);
+    set_value(0);
+
+    hp.name = NULL;
+    if (NAMED) {
+        /* One row of NAME_GLYPHS cells; the user accepted that a longer
+         * name is cut (2026-09-28). */
+        hp.name = lv_label_create(box);
+        lv_obj_set_style_text_font(hp.name, &lv_font_unscii_16, 0);
+        lv_obj_set_style_text_color(hp.name, name_color(hp.dim), 0);
+        lv_label_set_long_mode(hp.name, LV_LABEL_LONG_MODE_CLIP);
+        lv_obj_set_width(hp.name, NAME_GLYPHS * GLYPH_W);
+        lv_label_set_text_static(hp.name, NAME);
+        lv_obj_set_pos(hp.name, LABEL_X, NAME_Y);
+    }
 }
 
 static bool show(const struct beacon_status *now, bool fresh) {
@@ -118,11 +193,16 @@ static bool show(const struct beacon_status *now, bool fresh) {
         hp.shown = level;
         lv_bar_set_value(hp.bar, level, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(hp.bar, bar_color(level), LV_PART_INDICATOR);
+        set_value(level);
         changed = true;
     }
     if (hp.dim != !fresh) {
         hp.dim = !fresh;
         lv_obj_set_style_text_color(hp.label, label_color(hp.dim), 0);
+        lv_obj_set_style_text_color(hp.value, value_color(hp.dim), 0);
+        if (hp.name != NULL) {
+            lv_obj_set_style_text_color(hp.name, name_color(hp.dim), 0);
+        }
         changed = true;
     }
     return changed;

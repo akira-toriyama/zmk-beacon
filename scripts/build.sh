@@ -7,6 +7,7 @@
 #   ./scripts/build.sh prospector       # one shield (its board comes from build.yaml)
 #   ./scripts/build.sh --logging        # CONFIG_ZMK_USB_LOGGING=y variants (<shield>-logging.uf2)
 #   ./scripts/build.sh --sprite <gif>   # embed a GIF sprite (<shield>-sprite[-logging].uf2); local builds only
+#   ./scripts/build.sh --sprite <gif> --sprite-name <text>  # ... and show its name under the HP bar
 #   ./scripts/build.sh --update         # force west update (refresh zmk@main and its modules)
 #   ./scripts/build.sh --clean          # delete the workspace and exit
 #
@@ -23,7 +24,12 @@
 #
 # --sprite copies the GIF into the workspace (never into the repository: sprite
 # GIFs are personal files, .gitignore) and passes it to the build as
-# CONFIG_BEACON_SPRITE_GIF. CI and the release never build with a sprite.
+# CONFIG_BEACON_SPRITE_GIF; --sprite-name goes in as CONFIG_BEACON_SPRITE_NAME
+# (printable ASCII, no quote, backslash or "??"). Both go through the Kconfig
+# fragment sprite/sprite.conf (EXTRA_CONF_FILE), not -DCONFIG_...: when the
+# configure step fails, west prints the cmake command line, and the name
+# usually names the GIF's subject, so nothing here prints it (only its
+# length). CI and the release never build with a sprite.
 #
 # Output: ./firmware/<shield>[-sprite][-logging].uf2 (gitignored). Only the
 # targets built in this run are copied, so a stale file never shadows a fresh
@@ -44,6 +50,7 @@ MOD="$WS/module"
 FORCE_UPDATE=0
 LOGGING=0
 SPRITE=""
+SPRITE_NAME=""
 
 SHIELDS=()
 while [ $# -gt 0 ]; do
@@ -54,6 +61,9 @@ while [ $# -gt 0 ]; do
     --sprite)
       if [ $# -lt 2 ] || [ -z "$2" ]; then echo "--sprite needs a GIF path" >&2; exit 2; fi
       SPRITE="$2"; shift ;;
+    --sprite-name)
+      if [ $# -lt 2 ] || [ -z "$2" ]; then echo "--sprite-name needs a text" >&2; exit 2; fi
+      SPRITE_NAME="$2"; shift ;;
     -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,"");print;next} NR>1{exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *)  SHIELDS+=("$1") ;;
@@ -65,6 +75,24 @@ case "$SPRITE" in "" | /*) ;; *) SPRITE="$CALLER_DIR/$SPRITE" ;; esac
 if [ -n "$SPRITE" ] && [ ! -r "$SPRITE" ]; then
   echo "--sprite: cannot read $SPRITE" >&2
   exit 1
+fi
+if [ -n "$SPRITE_NAME" ] && [ -z "$SPRITE" ]; then
+  echo "--sprite-name needs --sprite" >&2
+  exit 2
+fi
+# What Kconfig takes unescaped, the C preprocessor leaves alone (a trigraph
+# "??x" would change in autoconf.h) and the HP bar's font can draw (Kconfig
+# help). grep reads lines, so a newline is checked apart; semicolons only
+# would collapse to an empty CMake list, and CMakeLists.txt would then size
+# the sprite box for no name.
+case "$SPRITE_NAME" in
+  *$'\n'*) echo "--sprite-name: one line" >&2; exit 2 ;;
+  "" | *[!\;]*) ;;
+  *) echo "--sprite-name: a character other than ';' is needed" >&2; exit 2 ;;
+esac
+if printf '%s' "$SPRITE_NAME" | LC_ALL=C grep -Eq '[^ -~]|["\\]|\?\?'; then
+  echo "--sprite-name: printable ASCII only, without a double quote, a backslash or \"??\"" >&2
+  exit 2
 fi
 
 # "board<TAB>shield" per build.yaml include: entry (board/shield in either
@@ -114,14 +142,19 @@ mkdir -p "$TOP/config" "$MOD"
 rsync -a --delete --exclude '/.git' --exclude '/.claude/' --exclude '/firmware/' "$REPO"/ "$MOD"/
 rsync -a --delete "$REPO"/config/ "$TOP"/config/
 
-# A fixed name inside the container: the path goes through an unquoted word
-# list below, and the GIF's own name may hold spaces.
-SPRITE_IN_CONTAINER=""
+# A fixed name inside the container: the container sees only the workspace,
+# and the GIF's own name usually names its subject. The fragment carries the
+# path and the name (Kconfig strings keep their quotes).
+SPRITE_CONF_IN_CONTAINER=""
 rm -rf "$WS/sprite"
 if [ -n "$SPRITE" ]; then
   mkdir -p "$WS/sprite"
   cp "$SPRITE" "$WS/sprite/sprite.gif"
-  SPRITE_IN_CONTAINER="/workspace/sprite/sprite.gif"
+  {
+    echo 'CONFIG_BEACON_SPRITE_GIF="/workspace/sprite/sprite.gif"'
+    [ -n "$SPRITE_NAME" ] && echo "CONFIG_BEACON_SPRITE_NAME=\"$SPRITE_NAME\""
+  } >"$WS/sprite/sprite.conf"
+  SPRITE_CONF_IN_CONTAINER="/workspace/sprite/sprite.conf"
 fi
 
 NEED_UPDATE=0
@@ -146,6 +179,7 @@ echo "targets     : $TARGET_LIST"
 [ "$LOGGING" -eq 1 ] && echo "logging     : CONFIG_ZMK_USB_LOGGING=y"
 # Not the source path: a GIF's file name usually names its subject.
 [ -n "$SPRITE" ] && echo "sprite      : $(wc -c <"$SPRITE" | tr -d ' ') byte GIF (copied to $WS/sprite/sprite.gif)"
+[ -n "$SPRITE_NAME" ] && echo "sprite name : ${#SPRITE_NAME} glyphs (not printed: it names the subject)"
 
 docker run --rm \
   -v "$WS:/workspace" \
@@ -154,7 +188,7 @@ docker run --rm \
   -e NEED_UPDATE="$NEED_UPDATE" \
   -e TARGETS="$TARGET_LIST" \
   -e LOGGING="$LOGGING" \
-  -e SPRITE="$SPRITE_IN_CONTAINER" \
+  -e SPRITE_CONF="$SPRITE_CONF_IN_CONTAINER" \
   "$IMAGE" bash -c '
 set -euo pipefail
 git config --global --add safe.directory "*"
@@ -167,14 +201,13 @@ west zephyr-export
 mkdir -p /workspace/output
 for t in $TARGETS; do
   BOARD="${t%%:*}"; SH="${t##*:}"
-  EXTRA=""; SUFFIX=""
-  # Kconfig strings keep their quotes through the shell: -DCONFIG_X="value".
-  if [ -n "$SPRITE" ]; then EXTRA="-DCONFIG_BEACON_SPRITE_GIF=\"$SPRITE\""; SUFFIX="-sprite"; fi
-  if [ "$LOGGING" = "1" ]; then EXTRA="$EXTRA -DCONFIG_ZMK_USB_LOGGING=y"; SUFFIX="$SUFFIX-logging"; fi
+  EXTRA=(); SUFFIX=""
+  # The sprite fragment merges after the conf files of the config directory.
+  if [ -n "$SPRITE_CONF" ]; then EXTRA+=("-DEXTRA_CONF_FILE=$SPRITE_CONF"); SUFFIX="-sprite"; fi
+  if [ "$LOGGING" = "1" ]; then EXTRA+=(-DCONFIG_ZMK_USB_LOGGING=y); SUFFIX="$SUFFIX-logging"; fi
   echo "=== BUILD $BOARD / $SH$SUFFIX ==="
-  # shellcheck disable=SC2086
   west build -p -s zmk/app -d "build/$SH$SUFFIX" -b "$BOARD" -- \
-    -DSHIELD="$SH" -DZMK_CONFIG=/workspace/ws/config -DZMK_EXTRA_MODULES=/workspace/module $EXTRA
+    -DSHIELD="$SH" -DZMK_CONFIG=/workspace/ws/config -DZMK_EXTRA_MODULES=/workspace/module "${EXTRA[@]}"
   cp "build/$SH$SUFFIX/zephyr/zmk.uf2" "/workspace/output/$SH$SUFFIX.uf2"
 done
 '
