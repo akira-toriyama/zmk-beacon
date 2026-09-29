@@ -88,12 +88,10 @@
 
 #include <lvgl.h>
 #include <libs/gif/gifdec.h>
+#include <lvgl_mem.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
-#ifdef CONFIG_SYS_HEAP_RUNTIME_STATS
-#include <lvgl_mem.h>
-#endif
 
 #include "sprite.h"
 #include "status_observer.h"
@@ -239,8 +237,8 @@ static void remove_sprite(const char *why) {
     sprite.gif = NULL;
 }
 
+/* Logging builds only: BEACON_SPRITE selects SYS_HEAP_RUNTIME_STATS with LOG. */
 static void log_stats(void) {
-#ifdef CONFIG_SYS_HEAP_RUNTIME_STATS
     struct sys_memory_stats heap;
 
     lvgl_heap_stats(&heap);
@@ -248,15 +246,8 @@ static void log_stats(void) {
             "speed %u%%, lvgl pool %u allocated, %u max, of %d",
             sprite.decoded, sprite.stepped, sprite.invalidated, sprite.renders,
             sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_EVERY_MS / 1000,
-            SPEED_PCT, (unsigned int)heap.allocated_bytes,
-            (unsigned int)heap.max_allocated_bytes, CONFIG_LV_Z_MEM_POOL_SIZE);
-#else
-    LOG_INF("sprite %u decoded, %u key steps, %u invalidated, %u renders of %u ms in %d s, "
-            "speed %u%%",
-            sprite.decoded, sprite.stepped, sprite.invalidated, sprite.renders,
-            sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_EVERY_MS / 1000,
-            SPEED_PCT);
-#endif
+            SPEED_PCT, (unsigned int)heap.allocated_bytes, (unsigned int)heap.max_allocated_bytes,
+            CONFIG_LV_Z_MEM_POOL_SIZE);
     sprite.decoded = 0;
     sprite.stepped = 0;
     sprite.invalidated = 0;

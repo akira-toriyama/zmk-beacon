@@ -57,7 +57,7 @@ config BEACON_SPRITE
     select LV_USE_IMAGE
     select LV_USE_GIF
     select LV_GIF_CACHE_DECODE_DATA
-    imply SYS_HEAP_RUNTIME_STATS if LOG
+    select SYS_HEAP_RUNTIME_STATS if LOG
     help
       Set when BEACON_SPRITE_GIF names a file. LV_GIF_CACHE_DECODE_DATA is a
       correctness requirement here, not a speed option (src/sprite.c).
