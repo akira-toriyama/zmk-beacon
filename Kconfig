@@ -1,9 +1,7 @@
 # Copyright (c) 2026 akira-toriyama
 # SPDX-License-Identifier: MIT
 #
-# Module-wide options. Every symbol carries the BEACON_ prefix so the module
-# can share a manifest with prospector-zmk-module (PROSPECTOR_*, ZMK_STATUS_ADV_*)
-# while canon migrates from it.
+# Module-wide options, all BEACON_*.
 
 menu "Beacon"
 

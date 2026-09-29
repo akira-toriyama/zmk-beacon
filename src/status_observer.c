@@ -7,18 +7,15 @@
  * which status_broadcaster.c sends from canon's Imprint Dongle. This file owns
  * the Bluetooth bring-up: CONFIG_ZMK_BLE=n compiles out ZMK's bt_enable()
  * callers (ble.c, and split/bluetooth/peripheral.c through ZMK_SPLIT_BLE) and
- * with them the connectable advertisement, so the device never advertises.
- * The active scan transmits SCAN_REQs only, from a fresh non-resolvable
- * private address.
+ * with them the connectable advertisement, so the device never advertises,
+ * and the scan is passive, so it transmits nothing at all.
  *
  * Only the prefix, the version byte, both halves' battery bytes and the
  * keystroke counter are read. 0 = no reading. No charging state is carried.
  *
- * - ACTIVE scan: the broadcaster puts the payload in the AD of a
- *   non-connectable PDU, which a passive scan would receive too. The scan
- *   stays active so that a keyboard still on prospector-zmk-module v2.2.3
- *   (same layout, carried in ZMK's scan response) is heard as well; passive
- *   is a follow-up once no such keyboard remains (canon task t-xe2q).
+ * - Passive scan: the broadcaster sends the payload in the AD of a
+ *   non-connectable, non-scannable ADV_NONCONN_IND (status_broadcaster.c),
+ *   so there is no scan response to ask for.
  * - No duplicate filter: every BT_LE_SCAN_* helper sets FILTER_DUPLICATE, and
  *   the controller then reports each address and PDU type once, so later
  *   payload changes would never arrive. The parameters are spelled out here.
@@ -63,7 +60,7 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_BT_OBSERVER), "the status observer needs CONFIG_B
 static const uint8_t payload_prefix[] = {BEACON_PAYLOAD_PREFIX_INIT};
 
 static const struct bt_le_scan_param scan_param = {
-    .type = BT_LE_SCAN_TYPE_ACTIVE,
+    .type = BT_LE_SCAN_TYPE_PASSIVE,
     .options = BT_LE_SCAN_OPT_NONE,
     .interval = BT_GAP_SCAN_FAST_WINDOW,
     .window = BT_GAP_SCAN_FAST_WINDOW,

@@ -6,8 +6,9 @@
  * Status broadcaster for the keyboard's split central (canon's Imprint
  * Dongle): the payload of status_payload.h on a second advertising set next
  * to ZMK's own connectable one. Legacy PDU, non-connectable, non-scannable
- * (ADV_NONCONN_IND), so the Prospector Dongle's observer receives it with a
- * plain scan; refreshed every BEACON_PAYLOAD_INTERVAL_MS.
+ * (ADV_NONCONN_IND) with the payload in its AD, so the Prospector Dongle's
+ * observer receives it with a passive scan; refreshed every
+ * BEACON_PAYLOAD_INTERVAL_MS.
  *
  * - CONFIG_BT_EXT_ADV: the host then shares one pool of
  *   CONFIG_BT_EXT_ADV_MAX_ADV_SET sets between ZMK's legacy bt_le_adv_start()

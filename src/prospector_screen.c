@@ -35,12 +35,10 @@
 
 LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 
-/* zmk-beacon's broadcaster sends a payload every 200 ms in canon (255-273 a
- * minute received on hardware, 2026-09-27). A keyboard still on
- * prospector-zmk-module v2.2.3, which the observer also accepts, carries it in
- * scan responses only, with payload-free windows of about 2 s after its boot
- * and up to its 30 s idle update period after a failed connection restarts
- * ZMK's advertising. A minute covers both. */
+/* A payload older than this greys the HP bar. The broadcaster sends one every
+ * BEACON_PAYLOAD_INTERVAL_MS, so lost ones never come near it; a minute also
+ * rides out a reboot or reflash of the Imprint Dongle without greying the
+ * screen, and the battery levels shown change far slower than that. */
 #define STALE_AFTER_MS 60000
 #define REFRESH_MS 500
 /* The panel as LVGL sees it: the Zephyr LVGL glue sizes its display from the
