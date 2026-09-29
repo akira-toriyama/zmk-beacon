@@ -42,6 +42,30 @@
  *   whole box is invalidated: the test GIF's frames cover 65-76 % of the
  *   canvas and consecutive ones nearly all of it, and invalidating only the
  *   touched rectangles changed nothing measurable (hardware 2026-09-28).
+ * - Keystrokes (canon task t-7c05): while the keyboard is typed on (the
+ *   observer's key_ms within KEY_GRACE_MS, status_observer.h) the tempo
+ *   stops, and every press the observer counted owes the sprite
+ *   FRAMES_PER_PRESS frames that change the canvas, each at most
+ *   STEP_DECODE_MAX decodes (the test GIF alternates a painted frame with one
+ *   that paints nothing). The frames due are stepped once per render: the
+ *   tick steps only once the display has rendered the last step
+ *   (LV_EVENT_RENDER_READY clears render_pending), one frame at a time while
+ *   the queue holds one press's worth or less (so a lone press shows every
+ *   frame), and as many as drain the queue in about DRAIN_RENDERS renders
+ *   beyond that (so the sprite runs faster and skips frames as presses pile
+ *   up), within DECODES_PER_TICK decodes a tick. The queue holds
+ *   FRAMES_QUEUE_MAX frames; a burst beyond that (the observer already drops
+ *   a keyboard reboot's counter restart above KEYS_DELTA_MAX) loses the
+ *   rest. KEY_GRACE_MS after the last press arrived the frames still due are
+ *   dropped and the tempo resumes from the shown frame: frame_at moves to
+ *   the present on every typing tick, so nothing falls due meanwhile. With
+ *   KEY_GRACE_MS equal to the advertising interval (the user's pick on
+ *   hardware) that is the look: a lone press shows three or four of its
+ *   frames before the tempo takes over, and while presses keep coming the
+ *   queue never holds more than the presses of the last payload, so the
+ *   sprite runs at the display's pace, skipping frames in proportion to how
+ *   fast the keys come. gifdec only moves forward, so a press never steps
+ *   back.
  * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
  *   and writes RGB565 into the layer's buffer for the clip area. That is
  *   safe under three conditions, which the screen keeps: LVGL has no OS
@@ -82,6 +106,7 @@
 #endif
 
 #include "sprite.h"
+#include "status_observer.h"
 
 LOG_MODULE_REGISTER(beacon_sprite, LOG_LEVEL_INF);
 
@@ -95,6 +120,25 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
  * decode per frame due, and the tempo ceiling is CATCHUP_MAX frames a cycle. A
  * higher limit raises the ceiling and costs renders. */
 #define CATCHUP_MAX 8
+/* The tempo resumes this long after the last key press arrived, frames still
+ * owed dropped: the user's pick (2026-09-29; 1000 first), so that the sprite
+ * never stands still between the last step and the tempo. It equals the
+ * consumer's advertising interval (BEACON_STATUS_BROADCAST_INTERVAL_MS 200),
+ * which shapes the look (header); revisit it with the interval. */
+#define KEY_GRACE_MS 200
+/* Frames a key press owes: the user's pick (2026-09-29, after 1, 2 and 4). */
+#define FRAMES_PER_PRESS 8
+/* Frames owed to presses and not yet stepped, at most: four presses. */
+#define FRAMES_QUEUE_MAX (4 * FRAMES_PER_PRESS)
+/* A queue above one press's worth is drained in about this many renders
+ * (each about 65 ms with the test GIF: 2 decodes and a render): two frames a
+ * render from two presses, up to six from a full queue. */
+#define DRAIN_RENDERS 6
+/* Decodes per visible frame at most, looking for one that changes the canvas. */
+#define STEP_DECODE_MAX 8
+/* Decodes a typing tick may spend (about 90 ms): a frame stops at this bound
+ * even before its canvas changed, and the display thread outranks BT RX. */
+#define DECODES_PER_TICK 8
 #define DELAY_UNIT_MS 10
 #define DELAY_MIN_UNITS 10
 #define SUB_PER_MS 100
@@ -118,7 +162,14 @@ static struct {
     uint32_t frame_ms;
     /* The canvas as last drawn. */
     uint32_t hash;
+    /* The observer's keystrokes count the sprite has caught up with. */
+    uint32_t keys_seen;
+    /* Visible frames owed to key presses, not yet stepped. */
+    uint32_t frames_due;
+    /* An invalidation the display has not rendered yet. */
+    bool render_pending;
     uint32_t decoded;
+    uint32_t stepped;
     uint32_t invalidated;
     uint32_t logged_at;
     /* Every screen render (readings included) and its time, flush included;
@@ -163,6 +214,25 @@ static bool decode_next(void) {
     return true;
 }
 
+/* One visible frame: the next that changes the canvas, within STEP_DECODE_MAX
+ * decodes and the tick's budget (a GIF of identical frames stops at either
+ * limit). Adds its decodes to *decodes. */
+static bool step_frame(unsigned int *decodes, unsigned int budget) {
+    const uint32_t from = canvas_hash();
+
+    for (unsigned int i = 0; i < STEP_DECODE_MAX && *decodes < budget; i++) {
+        if (!decode_next()) {
+            return false;
+        }
+        (*decodes)++;
+        if (canvas_hash() != from) {
+            break;
+        }
+    }
+    sprite.stepped++;
+    return true;
+}
+
 static uint32_t interval_sub(void) {
     const uint64_t sub = (uint64_t)sprite.frame_ms * SUB_PER_MS * SPEED_FULL_PCT / sprite.speed_pct;
     return (uint32_t)MIN(sub, INT32_MAX);
@@ -183,19 +253,21 @@ static void log_stats(void) {
     struct sys_memory_stats heap;
 
     lvgl_heap_stats(&heap);
-    LOG_INF("sprite %u decoded, %u invalidated, %u renders of %u ms in %d s, speed %u%%, "
-            "lvgl pool %u allocated, %u max, of %d",
-            sprite.decoded, sprite.invalidated, sprite.renders,
+    LOG_INF("sprite %u decoded, %u key steps, %u invalidated, %u renders of %u ms in %d s, "
+            "speed %u%%, lvgl pool %u allocated, %u max, of %d",
+            sprite.decoded, sprite.stepped, sprite.invalidated, sprite.renders,
             sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_EVERY_MS / 1000,
             sprite.speed_pct, (unsigned int)heap.allocated_bytes,
             (unsigned int)heap.max_allocated_bytes, CONFIG_LV_Z_MEM_POOL_SIZE);
 #else
-    LOG_INF("sprite %u decoded, %u invalidated, %u renders of %u ms in %d s, speed %u%%",
-            sprite.decoded, sprite.invalidated, sprite.renders,
+    LOG_INF("sprite %u decoded, %u key steps, %u invalidated, %u renders of %u ms in %d s, "
+            "speed %u%%",
+            sprite.decoded, sprite.stepped, sprite.invalidated, sprite.renders,
             sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_EVERY_MS / 1000,
             sprite.speed_pct);
 #endif
     sprite.decoded = 0;
+    sprite.stepped = 0;
     sprite.invalidated = 0;
     sprite.renders = 0;
     sprite.render_us = 0;
@@ -205,23 +277,54 @@ static void tick(lv_timer_t *timer) {
     ARG_UNUSED(timer);
     const uint32_t now = lv_tick_get();
     const uint32_t now_sub = now * SUB_PER_MS;
+    struct beacon_status status;
     unsigned int n = 0;
 
-    for (;;) {
-        const uint32_t interval = interval_sub();
-        if ((int32_t)(now_sub - sprite.frame_at) < (int32_t)interval) {
-            break;
+    beacon_status_get(&status);
+    /* key_ms is 0 until the first press arrives. */
+    const bool typing = status.key_ms != 0 && k_uptime_get() - status.key_ms < KEY_GRACE_MS;
+
+    if (typing) {
+        const uint32_t presses = status.keystrokes - sprite.keys_seen;
+
+        sprite.keys_seen = status.keystrokes;
+        sprite.frames_due = MIN(sprite.frames_due + presses * FRAMES_PER_PRESS, FRAMES_QUEUE_MAX);
+        if (sprite.frames_due > 0 && !sprite.render_pending) {
+            uint32_t want = sprite.frames_due > FRAMES_PER_PRESS
+                                ? DIV_ROUND_UP(sprite.frames_due, DRAIN_RENDERS)
+                                : 1;
+            unsigned int decodes = 0;
+
+            while (want > 0 && decodes < DECODES_PER_TICK) {
+                if (!step_frame(&decodes, DECODES_PER_TICK)) {
+                    remove_sprite("malformed GIF data");
+                    return;
+                }
+                sprite.frames_due--;
+                want--;
+                n++;
+            }
         }
-        if (n == CATCHUP_MAX) {
-            sprite.frame_at = now_sub;
-            break;
+        sprite.frame_at = now_sub;
+    } else {
+        for (;;) {
+            const uint32_t interval = interval_sub();
+            if ((int32_t)(now_sub - sprite.frame_at) < (int32_t)interval) {
+                break;
+            }
+            if (n == CATCHUP_MAX) {
+                sprite.frame_at = now_sub;
+                break;
+            }
+            sprite.frame_at += interval;
+            if (!decode_next()) {
+                remove_sprite("malformed GIF data");
+                return;
+            }
+            n++;
         }
-        sprite.frame_at += interval;
-        if (!decode_next()) {
-            remove_sprite("malformed GIF data");
-            return;
-        }
-        n++;
+        sprite.keys_seen = status.keystrokes;
+        sprite.frames_due = 0;
     }
 
     if (n > 0) {
@@ -229,6 +332,7 @@ static void tick(lv_timer_t *timer) {
         if (hash != sprite.hash) {
             sprite.hash = hash;
             sprite.invalidated++;
+            sprite.render_pending = true;
             lv_obj_invalidate(sprite.obj);
         }
     }
@@ -294,6 +398,13 @@ static void blit(lv_event_t *e) {
             }
         }
     }
+}
+
+/* Every refresh renders all invalid areas, the sprite's included, so a
+ * RENDER_READY means the last invalidated canvas is on the panel. */
+static void render_ready(lv_event_t *e) {
+    ARG_UNUSED(e);
+    sprite.render_pending = false;
 }
 
 static void count_render(lv_event_t *e) {
@@ -368,13 +479,18 @@ lv_obj_t *beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box, uint16_t 
     lv_obj_set_pos(obj, box->x1 + (box_w - w) / 2, box->y1 + (fill ? box_h - h : 0));
     lv_obj_add_event_cb(obj, blit, LV_EVENT_DRAW_MAIN, NULL);
 
+    struct beacon_status status;
+    beacon_status_get(&status);
+
     sprite.obj = obj;
     sprite.speed_pct = MAX(speed_pct, 1);
+    sprite.keys_seen = status.keystrokes;
     sprite.frame_at = lv_tick_get() * SUB_PER_MS;
     sprite.logged_at = lv_tick_get();
     sprite.timer = lv_timer_create(tick, TICK_MS, NULL);
+    lv_display_t *disp = lv_obj_get_display(obj);
+    lv_display_add_event_cb(disp, render_ready, LV_EVENT_RENDER_READY, NULL);
     if (IS_ENABLED(CONFIG_LOG)) {
-        lv_display_t *disp = lv_obj_get_display(obj);
         lv_display_add_event_cb(disp, count_render, LV_EVENT_RENDER_START, NULL);
         lv_display_add_event_cb(disp, count_render, LV_EVENT_RENDER_READY, NULL);
     }

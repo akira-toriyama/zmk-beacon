@@ -27,8 +27,8 @@ Japanese.
 - Roadmap = furrow, projects epic e-7n2v: t-5gxp (own BLE observer + battery
   screen + BLE silence, on hardware 2026-09-26, 19 h run) → t-eray (second
   advertising set spike, on hardware 2026-09-27) → t-k8pk (broadcaster, drop
-  the t-ogura module from canon) → t-rx4e (GIF sprite) → t-mxb7 (sprite
-  updates).
+  the t-ogura module from canon) → t-rx4e (GIF sprite) → t-7c05 (a step per
+  key press) → t-mxb7 (sprite updates).
 
 ## Fragile points
 
@@ -66,11 +66,16 @@ Japanese.
 - **The status payload is `src/status_payload.h`**, shared by the broadcaster
   and the observer: 26 bytes, the prospector-zmk-module v2.2.3 layout kept
   byte for byte (`FF FF AB CD`, version `0x22`, left half at 5, right at 12,
-  layer index at 6, 4-byte layer name at 15). Only those bytes are written and
-  read. The WPM byte (24) was written and read from 2026-09-27 to 09-28 for
-  the sprite's tempo and dropped when the tempo became fixed. A layout change
-  is a new version byte (t-xe2q) and both ends move in one commit; canon then
-  bumps its pin once.
+  layer index at 6, 4-byte layer name at 15, key press counter at 24). Only
+  those bytes are written and read. Byte 24 is the module's WPM byte: it
+  carried ZMK's WPM from 2026-09-27 to 09-28 for the sprite's tempo, was 0
+  while the tempo was fixed, and since 2026-09-29 counts key presses modulo
+  256 (t-7c05), the observer taking the difference between payloads. The
+  version byte stayed 0x22 each time: a keyboard on an older image sends 0
+  there, which reads as no presses, except one on the 09-27/28 images
+  (adec978 to 3500c22), whose WPM changes would read as presses. A layout
+  change is a new version byte (t-xe2q) and both ends move in one commit;
+  canon then bumps its pin once.
 - **The broadcaster runs only on a split central** (`ZMK_SPLIT_ROLE_CENTRAL`),
   so this repository's own build (`build.yaml`: the prospector shield) never
   compiles it. canon's `imprint_dongle` build is what checks it: after a change
@@ -79,9 +84,19 @@ Japanese.
   `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2` (a `BUILD_ASSERT` in the source fails the
   build otherwise). The set is created from a settings commit handler at
   commit priority 1, after ZMK's first `bt_le_adv_start()`; the source header
-  explains the ordering and the own work queue. Hardware 2026-09-27 (t-eray):
-  reconnects unchanged in 5 reboots and a half power cycle, 0 advertising
-  errors, 255-269 payloads a minute at the Prospector Dongle.
+  explains the ordering and the own work queue. A key press
+  (`zmk_position_state_changed`, either half) kicks that queue's tick, so the
+  payload with the new count goes on air at the next advertising event; the
+  kick is skipped until the set advertises, so that it never creates the set
+  early or retries a failed start at typing rate. The module's listener is
+  linked first (`zmk.map`, 2026-09-29: `status_broadcaster.c.obj` before
+  `behavior_hold_tap`, `combo`, `keymap`), so it counts a press before a
+  hold-tap or combo captures it, and skips the second and later captured
+  presses that `combo.c release_pressed_keys()` re-raises from the first
+  listener, by their (position, timestamp).
+  Hardware 2026-09-27 (t-eray): reconnects unchanged in 5 reboots and a half
+  power cycle, 0 advertising errors, 255-269 payloads a minute at the
+  Prospector Dongle.
 - **The observer owns Bluetooth.** `CONFIG_ZMK_BLE=n` (shield conf) removes
   ZMK's `bt_enable()` callers, its connectable advertisement (a Mac saw it as
   "Prospect", HID + BAS, before 2026-09-26), SMP and settings; the shield conf
@@ -108,8 +123,11 @@ Japanese.
   screen line (the halves' raw levels and the payload age; absent with
   `BEACON_READINGS_NONE` while a sprite shows) and, with a sprite, one sprite line (frames
   decoded, invalidations, screen renders and their average time, speed, LVGL
-  pool allocated and peak) every minute. "Invalidated" is not "shown": LVGL
-  merges invalidations between two renders, so renders is the shown count.
+  pool allocated and peak) every minute; the sprite line also counts the key
+  steps, the observer line the presses received, and the broadcaster's minute
+  line on the Imprint Dongle the presses counted. "Invalidated" is not
+  "shown": LVGL merges invalidations between two renders, so renders is the
+  shown count.
 - **1200 baud bootloader entry** (`BEACON_BOOTLOADER_ON_1200_BAUD`, default y
   under the shield): `bootmode_set()` + warm reboot, not `sys_reboot(0x57)`;
   the reasons are in [src/bootloader_on_1200_baud.c](src/bootloader_on_1200_baud.c).
@@ -220,12 +238,36 @@ Japanese.
   write cycle, as 16 MHz already was; set 20 MHz back if the panel ever
   shows noise.
 - **The sprite's CPU budget** (hardware 2026-09-28): a gifdec decode costs
-  about 11 ms a frame and a render about 43 ms, so at the fixed 150 % (the
-  user's pick after a WPM-driven tempo, 2026-09-27/28) the screen shows about
-  15 frames a second, the GIF's every step. The player keeps the tempo by
-  merging frames when drawing falls behind, up to `CATCHUP_MAX` frames a
-  tick; with the old 105 ms renders and `CATCHUP_MAX` 16, 300 % and 500 %
-  requested both reached about 2.8x at 3.5 renders a second.
+  about 11 ms a frame and a render about 43 ms, so at the idle tempo (75 %
+  of the GIF's own since 2026-09-29, after 100 % and 50 % the same day and
+  150 % from 09-28, all the user's picks after a WPM-driven tempo on
+  09-27/28) the screen shows the GIF's every step. The
+  player keeps the tempo by merging frames when drawing falls behind, up to
+  `CATCHUP_MAX` frames a tick; with the old 105 ms renders and `CATCHUP_MAX`
+  16, 300 % and 500 % requested both reached about 2.8x at 3.5 renders a
+  second. While the keyboard is typed on (`KEY_GRACE_MS` after the last
+  press) the tempo stops and each press owes the sprite `FRAMES_PER_PRESS`
+  (8, the user's pick after trying 1, 2 and 4) frames that change the canvas
+  (`STEP_DECODE_MAX` decodes at most each, the test GIF needs two), stepped
+  once per render (`LV_EVENT_RENDER_READY` gates the next): one frame while
+  the queue holds a press's worth or less, otherwise as many as drain it in
+  `DRAIN_RENDERS` (6) renders, within `DECODES_PER_TICK` (8) decodes a tick
+  and `FRAMES_QUEUE_MAX` (4 presses) queued; `KEY_GRACE_MS` (200) after the
+  last press arrived the queue is dropped and the tempo resumes. That grace
+  equals the advertising interval, so a lone press shows three or four of
+  its eight frames and a stream of presses keeps the queue at one payload's
+  presses: the look the user picked (t-7c05, after 1 s); the observer
+  accumulates the payload's 8-bit counter, the sprite consumes it. A
+  keyboard reboot restarts the counter: the observer drops a difference
+  above `KEYS_DELTA_MAX` (32) as that restart, a smaller one queues that
+  many presses' frames once. Hardware 2026-09-29, logging images: on the
+  one-frame-per-press build (4ca0f2e, 1 s grace) a minute of 50 presses
+  counted 50 on the Imprint Dongle and arrived as 50 presses and 50 steps on
+  the Prospector Dongle; on the eight-frame build (1 s grace) a minute of
+  typing decoded 2,305 frames for 961 steps at 555 renders with 261-266
+  payloads a minute received; reflashing the Imprint Dongle under a running
+  observer read as 182 presses, the case the guard now drops. "Key steps" in
+  the sprite's minute line counts frames, not presses.
 - **The LVGL pool is sized in `Kconfig.defconfig`, not in `prospector.conf`**:
   `LV_Z_MEM_POOL_SIZE` defaults to 90112 (88 KiB) with `BEACON_SPRITE` and to
   49152 without; a `.conf` line, the consumer's included, would fix it for

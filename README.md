@@ -24,7 +24,8 @@ observer and shows each half's battery (on the Prospector Dongle since
 from the Imprint Dongle on a second advertising set next to ZMK's own
 (measured on hardware 2026-09-27 as canon's t-eray spike). A local build can
 embed a GIF sprite that plays above the readings (canon task t-rx4e; shown
-on the Prospector Dongle 2026-09-27).
+on the Prospector Dongle 2026-09-27) and steps eight frames per key press on
+the keyboard (canon task t-7c05, hardware 2026-09-29).
 
 ## The screen
 
@@ -62,19 +63,36 @@ reports its first-paired half first (canon's CLAUDE.md, split peripheral slot).
 With `CONFIG_BEACON_SPRITE_GIF="<absolute path>"` the build embeds a GIF and
 the screen plays it above the battery readings, top-centred and scaled by the
 largest whole factor that fits between the top edge and the readings (a
-90x90 px GIF shows at 2x above the digits on the 280x240 panel). It never
-stops and always plays at 150 % of the GIF's own tempo, with no link to the
-keyboard.
+90x90 px GIF shows at 2x above the digits on the 280x240 panel). While nobody
+types it plays at three quarters of the GIF's own tempo and never stops.
+While the keyboard is typed on it runs on the key presses instead: every
+press, either half, any key, queues eight visibly different frames, a render
+steps one of them while the queue holds one press's worth or less and
+several at a time (skipping frames, so the sprite runs faster) as presses
+pile up, and 0.2 s after the last press arrived the frames still queued are
+dropped and the tempo resumes from the frame shown; the sprite never steps
+back. As that 0.2 s equals the advertising interval, a lone press shows
+three or four of its frames before the tempo takes over, and while presses
+keep coming the queue holds the presses of the last payload, so the sprite
+runs at the display's pace, skipping frames in proportion to how fast the
+keys come (the user's pick on hardware, canon task t-7c05). The press
+travels in the status advertisement as an 8-bit counter that the Imprint
+Dongle sends right after the press, so from the key to the first frame
+takes the advertising wait (up to 200 ms plus a random delay of up to
+10 ms), a render still pending, a decode or two and a render: about
+0.1-0.35 s (calculated). Every physical press counts once, at the press,
+whether or not a hold-tap or a combo later holds it back or consumes it.
 
 The sprite draws itself: the player scales the decoded frame straight into
 the display buffer by nearest neighbour (`src/sprite.c`), and the panel's SPI
 runs at 32 MHz. Hardware 2026-09-28 with the 2.2x sprite above the HP bar: a
-render, flush included, takes about 43 ms, so the screen shows about 15
-frames a second, every step of a 10-step-a-second GIF played at 150 %;
-decoding costs about 11 ms a GIF frame. For comparison, LVGL's own image
-transform took 105 ms a render of a 2x sprite (6 frames a second at 150 %)
-and the 16 MHz SPI clock 63 ms (10). When drawing falls behind, the player
-skips GIF frames to keep the tempo. 32 MHz is above the ST7789V data sheet's
+render, flush included, takes about 43 ms, so the screen showed every step
+of a 10-step-a-second GIF played at 150 % (the tempo until 2026-09-29), about
+15 frames a second; decoding costs about 11 ms a GIF frame. For comparison,
+LVGL's own image transform took 105 ms a render of a 2x sprite (6 frames a
+second at 150 %) and the 16 MHz SPI clock 63 ms (10). When drawing falls
+behind, the player skips GIF frames to keep the tempo; while typing it steps
+once per render, more frames at a time the fuller the queue. 32 MHz is above the ST7789V data sheet's
 write cycle, as 16 MHz already was; should the panel show noise, set
 `mipi-max-frequency` in the shield overlay back to 20 MHz (16 MHz effective).
 
@@ -115,13 +133,13 @@ Limits:
 | Path | What |
 | --- | --- |
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
-| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery from the status payload. |
-| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms. |
-| `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes and the active layer's index and name are used. |
+| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans actively without a duplicate filter, and reads each half's battery and the key press count from the status payload. |
+| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms and right after a key press. |
+| `src/status_payload.h` | The payload both sides share: 26 bytes, the prospector-zmk-module v2.2.3 layout, of which the battery bytes, the active layer's index and name and the key press counter are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): places the readings style along the bottom and the sprite above it, and feeds the readings the observer's state every 500 ms. |
 | `src/readings.h` | The readings style interface: where it starts, create, show. `src/readings_digits.c` is the digits (the default, and the fallback of `BEACON_READINGS_NONE` without a sprite). |
 | `src/hp_bar.c` | `CONFIG_BEACON_READINGS_HP_BAR`: the HP bar readings, `HP`, a bar with its value on it and, with `CONFIG_BEACON_SPRITE_NAME`, the sprite's name on a second row, in a box along the bottom; and the mapping of both halves' batteries to its one level. A sibling of the sprite, not a part of it. |
-| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo factor, one invalidation per changed frame, an endless loop, and its own nearest-neighbour draw into the display buffer. |
+| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo factor and eight frames per key press, one invalidation per changed frame, an endless loop, and its own nearest-neighbour draw into the display buffer. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: opening the serial port at 1200 baud reboots the device into its UF2 bootloader. On by default for the shield. |
 | `Kconfig` | The `BEACON_*` options (`BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_FILL`, `BEACON_SPRITE_NAME`, the `BEACON_READINGS` choice, `BEACON_STATUS_BROADCAST`, `BEACON_STATUS_BROADCAST_INTERVAL_MS`). |
 
