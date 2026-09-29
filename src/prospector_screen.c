@@ -21,8 +21,10 @@
  */
 
 #include <lvgl.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
 #include <zmk/display/status_screen.h>
 
 #include "hp_bar.h"
@@ -41,11 +43,29 @@ LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
  * ZMK's advertising. A minute covers both. */
 #define STALE_AFTER_MS 60000
 #define REFRESH_MS 500
+/* The panel as LVGL sees it: the Zephyr LVGL glue sizes its display from the
+ * driver's capabilities, which the ST7789V driver takes from these. */
+#define SCREEN_W DT_PROP(DT_CHOSEN(zephyr_display), width)
+#define SCREEN_H DT_PROP(DT_CHOSEN(zephyr_display), height)
 /* The sprite box's distance from the panel's top and side edges. */
 #define SPRITE_INSET_PX 2
+#define SPRITE_BOX_W (SCREEN_W - 2 * SPRITE_INSET_PX)
+#define SPRITE_BOX_H (BEACON_HP_BAR_TOP(SCREEN_H) - SPRITE_INSET_PX)
 /* Logging builds print the screen state on every change and at least this
  * often, so a long run's log shows the display thread alive. */
 #define LOG_EVERY_MS 60000
+
+#if IS_ENABLED(CONFIG_BEACON_SPRITE)
+/* CMakeLists.txt passes the GIF's size; sprite.c scales it up, never down.
+ * The messages avoid apostrophes, which GCC prints escaped. */
+BUILD_ASSERT(BEACON_SPRITE_GIF_W <= SPRITE_BOX_W,
+             "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box: the panel width less "
+             "SPRITE_INSET_PX on each side (prospector_screen.c)");
+BUILD_ASSERT(BEACON_SPRITE_GIF_H <= SPRITE_BOX_H,
+             "CONFIG_BEACON_SPRITE_GIF is taller than the sprite box: the panel height less "
+             "SPRITE_INSET_PX above and the HP bar box and margin below, a row taller with "
+             "CONFIG_BEACON_SPRITE_NAME (prospector_screen.c, hp_bar.h)");
+#endif
 
 static void refresh(lv_timer_t *timer) {
     ARG_UNUSED(timer);
@@ -68,7 +88,6 @@ static void refresh(lv_timer_t *timer) {
 }
 
 lv_obj_t *zmk_display_status_screen(void) {
-    const int32_t screen_w = lv_display_get_horizontal_resolution(NULL);
     lv_obj_t *screen = lv_obj_create(NULL);
 
     lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
@@ -80,13 +99,13 @@ lv_obj_t *zmk_display_status_screen(void) {
     const lv_area_t box = {
         .x1 = SPRITE_INSET_PX,
         .y1 = SPRITE_INSET_PX,
-        .x2 = screen_w - 1 - SPRITE_INSET_PX,
-        .y2 = BEACON_HP_BAR_TOP(lv_display_get_vertical_resolution(NULL)) - 1,
+        .x2 = SPRITE_INSET_PX + SPRITE_BOX_W - 1,
+        .y2 = SPRITE_INSET_PX + SPRITE_BOX_H - 1,
     };
     beacon_sprite_create(screen, &box);
 #endif
 
-    beacon_hp_bar_create(screen, screen_w);
+    beacon_hp_bar_create(screen, SCREEN_W);
     lv_timer_create(refresh, REFRESH_MS, NULL);
     return screen;
 }

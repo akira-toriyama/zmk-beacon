@@ -45,11 +45,12 @@ config BEACON_SPRITE_GIF
       while it is typed on (src/sprite.c). Empty: no sprite, which is what CI
       and the release build.
 
-      The build fails when the GIF does not fit that space at 1x, or when its
-      decoder's share of the LVGL pool, kept for the whole run, does not fit
-      CONFIG_LV_Z_MEM_POOL_SIZE next to the screen (CMakeLists.txt; the
-      prospector shield's default grows with a sprite). Local builds:
-      scripts/build.sh --sprite <gif> [--sprite-name <text>].
+      The build fails when the GIF does not fit that space at 1x
+      (src/prospector_screen.c), or when its decoder's share of the LVGL
+      pool, kept for the whole run, does not fit CONFIG_LV_Z_MEM_POOL_SIZE
+      next to the screen (CMakeLists.txt; the prospector shield's default
+      grows with a sprite). Local builds: scripts/build.sh --sprite <gif>
+      [--sprite-name <text>].
 
 config BEACON_SPRITE
     bool

@@ -134,8 +134,6 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
 #define SUB_PER_MS 100
 #define SPEED_FULL_PCT 100
 #define LOG_EVERY_MS 60000
-/* gifdec.c LZW_CACHE_SIZE, for the log line. */
-#define LZW_CACHE_BYTES 16384
 
 static const uint8_t sprite_gif[] = {
 #include <beacon_sprite_gif.inc>
@@ -238,6 +236,14 @@ static void remove_sprite(const char *why) {
 }
 
 /* Logging builds only: BEACON_SPRITE selects SYS_HEAP_RUNTIME_STATS with LOG. */
+static size_t pool_allocated(void) {
+    struct sys_memory_stats heap;
+
+    lvgl_heap_stats(&heap);
+    return heap.allocated_bytes;
+}
+
+/* Logging builds only, as pool_allocated(). */
 static void log_stats(void) {
     struct sys_memory_stats heap;
 
@@ -403,6 +409,7 @@ static void count_render(lv_event_t *e) {
 void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
     const int32_t box_w = lv_area_get_width(box);
     const int32_t box_h = lv_area_get_height(box);
+    const size_t pool_before = IS_ENABLED(CONFIG_LOG) ? pool_allocated() : 0;
 
     gd_GIF *gif = gd_open_gif_data(sprite_gif);
     if (gif == NULL) {
@@ -410,8 +417,13 @@ void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
                 (unsigned int)sizeof(sprite_gif));
         return;
     }
+    /* The decoder's one allocation, which CMakeLists.txt estimates. */
+    const size_t pool_gif = IS_ENABLED(CONFIG_LOG) ? pool_allocated() - pool_before : 0;
+
     /* The largest size of the GIF's proportions inside the box, whole factor
-     * or not (a GIF pixel then covers two or three panel pixels in turn). */
+     * or not (a GIF pixel then covers two or three panel pixels in turn). The
+     * box holds the GIF at 1x (a BUILD_ASSERT in prospector_screen.c), so w
+     * and h are at least the GIF's, which blit() relies on. */
     int32_t w, h;
     if ((int64_t)box_w * gif->height <= (int64_t)box_h * gif->width) {
         w = box_w;
@@ -419,11 +431,6 @@ void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
     } else {
         h = box_h;
         w = (int32_t)((int64_t)box_h * gif->width / gif->height);
-    }
-    if (w < gif->width || h < gif->height) {
-        LOG_ERR("sprite %ux%u does not fit %dx%d", gif->width, gif->height, box_w, box_h);
-        gd_close_gif(gif);
-        return;
     }
 
     memset(gif->canvas, 0, 4u * gif->width * gif->height);
@@ -469,6 +476,5 @@ void beacon_sprite_create(lv_obj_t *parent, const lv_area_t *box) {
 
     LOG_INF("sprite %ux%u as %dx%d (%d.%02dx) from a %u byte GIF, %u bytes of the lvgl pool",
             gif->width, gif->height, w, h, h / gif->height, h * 100 / gif->height % 100,
-            (unsigned int)sizeof(sprite_gif),
-            (unsigned int)(sizeof(gd_GIF) + 5u * gif->width * gif->height + LZW_CACHE_BYTES));
+            (unsigned int)sizeof(sprite_gif), (unsigned int)pool_gif);
 }

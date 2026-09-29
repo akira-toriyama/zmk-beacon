@@ -14,31 +14,25 @@ target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broad
 
 # The sprite GIF is embedded from CONFIG_BEACON_SPRITE_GIF into the build tree
 # only (never next to the sources: the file is personal and stays out of git).
-# The checks below reject up front what gifdec would reject at run time
-# (gifdec.c gif_open(): "GIF89a" and a global colour table) and what would not
-# fit the LVGL pool: its one allocation is sizeof(gd_GIF) + 5 * w * h + a 16 KiB
-# LZW cache (LV_GIF_CACHE_DECODE_DATA), kept for the whole run. The reserve is
-# for the battery screen's widgets and the draw tasks: on hardware 2026-09-27
-# the pool peaked at 63,376 B with a 58,515 B decoder allocation, so the screen
-# took under 5 KB. The size limit is the sprite box prospector_screen.c
-# computes at run time: the panel (280x240) down to the HP bar's top
-# (240 - 12 margin - 28 = 200, or 182 with a sprite name, whose row makes the
-# box 46 px), less the 2 px inset at the top and sides. A GIF that passes here
-# but not sprite.c's fit check would boot without a sprite; change both
-# together, and the box heights together with hp_bar.h.
+# The file checks reject up front what gifdec would reject at run time
+# (gifdec.c gif_open(): "GIF89a", a global colour table, a zero size). The
+# GIF's width and height go to the sources as BEACON_SPRITE_GIF_W/_H, and
+# prospector_screen.c asserts that they fit the sprite box it lays out.
+#
+# The LVGL pool check is here, not a BUILD_ASSERT, because CMake can name the
+# pool size that would fit. The decoder's one allocation, kept for the whole
+# run, is sizeof(gd_GIF) (under 2 KiB), a 4-byte canvas pixel and a 1-byte
+# frame index per GIF pixel, and a 16 KiB LZW cache (gifdec.c gif_open(),
+# LV_GIF_CACHE_DECODE_DATA); the sprite's boot log line reports it as
+# measured. The reserve is for the screen's widgets and the draw tasks: on
+# hardware 2026-09-27 the pool peaked at 63,376 B with a 58,515 B decoder
+# allocation, so the screen took under 5 KB.
 if(CONFIG_BEACON_SPRITE)
   set(sprite_gif "${CONFIG_BEACON_SPRITE_GIF}")
   set(sprite_gd_gif_bytes 2048)
+  set(sprite_bytes_per_pixel 5)
   set(sprite_lzw_cache_bytes 16384)
   set(sprite_reserve_bytes 8192)
-  if("${CONFIG_BEACON_SPRITE_NAME}" STREQUAL "")
-    set(sprite_hp_bar_top 200)
-  else()
-    set(sprite_hp_bar_top 182)
-  endif()
-  set(sprite_inset 2)
-  math(EXPR sprite_max_w "280 - 2 * ${sprite_inset}")
-  math(EXPR sprite_max_h "${sprite_hp_bar_top} - ${sprite_inset}")
 
   if(NOT IS_ABSOLUTE "${sprite_gif}")
     message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF must be an absolute path, got '${sprite_gif}'")
@@ -70,14 +64,13 @@ if(CONFIG_BEACON_SPRITE)
   if(sprite_has_gct EQUAL 0)
     message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} has no global colour table (gifdec needs one)")
   endif()
-  if(sprite_w EQUAL 0 OR sprite_h EQUAL 0 OR sprite_w GREATER sprite_max_w OR sprite_h GREATER sprite_max_h)
-    message(FATAL_ERROR
-            "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} is ${sprite_w}x${sprite_h}; the sprite box above the "
-            "HP bar is ${sprite_max_w}x${sprite_max_h}")
+  if(sprite_w EQUAL 0 OR sprite_h EQUAL 0)
+    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} is ${sprite_w}x${sprite_h} (gifdec opens no empty image)")
   endif()
+  target_compile_definitions(app PRIVATE BEACON_SPRITE_GIF_W=${sprite_w} BEACON_SPRITE_GIF_H=${sprite_h})
 
   math(EXPR sprite_need
-       "${sprite_gd_gif_bytes} + 5 * ${sprite_w} * ${sprite_h} + ${sprite_lzw_cache_bytes} + ${sprite_reserve_bytes}")
+       "${sprite_gd_gif_bytes} + ${sprite_bytes_per_pixel} * ${sprite_w} * ${sprite_h} + ${sprite_lzw_cache_bytes} + ${sprite_reserve_bytes}")
   if(sprite_need GREATER CONFIG_LV_Z_MEM_POOL_SIZE)
     math(EXPR sprite_pool_fit "(${sprite_need} + 4095) / 4096 * 4096")
     message(FATAL_ERROR
@@ -85,7 +78,7 @@ if(CONFIG_BEACON_SPRITE)
             "of the LVGL pool (decoder + screen reserve), CONFIG_LV_Z_MEM_POOL_SIZE is ${CONFIG_LV_Z_MEM_POOL_SIZE}; "
             "CONFIG_LV_Z_MEM_POOL_SIZE=${sprite_pool_fit} would fit, if RAM allows")
   endif()
-  message(STATUS "Sprite: ${sprite_gif} (${sprite_w}x${sprite_h}) in a ${sprite_max_w}x${sprite_max_h} box, about ${sprite_need} of ${CONFIG_LV_Z_MEM_POOL_SIZE} pool bytes")
+  message(STATUS "Sprite: ${sprite_gif} (${sprite_w}x${sprite_h}), about ${sprite_need} of ${CONFIG_LV_Z_MEM_POOL_SIZE} pool bytes")
 
   set(sprite_inc "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite_gif.inc")
   generate_inc_file_for_target(app "${sprite_gif}" "${sprite_inc}")
