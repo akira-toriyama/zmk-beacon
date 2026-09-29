@@ -31,17 +31,22 @@ target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broad
 # took under 5 KB. The size limit is the sprite box prospector_screen.c
 # computes at run time: the panel (280x240) down to the readings' top (the
 # digits: 240 - 12 margin - 9 base line - 34 digit ink = 185 rows with
-# Montserrat 48, hp_bar.c: 240 - 12 - 28 = 200, BEACON_READINGS_NONE: the
-# panel's 240), less BEACON_SPRITE_FILL's 2 px inset at each edge. A GIF that
-# passes here but not sprite.c's fit check would boot without a sprite; change
-# both together.
+# Montserrat 48, hp_bar.c: 240 - 12 - 28 = 200, or 182 with a sprite name,
+# whose row makes the box 46 px, BEACON_READINGS_NONE: the panel's 240), less
+# BEACON_SPRITE_FILL's 2 px inset at each edge. A GIF that passes here but not
+# sprite.c's fit check would boot without a sprite; change both together, and
+# the box heights together with hp_bar.c.
 if(CONFIG_BEACON_SPRITE)
   set(sprite_gif "${CONFIG_BEACON_SPRITE_GIF}")
   set(sprite_gd_gif_bytes 2048)
   set(sprite_lzw_cache_bytes 16384)
   set(sprite_reserve_bytes 8192)
   if(CONFIG_BEACON_READINGS_HP_BAR)
-    set(sprite_readings_top 200)
+    if("${CONFIG_BEACON_SPRITE_NAME}" STREQUAL "")
+      set(sprite_readings_top 200)
+    else()
+      set(sprite_readings_top 182)
+    endif()
   elseif(CONFIG_BEACON_READINGS_NONE)
     set(sprite_readings_top 240)
   else()
@@ -100,7 +105,7 @@ if(CONFIG_BEACON_SPRITE)
             "of the LVGL pool (decoder + screen reserve), CONFIG_LV_Z_MEM_POOL_SIZE is ${CONFIG_LV_Z_MEM_POOL_SIZE}; "
             "CONFIG_LV_Z_MEM_POOL_SIZE=${sprite_pool_fit} would fit, if RAM allows")
   endif()
-  message(STATUS "Sprite: ${sprite_gif} (${sprite_w}x${sprite_h}), about ${sprite_need} of ${CONFIG_LV_Z_MEM_POOL_SIZE} pool bytes")
+  message(STATUS "Sprite: ${sprite_gif} (${sprite_w}x${sprite_h}) in a ${sprite_max_w}x${sprite_max_h} box, about ${sprite_need} of ${CONFIG_LV_Z_MEM_POOL_SIZE} pool bytes")
 
   set(sprite_inc "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite_gif.inc")
   generate_inc_file_for_target(app "${sprite_gif}" "${sprite_inc}")

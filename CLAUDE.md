@@ -43,12 +43,15 @@ Japanese.
 - **Kconfig merge order** (build log, 2026-09-26): board defconfig
   (`xiao_ble_zmk_defconfig`) → ZMK `app/prj.conf` → the shield's
   `boards/shields/prospector/prospector.conf` → the consumer's
-  `config/prospector.conf`. Later wins: the board sets `CONFIG_ZMK_USB=y` and
-  the shield conf's `=n` left it unset in `.config`. Shield-level facts (USB
-  layout, display buffers) live in the shield conf, the LVGL pool in the
-  shield's `Kconfig.defconfig` (below); canon-only facts (e.g.
-  `CONFIG_ZMK_RGB_UNDERGLOW=n`, forced on by the Cyboard module) stay in
-  canon's `config/prospector.conf`.
+  `config/prospector.conf` → `EXTRA_CONF_FILE` (the sprite fragment). Later
+  wins: the board sets `CONFIG_ZMK_USB=y` and the shield conf's `=n` left it
+  unset in `.config`. Shield-level facts (USB layout, display buffers) live
+  in the shield conf, the LVGL pool in the shield's `Kconfig.defconfig`
+  (below); canon-only facts (e.g. `CONFIG_ZMK_RGB_UNDERGLOW=n`, forced on by
+  the Cyboard module) stay in canon's `config/prospector.conf`. This
+  repository's own `config/prospector.conf` picks the HP bar and the fill
+  layout (canon's screen) so that CI compiles `hp_bar.c`; before 2026-09-29
+  the module's own build was the digits and never compiled it.
 - **`CONFIG_USB_DEVICE_PRODUCT="Prospector Dongle"` is a contract** with
   canon's `scripts/flash-prospector.sh`, which finds the device by that exact
   string (VID/PID are ZMK's defaults and the Imprint Dongle shares them). Set
@@ -132,8 +135,15 @@ Japanese.
   only, `generate_inc_file_for_target`). `.gitignore` has `*.[gG][iI][fF]`
   (`core.ignorecase` is false on this case-sensitive volume); never
   commit the GIF, an `.inc`, frames or previews, and never write its path or
-  its subject into this repository. CI and `release.yml` build without one,
-  so no release carries a sprite image.
+  its subject into this repository. The sprite's name
+  (`CONFIG_BEACON_SPRITE_NAME`, `build.sh --sprite-name`) is the subject too:
+  `build.sh` writes it with the GIF's path into the Kconfig fragment
+  `~/.cache/zmk-beacon/sprite/sprite.conf` and passes only that path
+  (`EXTRA_CONF_FILE`; with `-DCONFIG_...` west's message on a failed configure
+  step, which quotes the whole cmake command line, showed the name, reproduced
+  2026-09-29), prints only its length, and it never goes into a commit, a PR
+  or a doc here. CI and `release.yml` build without either, so no release
+  carries a sprite image or a name.
 - **`CONFIG_LV_GIF_CACHE_DECODE_DATA=y` is a correctness requirement**
   (`BEACON_SPRITE` selects it): in this LVGL (9.3.0-dev, zmk 9ebbeff0) the
   `=n` `read_image_data()` bound check is `frm_off + str_len >= frm_size`
@@ -164,7 +174,16 @@ Japanese.
   never over it. The readings keep a 12 px margin: the panel's corners are
   rounded and a box 2 px from the edge lost its bottom corners (hardware
   2026-09-28). A filling sprite (`BEACON_SPRITE_FILL`) keeps 2 px. No LVGL
-  theme is installed, so every widget sets its styles itself.
+  theme is installed, so every widget sets its styles itself. The HP bar's
+  box is 28 px, or 46 px with a sprite name (`CONFIG_BEACON_SPRITE_NAME`:
+  the value "65/100" sits on the bar in white and the name on a second row,
+  the user's pick from twelve trials, canon t-er81, 2026-09-28/29);
+  `hp_bar.c` and the `sprite_readings_top` of `CMakeLists.txt` (200 / 182)
+  carry the same two heights, change both together. Every text there is
+  unscii 16: a 16 px cell on a 17 px line; capitals and digits ink rows
+  1..14 of the cell (most 12 px wide, some 14 or the full 16, `/` included),
+  and a descender, `,` `;` `_` reach row 16, which is why the name row sits
+  at 24 in a 42-row content area.
 - **The sprite draws itself** (`src/sprite.c` `blit()`, since 2026-09-28): a
   plain transparent object whose `LV_EVENT_DRAW_MAIN` handler scales the
   gifdec canvas by nearest neighbour straight into the layer's RGB565 buffer.
@@ -235,11 +254,13 @@ Japanese.
 
 ## Build
 
-- `./scripts/build.sh [shield] [--logging] [--sprite <gif>] [--update]` —
+- `./scripts/build.sh [shield] [--logging] [--sprite <gif> [--sprite-name <text>]] [--update]` —
   Docker (`zmkfirmware/zmk-build-arm:stable`), workspace `~/.cache/zmk-beacon`,
   output `firmware/<shield>[-sprite][-logging].uf2` (gitignored). `--update`
-  refreshes zmk@main; without it the cached checkout is reused. `--sprite` is
-  local-only (above); canon's `scripts/build-zmk.sh` carries the same flag.
+  refreshes zmk@main; without it the cached checkout is reused. `--sprite` and
+  `--sprite-name` are local-only (above); canon's `scripts/build-zmk.sh`
+  carries `--sprite` and derives the name from the GIF's file name
+  (`assets/sprite-name.sh` there).
 - CI: `build.yml` → `zmk-build.yml` (local reusable; the file says why not
   ZMK's). `release.yml`: glyph computes the next version and notes on every
   push to `main` and upserts one rolling draft release with `prospector.uf2`
