@@ -156,7 +156,12 @@ static struct {
     /* An invalidation the display has not rendered yet. */
     bool render_pending;
     uint32_t decoded;
+    /* Presses taken from the observer, frames stepped for them, and frames
+     * they queued that were never stepped (beyond FRAMES_QUEUE_MAX, or still
+     * queued when the grace expired). */
+    uint32_t presses;
     uint32_t stepped;
+    uint32_t dropped;
     uint32_t invalidated;
     uint32_t logged_at;
     /* Every screen render (the HP bar's included) and its time, flush included;
@@ -248,14 +253,17 @@ static void log_stats(void) {
     struct sys_memory_stats heap;
 
     lvgl_heap_stats(&heap);
-    LOG_INF("sprite %u decoded, %u key steps, %u invalidated, %u renders of %u ms in %d s, "
-            "speed %u%%, lvgl pool %u allocated, %u max, of %d",
-            sprite.decoded, sprite.stepped, sprite.invalidated, sprite.renders,
-            sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_EVERY_MS / 1000,
-            SPEED_PCT, (unsigned int)heap.allocated_bytes, (unsigned int)heap.max_allocated_bytes,
-            CONFIG_LV_Z_MEM_POOL_SIZE);
+    LOG_INF("sprite %u decoded, %u presses for %u key steps and %u frames dropped, "
+            "%u invalidated, %u renders of %u ms in %d s, speed %u%%, "
+            "lvgl pool %u allocated, %u max, of %d",
+            sprite.decoded, sprite.presses, sprite.stepped, sprite.dropped, sprite.invalidated,
+            sprite.renders, sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0,
+            LOG_EVERY_MS / 1000, SPEED_PCT, (unsigned int)heap.allocated_bytes,
+            (unsigned int)heap.max_allocated_bytes, CONFIG_LV_Z_MEM_POOL_SIZE);
     sprite.decoded = 0;
+    sprite.presses = 0;
     sprite.stepped = 0;
+    sprite.dropped = 0;
     sprite.invalidated = 0;
     sprite.renders = 0;
     sprite.render_us = 0;
@@ -272,11 +280,15 @@ static void tick(lv_timer_t *timer) {
     /* key_ms is 0 until the first press arrives. */
     const bool typing = status.key_ms != 0 && k_uptime_get() - status.key_ms < KEY_GRACE_MS;
 
-    if (typing) {
-        const uint32_t presses = status.keystrokes - sprite.keys_seen;
+    const uint32_t presses = status.keystrokes - sprite.keys_seen;
 
-        sprite.keys_seen = status.keystrokes;
-        sprite.frames_due = MIN(sprite.frames_due + presses * FRAMES_PER_PRESS, FRAMES_QUEUE_MAX);
+    sprite.keys_seen = status.keystrokes;
+    sprite.presses += presses;
+    if (typing) {
+        const uint32_t owed = sprite.frames_due + presses * FRAMES_PER_PRESS;
+
+        sprite.frames_due = MIN(owed, FRAMES_QUEUE_MAX);
+        sprite.dropped += owed - sprite.frames_due;
         if (sprite.frames_due > 0 && !sprite.render_pending) {
             uint32_t want = sprite.frames_due > FRAMES_PER_PRESS
                                 ? DIV_ROUND_UP(sprite.frames_due, DRAIN_RENDERS)
@@ -311,7 +323,9 @@ static void tick(lv_timer_t *timer) {
             }
             n++;
         }
-        sprite.keys_seen = status.keystrokes;
+        /* The grace expired: what is still queued is dropped, and presses
+         * that arrived and went stale between two ticks queue nothing. */
+        sprite.dropped += sprite.frames_due + presses * FRAMES_PER_PRESS;
         sprite.frames_due = 0;
     }
 

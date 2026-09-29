@@ -71,8 +71,12 @@ static const struct bt_le_scan_param scan_param = {
 
 static struct k_spinlock status_lock;
 static struct beacon_status status;
-/* The counter byte of the last payload; under status_lock. */
+/* Under status_lock: the counter byte of the last payload, and the counter
+ * restarts dropped so far (a difference above KEYS_DELTA_MAX) with the last
+ * one's difference, for the minute line. */
 static uint8_t last_keys;
+static uint32_t key_restarts;
+static uint8_t key_restart_jump;
 
 /* Valid payloads since the last stats line (logging builds only). */
 static atomic_t payload_count;
@@ -98,10 +102,15 @@ static K_WORK_DELAYABLE_DEFINE(stats_work, log_stats);
 
 static void log_stats(struct k_work *work) {
     ARG_UNUSED(work);
-    struct beacon_status now;
-    beacon_status_get(&now);
-    LOG_INF("%ld status payloads in %d s, %u keystrokes so far", (long)atomic_set(&payload_count, 0),
-            STATS_PERIOD_MS / 1000, now.keystrokes);
+    k_spinlock_key_t key = k_spin_lock(&status_lock);
+    const uint32_t keystrokes = status.keystrokes;
+    const uint32_t restarts = key_restarts;
+    const uint8_t jump = key_restart_jump;
+    k_spin_unlock(&status_lock, key);
+
+    LOG_INF("%ld status payloads in %d s; so far %u keystrokes, %u counter restarts (last jump %u)",
+            (long)atomic_set(&payload_count, 0), STATS_PERIOD_MS / 1000, keystrokes, restarts,
+            jump);
     k_work_schedule(&stats_work, K_MSEC(STATS_PERIOD_MS));
 }
 
@@ -141,7 +150,10 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     /* The first payload only sets the reference: what came before it is
      * unknown. Modulo 256, as the keyboard counts. */
     const uint8_t delta = status.received ? (uint8_t)(keys - last_keys) : 0;
-    if (delta != 0 && delta <= KEYS_DELTA_MAX) {
+    if (delta > KEYS_DELTA_MAX) {
+        key_restarts++;
+        key_restart_jump = delta;
+    } else if (delta != 0) {
         status.keystrokes += delta;
         status.key_ms = now_ms;
     }
