@@ -45,4 +45,7 @@ config LV_Z_MEM_POOL_SIZE
 config BEACON_BOOTLOADER_ON_1200_BAUD
     default y
 
+config BEACON_SCREEN_DUMP
+    default y
+
 endif

@@ -6,7 +6,8 @@ nRF52840 with a Waveshare 1.69" 240x280 LCD (the
 that sits next to a keyboard and shows its battery, received over BLE from the
 keyboard's status advertisement. It only listens: it never advertises, pairs
 or connects, and its scan is passive. Its USB-C carries power and one serial
-port, used to reflash it and, in a logging build, for its log.
+port, used to reflash it, to take a picture of its screen and, in a logging
+build, for its log.
 
 It is built for the Cyboard Imprint through its Imprint Dongle
 ([akira-toriyama/canon](https://github.com/akira-toriyama/canon)). Both ends
@@ -101,8 +102,9 @@ Limits:
 | `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with `CONFIG_BEACON_SPRITE_NAME`, the name on a second row; and the mapping of both halves' batteries to its one level. |
 | `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo, eight frames per key press, one invalidation per changed frame, an endless loop, and its own nearest-neighbour draw into the display buffer. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
+| `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
 | `src/backlight_init.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) before the display driver starts. |
-| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_STATUS_BROADCAST`. |
+| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_STATUS_BROADCAST`. |
 
 ## Flashing
 
@@ -126,6 +128,15 @@ The Imprint Dongle mounts as the same `XIAO-SENSE` volume, and canon gives it
 the same 1200 baud entry. Never have both in the bootloader at once, and keep
 canon's `flash-watch.sh` / `flash-reset.sh` stopped while flashing this
 device: they copy `imprint_dongle.uf2` onto any `XIAO-SENSE` mount.
+
+## A picture of the screen
+
+canon's `python3 scripts/dongle.py shot` writes a PNG of what the screen shows
+and prints its path. It sets the serial port to 2400 baud, on which the device
+renders the screen once more and sends it; then it sets 115200 again. The
+screen stands still while the picture goes out, and a logging build leaves out
+the log lines of that moment. A picture of a sprite build shows the sprite:
+keep it out of repositories like the GIF.
 
 ## Using the module in a ZMK config
 

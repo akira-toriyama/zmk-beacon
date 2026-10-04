@@ -21,6 +21,10 @@
  * - The class driver calls back only when the rate changes, and resets the
  *   rate to 115200 on every USB reset: a host retry must set another rate
  *   first, then 1200.
+ * - The class driver keeps one rate callback per device, so this one also
+ *   hands 2400 baud to the screen dump (screen_dump.c) when
+ *   CONFIG_BEACON_SCREEN_DUMP is on. Without it the preprocessor removes that
+ *   branch, and the Imprint Dongle's code stays as it was.
  *
  * Verified on hardware in canon (Seeed XIAO nRF52840 Sense, Adafruit UF2
  * bootloader 0.6.1, macOS, 2026-09-26) as the module patch this file was
@@ -36,6 +40,10 @@
 #include <zephyr/retention/bootmode.h>
 #include <zephyr/sys/reboot.h>
 
+#if IS_ENABLED(CONFIG_BEACON_SCREEN_DUMP)
+#include "screen_dump.h"
+#endif
+
 LOG_MODULE_REGISTER(beacon_bootloader_on_1200_baud, LOG_LEVEL_INF);
 
 #define TOUCH_BAUD 1200
@@ -49,6 +57,12 @@ static void reboot_work_handler(struct k_work *work) {
 static K_WORK_DELAYABLE_DEFINE(reboot_work, reboot_work_handler);
 
 static void dte_rate_changed(const struct device *dev, uint32_t rate) {
+#if IS_ENABLED(CONFIG_BEACON_SCREEN_DUMP)
+    if (rate == BEACON_SCREEN_DUMP_BAUD) {
+        beacon_screen_dump_request(dev);
+        return;
+    }
+#endif
     if (rate != TOUCH_BAUD || k_work_delayable_is_pending(&reboot_work)) {
         return;
     }
