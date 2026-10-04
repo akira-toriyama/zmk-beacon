@@ -88,8 +88,10 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_LV_Z_FLUSH_THREAD),
  * one means it stopped reading. */
 #define STALL_MS 1000
 /* A dump asked for before the log thread started waits for it, polling, up to
- * this uptime. */
-#define LOG_START_LIMIT_MS 5000
+ * this uptime: the thread's start delay, which a consumer may raise (ZMK's
+ * docs suggest 8000 to catch a boot log), plus a margin. */
+#define LOG_START_LIMIT_MS                                                               \
+    (COND_CODE_1(CONFIG_LOG_PROCESS_THREAD, (CONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS), (0)) + 4000)
 #define LOG_START_POLL_MS 50
 /* The refresh after the invalidation starts within LV_DEF_REFR_PERIOD (33 ms);
  * none by then means the display is not refreshing. */
