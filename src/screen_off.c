@@ -5,8 +5,9 @@
  *
  * Screen off (screen_off.h): once no key press has arrived for
  * CONFIG_BEACON_SCREEN_OFF_AFTER_S the backlight fades out over FADE_MS and
- * the panel is blanked; the next key press lights the screen at once. A key
- * press is what the observer counts (status_observer.h key_ms: any key of
+ * the panel is blanked; the next key press lights the screen within a tick of
+ * its payload (longer only behind a screen dump, which holds the display work
+ * queue for its length). A key press is what the observer counts (status_observer.h key_ms: any key of
  * either half, and nothing else, so a pointing device does not keep the screen
  * lit). key_ms is 0 until the first press, so until then the time since boot
  * counts: a device that hears no keyboard goes dark too.
@@ -16,16 +17,20 @@
  *   the device's own position, sensor and pointing events (app/src/activity.c),
  *   which a device without keys never raises, so the display would blank
  *   CONFIG_ZMK_IDLE_TIMEOUT after boot for good. That option also stops the
- *   display tick, which this file's timer runs on: the BUILD_ASSERT.
+ *   display tick, which every lv_timer runs on (prospector_screen.c asserts
+ *   it off).
  * - LVGL keeps running while the screen is dark. The HP bar still refreshes
  *   and the panel's frame memory takes the flushes (display blanking is the
- *   ST7789V's DISPOFF, which leaves its RAM writable), so the screen is right
- *   from the moment it lights and a screen dump of a dark screen shows what it
- *   would show. Only the sprite's tempo stops (sprite.c).
+ *   ST7789V's DISPOFF; the driver sends a write the same either way, and
+ *   Zephyr's display sample likewise draws before display_blanking_off()), so
+ *   the screen is right from the moment it lights and a screen dump of a dark
+ *   screen shows what it would show. Only the sprite stands still (sprite.c).
  * - Off: backlight 0, then blanking on. On: blanking off, then the backlight.
- *   The panel is never lit while blanked. The backlight alone makes it dark.
- * - The fade follows the square of the time left: perceived brightness grows
- *   slower than the PWM duty, and a linear ramp looks lit until its end.
+ *   Neither transition lights a blanked panel. The backlight alone makes it
+ *   dark.
+ * - The fade follows the square of the time left: the eye is more sensitive
+ *   at low luminance, so a low duty looks brighter than its share and a
+ *   linear ramp looks lit until its end.
  * - Display work queue only, from an lv_timer like the screen's: the driver
  *   sends a flush as several SPI transfers (zephyr
  *   drivers/display/display_st7789v.c st7789v_write()), a blanking command
@@ -47,14 +52,12 @@
 
 LOG_MODULE_REGISTER(beacon_screen_off, LOG_LEVEL_INF);
 
-BUILD_ASSERT(!IS_ENABLED(CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE),
-             "CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE blanks a device without keys for good and stops "
-             "the display tick (screen_off.c)");
 BUILD_ASSERT(!IS_ENABLED(CONFIG_LV_Z_FLUSH_THREAD),
              "screen off sends the blanking command between flushes: no flush thread");
 
 #define OFF_AFTER_MS ((int64_t)CONFIG_BEACON_SCREEN_OFF_AFTER_S * MSEC_PER_SEC)
-/* The longest a key press waits for the light, and a step of the fade. */
+/* How long a key press's payload waits for the light at most (sprite.c steps
+ * no frame meanwhile), and a step of the fade. */
 #define TICK_MS 20
 #define FADE_MS 1000
 #define LIT_PERCENT CONFIG_BEACON_BACKLIGHT_BRIGHTNESS
@@ -82,12 +85,13 @@ static void set_backlight(uint8_t percent) {
     if (percent == screen.percent) {
         return;
     }
-    screen.percent = percent;
 
     int ret = beacon_backlight_set(percent);
     if (ret < 0) {
         LOG_ERR("backlight %u: %d", percent, ret);
+        return;
     }
+    screen.percent = percent;
 }
 
 static void turn_off(void) {

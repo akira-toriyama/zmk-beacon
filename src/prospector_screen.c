@@ -39,6 +39,14 @@
 
 LOG_MODULE_REGISTER(beacon_screen, LOG_LEVEL_INF);
 
+/* ZMK's activity returns to active only on the device's own key, sensor and
+ * pointing events (zmk app/src/activity.c), which this device never raises:
+ * the option would blank the display CONFIG_ZMK_IDLE_TIMEOUT after boot and
+ * stop the display tick, and every lv_timer with it, for good. */
+BUILD_ASSERT(!IS_ENABLED(CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE),
+             "CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE blanks a device without keys for good; "
+             "CONFIG_BEACON_SCREEN_OFF_AFTER_S turns this screen off (prospector_screen.c)");
+
 /* A payload older than this greys the HP bar. The broadcaster sends one every
  * BEACON_PAYLOAD_INTERVAL_MS, so lost ones never come near it; a minute also
  * rides out a reboot or reflash of the Imprint Dongle without greying the

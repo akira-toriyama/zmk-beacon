@@ -112,8 +112,8 @@ Limits:
 | `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo, eight frames per key press, one invalidation per changed frame, an endless loop, and its own nearest-neighbour draw into the display buffer. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
-| `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite's tempo stops. |
-| `src/backlight.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) before the display driver starts, and sets it for `src/screen_off.c`. |
+| `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite stands still. |
+| `src/backlight.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) at boot, before LVGL and ZMK's display start, and sets it for `src/screen_off.c`. |
 | `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SCREEN_OFF_AFTER_S`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_STATUS_BROADCAST`. |
 
 ## Flashing

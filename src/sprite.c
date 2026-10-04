@@ -57,11 +57,12 @@
  *   from the shown frame (frame_at follows the present while typing, so
  *   nothing falls due meanwhile). gifdec only moves forward, so a press
  *   never steps back.
- * - Screen off (screen_off.h): while the screen is dark the tempo stands
- *   still, frame_at following the present as it does while typing, so
- *   nothing is decoded or rendered unseen and the tempo resumes from the
- *   shown frame. The press that lights the screen steps as any other; its
- *   first frames may render up to screen_off.c's tick before the light.
+ * - Screen off (screen_off.h): while the screen is dark nothing is decoded.
+ *   The tempo stands still, frame_at following the present as it does while
+ *   typing, and resumes from the shown frame; a press queues its frames
+ *   without stepping, so the press that lights the screen (within
+ *   screen_off.c's tick) shows its first frame lit, and no decode or render
+ *   holds the display work queue ahead of the light.
  * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
  *   and writes RGB565 into the layer's buffer for the clip area. That is
  *   safe under three conditions: LVGL has no OS (LV_USE_OS == LV_OS_NONE,
@@ -279,10 +280,19 @@ static void log_stats(void) {
     sprite.render_us = 0;
 }
 
+static bool screen_dark(void) {
+#if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
+    return beacon_screen_is_off();
+#else
+    return false;
+#endif
+}
+
 static void tick(lv_timer_t *timer) {
     ARG_UNUSED(timer);
     const uint32_t now = lv_tick_get();
     const uint32_t now_sub = now * SUB_PER_MS;
+    const bool dark = screen_dark();
     struct beacon_status status;
     unsigned int n = 0;
 
@@ -299,7 +309,7 @@ static void tick(lv_timer_t *timer) {
 
         sprite.frames_due = MIN(owed, FRAMES_QUEUE_MAX);
         sprite.dropped += owed - sprite.frames_due;
-        if (sprite.frames_due > 0 && !sprite.render_pending) {
+        if (sprite.frames_due > 0 && !sprite.render_pending && !dark) {
             uint32_t want = sprite.frames_due > FRAMES_PER_PRESS
                                 ? DIV_ROUND_UP(sprite.frames_due, DRAIN_RENDERS)
                                 : 1;
@@ -317,11 +327,9 @@ static void tick(lv_timer_t *timer) {
         }
         sprite.frame_at = now_sub;
     } else {
-#if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
-        if (beacon_screen_is_off()) {
+        if (dark) {
             sprite.frame_at = now_sub;
         }
-#endif
         for (;;) {
             const uint32_t interval = interval_sub();
             if ((int32_t)(now_sub - sprite.frame_at) < (int32_t)interval) {

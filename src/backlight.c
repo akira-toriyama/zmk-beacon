@@ -5,9 +5,11 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * The PWM backlight (backlight.h). It is lit before the display driver
- * initializes (SYS_INIT priority 50 < ZMK display), so a panel that fails to
- * initialize still lights up instead of looking dead. Derived from
+ * The PWM backlight (backlight.h). It is lit before LVGL and ZMK's display
+ * start (SYS_INIT APPLICATION 50; LVGL's glue is APPLICATION 90 and ZMK's
+ * display starts from main()), so a screen that never draws still lights up
+ * instead of looking dead. The panel driver itself is earlier (POST_KERNEL)
+ * and leaves the panel blanked until ZMK unblanks it. Derived from
  * prospector-zmk-module v2.2.3
  * boards/shields/prospector_scanner/src/backlight_init.c; the brightness comes
  * from Kconfig instead of a constant.

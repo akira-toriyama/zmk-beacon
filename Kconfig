@@ -11,8 +11,9 @@ config BEACON_BACKLIGHT_BRIGHTNESS
     default 80
     depends on LED_PWM
     help
-      Duty cycle written to the pwm-leds backlight before the display driver
-      starts. The unit has no ambient light sensor, so a lit screen keeps
+      Duty cycle written to the pwm-leds backlight at boot, before LVGL and
+      ZMK's display start. The unit has no ambient light sensor, so a lit
+      screen keeps
       this value; BEACON_SCREEN_OFF_AFTER_S turns the backlight off and back
       on to it.
 
@@ -25,6 +26,8 @@ config BEACON_SCREEN_OFF_AFTER_S
       Once the keyboard's status payload has counted no key press for this
       long, the backlight fades out within a second and the panel is
       blanked; the next key press lights the screen again (src/screen_off.c).
+      ZMK's own CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE must stay off
+      (src/prospector_screen.c).
       Only the keyboard's key presses count, any key of either half: the
       device hears nothing else, so a pointing device does not keep the
       screen lit. Until the first key press the time since boot counts, so
