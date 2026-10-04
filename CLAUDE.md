@@ -41,8 +41,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   on by the Cyboard module) stay in canon.
 - ZMK tracks `main`, never a tag: canon's Cyboard board needs zmk@main and this
   module compiles on the same tree; the weekly run of `build.yml` warns early.
-- FLASH / RAM of 788 / 256 KB (zmk 9ebbeff0, 2026-09-29): plain 25.11% / 67.88%,
-  `--logging` 27.95% / 73.99%, an 84 KB sprite 36.07% / 83.56%, both 39.06% / 89.61%.
+- FLASH / RAM of 788 / 256 KB (zmk 9ebbeff0, 2026-10-04): plain 25.30% / 67.98%,
+  `--logging` 28.24% / 74.03%, an 84 KB sprite 36.26% / 83.60%, both 39.36% / 89.71%.
 - CI: `build.yml` → the local reusable `zmk-build.yml` (it says why not ZMK's).
   `release.yml` keeps a rolling draft release of `prospector.uf2`, tagged when
   published by hand. A ruleset requires `build / Build (xiao_ble/nrf52840/zmk, prospector)`.
@@ -92,6 +92,13 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   queue carried across the minute's edge. Renders is what the panel showed (LVGL
   merges invalidations). A render took about 43 ms and a decode 11 ms a frame
   (hardware 2026-09-28); the pool peaked 4.9 KB above the decoder (2026-09-27).
+- Screen off (Prospector Dongle): `screen off: no key press for N s` a second
+  (the fade) after the last key press went N s back, or N + 1 s after boot
+  without one, and `screen on: key press` at the next press. While the screen is
+  dark the sprite decodes nothing. To watch
+  both without waiting five minutes, build with
+  `--kconfig CONFIG_BEACON_SCREEN_OFF_AFTER_S=20` (off at 00:00:21.0 and on
+  at the next press, log and eye, hardware 2026-10-04).
 - Broadcaster (Imprint Dongle): `advertising, N updates ok, N failed, N start
   failures, battery L/R, N keystrokes, in 60 s`. Healthy: `advertising`, 0
   failed, 0 start failures (hardware 2026-09-27); its keystrokes and the
@@ -148,6 +155,15 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - Touch LVGL only on ZMK's display work queue (`LV_USE_OS=0`): the scan callback
   runs on the BT RX queue and only copies under a spinlock; the screen reads the
   state from an `lv_timer` ([src/prospector_screen.c](src/prospector_screen.c)).
+  Display driver calls too: a flush is several SPI transfers, and the blanking
+  command of [src/screen_off.c](src/screen_off.c) must not land between them.
+- Keep `CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE` off (ZMK's default for this panel):
+  ZMK's activity returns to active only on the device's own key, sensor and
+  pointing events, so a device without keys would blank 30 s after boot for
+  good, and the stopped display tick would stop every `lv_timer` with it.
+  [src/screen_off.c](src/screen_off.c) turns the screen off instead, on the
+  keyboard's key presses; [src/prospector_screen.c](src/prospector_screen.c)
+  asserts the option off.
 - Opt every LVGL widget and font in: ZMK implies `LV_CONF_MINIMAL`, and a widget
   used without its `CONFIG_LV_USE_*` fails at link time, not in Kconfig (the HP
   bar's are set in the shield conf, the sprite's selected by `BEACON_SPRITE`).
@@ -161,7 +177,7 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - Size the LVGL pool in the shield's
   [Kconfig.defconfig](boards/shields/prospector/Kconfig.defconfig) (88 KiB with a
   sprite, 48 KiB without), never in a `.conf`: a conf line, the consumer's too,
-  fixes one size for both. More pool takes a logging sprite build (89.61% RAM)
+  fixes one size for both. More pool takes a logging sprite build (89.71% RAM)
   over 90%. [CMakeLists.txt](CMakeLists.txt) refuses a GIF whose decoder does not
   fit, [src/prospector_screen.c](src/prospector_screen.c) one larger than the box.
 - The panel's SPI runs at 32 MHz on SPIM3 with high drive on its pins (overlay),
