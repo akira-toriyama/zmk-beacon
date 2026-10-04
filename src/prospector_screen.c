@@ -17,7 +17,8 @@
  * queue, so the HP bar is refreshed from an lv_timer, which runs on that
  * queue, reading the observer's state through beacon_status_get(). No LVGL
  * theme is installed (LV_USE_THEME_* off): every style is set by the file
- * that owns the widget.
+ * that owns the widget. The refresh also runs while the screen is dark
+ * (screen_off.h), so the HP bar is current when it lights.
  */
 
 #include <lvgl.h>
@@ -29,6 +30,9 @@
 
 #include "hp_bar.h"
 #include "status_observer.h"
+#if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
+#include "screen_off.h"
+#endif
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
 #include "sprite.h"
 #endif
@@ -104,5 +108,8 @@ lv_obj_t *zmk_display_status_screen(void) {
 
     beacon_hp_bar_create(screen, SCREEN_W);
     lv_timer_create(refresh, REFRESH_MS, NULL);
+#if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
+    beacon_screen_off_start();
+#endif
     return screen;
 }

@@ -40,6 +40,14 @@ of the box; 15 characters fit, a longer name is cut.
 | A coloured bar and `65/100` | The keyboard's battery, from a status advertisement received in the last minute. |
 | An empty bar and `--/100` | The keyboard is heard, but neither half has a reading: both are off or out of range, or have not reported since they connected. |
 | Grey `HP` and `--/100` | No status advertisement in the last minute, or none since the Prospector Dongle started. |
+| Nothing: the screen is dark | No key press on the keyboard for five minutes. |
+
+The screen turns off when the keyboard has not been typed on for five minutes
+(`CONFIG_BEACON_SCREEN_OFF_AFTER_S`, default 300; 0 keeps it lit): the
+backlight fades out within a second, and the next key press, either half, any
+key, lights it at once. Only the keyboard's key presses count, so the screen
+also goes dark while only a pointing device is in use, and five minutes after
+the Prospector Dongle started when no key press has reached it by then.
 
 ## The sprite
 
@@ -49,8 +57,9 @@ to the largest size of its own proportions that fits the space above it, 2 px
 in from the panel's top and sides (a 90x90 px GIF shows at 198x198, or 180x180
 above a bar with a name).
 
-While nobody types it plays at three quarters of the GIF's own tempo and never
-stops. While the keyboard is typed on it runs on the key presses instead: every
+While nobody types it plays at three quarters of the GIF's own tempo and stops
+only while the screen is off. While the keyboard is typed on it runs on the key
+presses instead: every
 press, either half, any key, queues eight visibly different frames. A render
 steps one of them while the queue holds one press's worth or less, and several
 at a time (skipping frames, so the sprite runs faster) as presses pile up.
@@ -103,8 +112,9 @@ Limits:
 | `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo, eight frames per key press, one invalidation per changed frame, an endless loop, and its own nearest-neighbour draw into the display buffer. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
-| `src/backlight_init.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) before the display driver starts. |
-| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_STATUS_BROADCAST`. |
+| `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite's tempo stops. |
+| `src/backlight.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) before the display driver starts, and sets it for `src/screen_off.c`. |
+| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SCREEN_OFF_AFTER_S`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_STATUS_BROADCAST`. |
 
 ## Flashing
 
@@ -135,8 +145,10 @@ canon's `python3 scripts/dongle.py shot` writes a PNG of what the screen shows
 and prints its path. It sets the serial port to 2400 baud, on which the device
 renders the screen once more and sends it; then it sets 115200 again. The
 screen stands still while the picture goes out, and a logging build leaves out
-the log lines of that moment. A picture of a sprite build shows the sprite:
-keep it out of repositories like the GIF.
+the log lines of that moment. The picture is what the device draws, not what
+the backlight shows: a dark screen gives the picture it would show when lit. A
+picture of a sprite build shows the sprite: keep it out of repositories like
+the GIF.
 
 ## Using the module in a ZMK config
 
@@ -208,7 +220,7 @@ creates the tag.
 ## Hardware notes
 
 - The beekeeb pre-soldered unit has no APDS9960 ambient light sensor and its
-  touch panel is not wired, so the backlight is fixed
+  touch panel is not wired, so a lit screen has one brightness
   (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`, default 80) and there is no touch
   input.
 - Pin mapping and panel parameters are the Prospector's, taken from

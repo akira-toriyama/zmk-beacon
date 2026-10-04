@@ -57,6 +57,11 @@
  *   from the shown frame (frame_at follows the present while typing, so
  *   nothing falls due meanwhile). gifdec only moves forward, so a press
  *   never steps back.
+ * - Screen off (screen_off.h): while the screen is dark the tempo stands
+ *   still, frame_at following the present as it does while typing, so
+ *   nothing is decoded or rendered unseen and the tempo resumes from the
+ *   shown frame. The press that lights the screen steps as any other; its
+ *   first frames may render up to screen_off.c's tick before the light.
  * - Drawing: blit() runs on LV_EVENT_DRAW_MAIN of a plain, transparent object
  *   and writes RGB565 into the layer's buffer for the clip area. That is
  *   safe under three conditions: LVGL has no OS (LV_USE_OS == LV_OS_NONE,
@@ -93,6 +98,9 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 
+#if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
+#include "screen_off.h"
+#endif
 #include "sprite.h"
 #include "status_observer.h"
 
@@ -309,6 +317,11 @@ static void tick(lv_timer_t *timer) {
         }
         sprite.frame_at = now_sub;
     } else {
+#if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
+        if (beacon_screen_is_off()) {
+            sprite.frame_at = now_sub;
+        }
+#endif
         for (;;) {
             const uint32_t interval = interval_sub();
             if ((int32_t)(now_sub - sprite.frame_at) < (int32_t)interval) {
