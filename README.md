@@ -51,11 +51,11 @@ the Prospector Dongle started when no key press has reached it by then.
 
 ## The sprite
 
-With `CONFIG_BEACON_SPRITE_GIF="<absolute path>"` the build embeds a GIF and
-the screen plays it above the HP bar: centred, standing on the bar, and scaled
-to the largest size of its own proportions that fits the space above it, 2 px
-in from the panel's top and sides (a 90x90 px GIF shows at 198x198, or 180x180
-above a bar with a name).
+With `CONFIG_BEACON_SPRITE_GIF="<absolute path>"` the build converts a GIF
+into a sprite pack (below), embeds that, and the screen plays it above the HP
+bar: centred, standing on the bar, and scaled to the largest size of its own
+proportions that fits the space above it, 2 px in from the panel's top and
+sides (a 90x90 px GIF shows at 198x198, or 180x180 above a bar with a name).
 
 While nobody types it plays at three quarters of the GIF's own tempo and stops
 only while the screen is off. While the keyboard is typed on it runs on the key
@@ -69,29 +69,31 @@ the tempo resumes from the frame shown; the sprite never steps back. As that
 frames before the tempo takes over. Every physical press counts once, at the
 press, whether or not a hold-tap or a combo later holds it back or consumes it.
 
-The sprite draws itself: the player scales the decoded frame straight into the
-display buffer by nearest neighbour (`src/sprite.c`), and the panel's SPI runs
-at 32 MHz. Redrawing a 90x90 px GIF shown at 2.2x takes about 43 ms, flush
-included, and decoding a GIF frame about 11 ms (hardware 2026-09-28). 32 MHz is
-above the ST7789V data sheet's write cycle, as 16 MHz already was; should the
-panel show noise, set `mipi-max-frequency` in the shield overlay back to 20 MHz
-(16 MHz effective).
+The sprite draws itself: the player inflates the frame's picture into a
+packed canvas and scales it straight into the display buffer by nearest
+neighbour (`src/sprite.c`), and the panel's SPI runs at 32 MHz. Redrawing a
+sprite shown at about 2x takes 27-51 ms, flush included, and inflating a
+153x94 picture 6-9 ms (hardware 2026-10-06); a frame whose picture is already
+on the canvas costs nothing, and catching up after a slow render moves the
+frame index without decoding. 32 MHz is above the ST7789V data sheet's write
+cycle, as 16 MHz already was; should the panel show noise, set
+`mipi-max-frequency` in the shield overlay back to 20 MHz (16 MHz effective).
 
 Limits:
 
-- GIF89a with a global colour table (what LVGL's gifdec opens) and at least one
-  frame, no larger than the sprite box: 276x198, or 276x180 with a sprite name.
-  A larger GIF stops the build with `static assertion failed:
+- Any GIF a browser plays (GIF87a or GIF89a, disposal 0-3, transparency,
+  interlace, local colour tables), with at least one frame and at most 255
+  colours in all, no larger than the sprite box: 276x198, or 276x180 with a
+  sprite name. A larger GIF stops the build with `static assertion failed:
   "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box: ..."` or `"... is
-  taller than the sprite box: ..."`. A GIF whose decoder (5 bytes per pixel
-  plus about 18 KiB) does not fit the LVGL pool next to the screen stops it in
-  CMake, and the message names the `CONFIG_LV_Z_MEM_POOL_SIZE` that would fit.
-  The shield's pool grows from 48 KiB to 88 KiB when a sprite is configured:
-  room for a square GIF of up to 112x112 px.
-- Frame delays of 0 and 10 ms play as 100 ms, as browsers do.
-- gifdec ignores disposal 3 (restore to previous), and a frame without its
-  own graphic control extension reuses the previous frame's delay and
-  transparency. Such a GIF shows trails or holes on the device.
+  taller than the sprite box: ..."`. A GIF whose player (its canvas and
+  dictionary: two bytes a pixel with more than 15 colours, one otherwise, plus
+  8 KiB) does not fit the LVGL pool next to the screen stops it in CMake, and
+  the message names the `CONFIG_LV_Z_MEM_POOL_SIZE` that would fit. The
+  shield's pool grows from 48 KiB to 64 KiB when a sprite is configured: room
+  for any GIF of the box at 15 colours, or about 200x140 px beyond that.
+- Frame delays of 0 and 10 ms play as 100 ms, as browsers do (the converter
+  writes them so).
 - The GIF is a personal file and never enters a repository: build locally with
   `./scripts/build.sh --sprite <gif>` (`firmware/prospector-sprite.uf2`).
   `--sprite-name <text>` adds the name (printable ASCII without a double quote,
@@ -104,9 +106,10 @@ Limits:
 `tools/sprite_pack.py` turns a GIF, and optionally a second one for the back
 view, into a sprite pack (`.spk`): the distinct pictures the GIF shows, packed
 and deflated against the first, with the order and delays, the name, a length
-and a CRC-32. It is the unit the player is moving to, for a sprite swapped
-over the air without a reboot; [docs/sprite-pack.md](docs/sprite-pack.md)
-explains the format and what was measured. Standard library Python 3.9 or
+and a CRC-32. It is what the player plays, embedded by the build from
+`CONFIG_BEACON_SPRITE_GIF`, and the unit of a sprite swapped over the air
+without a reboot; [docs/sprite-pack.md](docs/sprite-pack.md) explains the
+format and what was measured. Standard library Python 3.9 or
 later:
 
 ```sh
@@ -128,7 +131,7 @@ as above; the tool prints sizes only.
 | `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name and the key press counter are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that the GIF fits. |
 | `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with `CONFIG_BEACON_SPRITE_NAME`, the name on a second row; and the mapping of both halves' batteries to its one level. |
-| `src/sprite.c` | `CONFIG_BEACON_SPRITE`: the GIF player, an own player on LVGL's gifdec with a tempo, eight frames per key press, one invalidation per changed frame, an endless loop, and its own nearest-neighbour draw into the display buffer. |
+| `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, and its own nearest-neighbour draw into the display buffer; and the pack's reader and inflater, plain C that also compiles on the host. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
 | `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite stands still. |

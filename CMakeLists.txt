@@ -14,76 +14,69 @@ target_sources_ifdef(CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD app PRIVATE src/bootl
 target_sources_ifdef(CONFIG_BEACON_SCREEN_DUMP app PRIVATE src/screen_dump.c)
 target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broadcaster.c)
 
-# The sprite GIF is embedded from CONFIG_BEACON_SPRITE_GIF into the build tree
-# only (never next to the sources: the file is personal and stays out of git).
-# The file checks reject up front what gifdec would reject at run time
-# (gifdec.c gif_open(): "GIF89a", a global colour table, a zero size). The
-# GIF's width and height go to the sources as BEACON_SPRITE_GIF_W/_H, and
-# prospector_screen.c asserts that they fit the sprite box it lays out.
-#
-# The LVGL pool check is here, not a BUILD_ASSERT, because CMake can name the
-# pool size that would fit. The decoder's one allocation, kept for the whole
-# run, is sizeof(gd_GIF) (under 2 KiB), a 4-byte canvas pixel and a 1-byte
-# frame index per GIF pixel, and a 16 KiB LZW cache (gifdec.c gif_open(),
-# LV_GIF_CACHE_DECODE_DATA); the sprite's boot log line reports it as
-# measured. The reserve is for the screen's widgets and the draw tasks: on
-# hardware 2026-09-27 the pool peaked at 63,376 B with a 58,515 B decoder
-# allocation, so the screen took under 5 KB.
+# The sprite GIF named by CONFIG_BEACON_SPRITE_GIF is converted at configure
+# time into a sprite pack (tools/sprite_pack.py, docs/sprite-pack.md) and
+# embedded from the build tree only (never next to the sources: the file is
+# personal and stays out of git). The converter prints the animation's size,
+# from which the LVGL pool check computes what the player keeps for the whole
+# run: a packed canvas and the decoded picture 0 (stride x height bytes each);
+# the reserve is for the screen's widgets and the draw tasks (the pool peaked
+# 4.9 KB above the sprite's block, hardware 2026-09-27 and 2026-10-06). The
+# canvas size goes to the sources as BEACON_SPRITE_GIF_W/_H, and
+# prospector_screen.c asserts that it fits the sprite box it lays out. The
+# name goes into the pack too, cut to what the HP bar shows; no message here
+# echoes the path or the name.
 if(CONFIG_BEACON_SPRITE)
   set(sprite_gif "${CONFIG_BEACON_SPRITE_GIF}")
-  set(sprite_gd_gif_bytes 2048)
-  set(sprite_bytes_per_pixel 5)
-  set(sprite_lzw_cache_bytes 16384)
+  set(sprite_pack_py "${CMAKE_CURRENT_SOURCE_DIR}/tools/sprite_pack.py")
+  set(sprite_bin "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite.spk")
   set(sprite_reserve_bytes 8192)
+  set(sprite_name_glyphs 15)
 
   if(NOT IS_ABSOLUTE "${sprite_gif}")
-    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF must be an absolute path, got '${sprite_gif}'")
+    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF must be an absolute path")
   endif()
   if(NOT EXISTS "${sprite_gif}")
-    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: no such file: ${sprite_gif}")
+    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: no such file")
   endif()
-  # file(READ) registers no dependency: a changed GIF must re-run these checks.
-  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${sprite_gif}")
-
-  # Header + logical screen descriptor: "GIF89a", width, height (uint16 LE), packed byte.
-  file(READ "${sprite_gif}" sprite_head HEX LIMIT 13)
-  string(LENGTH "${sprite_head}" sprite_head_len)
-  if(sprite_head_len LESS 26)
-    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} is shorter than a GIF header")
+  string(SUBSTRING "${CONFIG_BEACON_SPRITE_NAME}" 0 ${sprite_name_glyphs} sprite_name)
+  # execute_process registers no dependency: a changed GIF or converter must re-run it.
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+               "${sprite_gif}" "${sprite_pack_py}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gifpics.py")
+  execute_process(COMMAND ${PYTHON_EXECUTABLE} "${sprite_pack_py}" pack --name "${sprite_name}"
+                          -o "${sprite_bin}" "${sprite_gif}"
+                  RESULT_VARIABLE sprite_rc OUTPUT_VARIABLE sprite_out ERROR_VARIABLE sprite_err)
+  if(NOT sprite_rc EQUAL 0)
+    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: the GIF does not convert to a sprite pack: ${sprite_err}")
   endif()
-  string(SUBSTRING "${sprite_head}" 0 12 sprite_sig)
-  if(NOT sprite_sig STREQUAL "474946383961")
-    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} is not a GIF89a file (gifdec opens no other version)")
+  string(REGEX MATCH
+         "animation 0: ([0-9]+)x([0-9]+) bpp ([0-9]+) colours ([0-9]+) pictures ([0-9]+) frames ([0-9]+) bytes ([0-9]+)"
+         sprite_line "${sprite_out}")
+  if(sprite_line STREQUAL "")
+    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: the converter printed no size: ${sprite_out}")
   endif()
-  string(SUBSTRING "${sprite_head}" 12 2 sprite_w_lo)
-  string(SUBSTRING "${sprite_head}" 14 2 sprite_w_hi)
-  string(SUBSTRING "${sprite_head}" 16 2 sprite_h_lo)
-  string(SUBSTRING "${sprite_head}" 18 2 sprite_h_hi)
-  string(SUBSTRING "${sprite_head}" 20 2 sprite_packed)
-  math(EXPR sprite_w "0x${sprite_w_hi}${sprite_w_lo}")
-  math(EXPR sprite_h "0x${sprite_h_hi}${sprite_h_lo}")
-  math(EXPR sprite_has_gct "0x${sprite_packed} & 0x80")
-  if(sprite_has_gct EQUAL 0)
-    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} has no global colour table (gifdec needs one)")
-  endif()
-  if(sprite_w EQUAL 0 OR sprite_h EQUAL 0)
-    message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} is ${sprite_w}x${sprite_h} (gifdec opens no empty image)")
-  endif()
+  set(sprite_w ${CMAKE_MATCH_1})
+  set(sprite_h ${CMAKE_MATCH_2})
+  set(sprite_bpp ${CMAKE_MATCH_3})
   target_compile_definitions(app PRIVATE BEACON_SPRITE_GIF_W=${sprite_w} BEACON_SPRITE_GIF_H=${sprite_h})
 
-  math(EXPR sprite_need
-       "${sprite_gd_gif_bytes} + ${sprite_bytes_per_pixel} * ${sprite_w} * ${sprite_h} + ${sprite_lzw_cache_bytes} + ${sprite_reserve_bytes}")
+  if(sprite_bpp EQUAL 4)
+    math(EXPR sprite_stride "(${sprite_w} + 1) / 2")
+  else()
+    set(sprite_stride ${sprite_w})
+  endif()
+  math(EXPR sprite_need "2 * ${sprite_stride} * ${sprite_h} + ${sprite_reserve_bytes}")
   if(sprite_need GREATER CONFIG_LV_Z_MEM_POOL_SIZE)
     math(EXPR sprite_pool_fit "(${sprite_need} + 4095) / 4096 * 4096")
     message(FATAL_ERROR
-            "CONFIG_BEACON_SPRITE_GIF: ${sprite_gif} (${sprite_w}x${sprite_h}) needs about ${sprite_need} bytes "
-            "of the LVGL pool (decoder + screen reserve), CONFIG_LV_Z_MEM_POOL_SIZE is ${CONFIG_LV_Z_MEM_POOL_SIZE}; "
-            "CONFIG_LV_Z_MEM_POOL_SIZE=${sprite_pool_fit} would fit, if RAM allows")
+            "CONFIG_BEACON_SPRITE_GIF: a ${sprite_w}x${sprite_h} sprite at ${sprite_bpp} bits a pixel needs about "
+            "${sprite_need} bytes of the LVGL pool (canvas, dictionary, screen reserve), CONFIG_LV_Z_MEM_POOL_SIZE is "
+            "${CONFIG_LV_Z_MEM_POOL_SIZE}; CONFIG_LV_Z_MEM_POOL_SIZE=${sprite_pool_fit} would fit, if RAM allows")
   endif()
-  message(STATUS "Sprite: ${sprite_gif} (${sprite_w}x${sprite_h}), about ${sprite_need} of ${CONFIG_LV_Z_MEM_POOL_SIZE} pool bytes")
+  message(STATUS "Sprite: ${sprite_line}; about ${sprite_need} of ${CONFIG_LV_Z_MEM_POOL_SIZE} pool bytes")
 
-  set(sprite_inc "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite_gif.inc")
-  generate_inc_file_for_target(app "${sprite_gif}" "${sprite_inc}")
+  set(sprite_inc "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite_pack.inc")
+  generate_inc_file_for_target(app "${sprite_bin}" "${sprite_inc}")
   target_include_directories(app PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-  target_sources(app PRIVATE src/sprite.c)
+  target_sources(app PRIVATE src/sprite.c src/sprite_pack.c)
 endif()
