@@ -33,13 +33,14 @@ endchoice
 config LV_COLOR_16_SWAP
     default y
 
-# The LVGL pool (sys_heap). A sprite's decoder keeps one allocation in it for
-# the whole run, next to the screen's widgets and draw tasks; CMakeLists.txt
-# holds the estimate and checks a GIF against this value at build time.
-# 88 KiB keeps RAM under 90% in a logging build and leaves room for a GIF of
-# about 110x110 px.
+# The LVGL pool (sys_heap). A sprite's player keeps one allocation in it for
+# the whole run (its canvas and dictionary, two bytes a pixel at most), next
+# to the screen's widgets and draw tasks; CMakeLists.txt holds the estimate
+# and checks a GIF against this value at build time. 64 KiB holds any GIF of
+# the sprite box at 4 bits a pixel (276x180: 49,680 bytes) and about 200x140
+# at 8; the 88 KiB of the gifdec player took a logging build to 89.71% of RAM.
 config LV_Z_MEM_POOL_SIZE
-    default 90112 if BEACON_SPRITE
+    default 65536 if BEACON_SPRITE
     default 49152
 
 config BEACON_BOOTLOADER_ON_1200_BAUD
