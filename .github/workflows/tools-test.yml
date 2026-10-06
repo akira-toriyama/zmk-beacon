@@ -1,0 +1,31 @@
+name: Tools
+
+# The unit tests of tools/ (sprite_pack.py, gifpics.py) on the Python that
+# ships with the GitHub Ubuntu runner: standard library only, nothing to
+# install. The GIFs they read are written by the tests themselves.
+on:
+  # push only on main: a PR branch is checked once, through pull_request.
+  push:
+    branches: [main]
+    paths:
+      - "tools/**"
+      - ".github/workflows/tools-test.yml"
+  pull_request:
+    paths:
+      - "tools/**"
+      - ".github/workflows/tools-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Test-only, never pushes.
+          persist-credentials: false
+      - name: Run the tests
+        run: python3 -m unittest discover -v -s tools -p 'test_*.py'

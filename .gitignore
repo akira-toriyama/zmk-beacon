@@ -6,6 +6,7 @@
 
 # Sprite GIFs are personal files: never committed, nor anything derived from them
 *.[gG][iI][fF]
+*.[sS][pP][kK]
 
 # Python
 __pycache__/
