@@ -48,8 +48,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   on by the Cyboard module) stay in canon.
 - ZMK tracks `main`, never a tag: canon's Cyboard board needs zmk@main and this
   module compiles on the same tree; the weekly run of `build.yml` warns early.
-- FLASH / RAM of 788 / 256 KB (zmk 9ebbeff0, 2026-10-04): plain 25.30% / 67.98%,
-  `--logging` 28.24% / 74.03%, an 84 KB sprite 36.26% / 83.60%, both 39.36% / 89.71%.
+- FLASH / RAM of 788 / 256 KB (zmk 5b51501f, 2026-10-06): plain 25.30% / 67.98%,
+  a 89x91 sprite (a 39 KB pack from an 84 KB GIF) 30.72% / 75.65%, a 153x94
+  one with `--logging` 32.48% / 81.70%; the gifdec player's 84 KB sprite took
+  36.26% / 83.60% and 39.36% / 89.71% with logging (2026-10-04).
 - CI: `build.yml` → the local reusable `zmk-build.yml` (it says why not ZMK's);
   `tools-test.yml` runs `tools/`' unit tests.
   `release.yml` keeps a rolling draft release of `prospector.uf2`, tagged when
@@ -94,12 +96,14 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   the keyboard rebooting (a reflashed Imprint Dongle jumped 182, 2026-09-29).
 - Screen (Prospector Dongle): `screen left L right R (fresh, payload N ms ago, N
   keystrokes)` on every HP bar change and once a minute; `stale` (grey) after 60 s.
-- Sprite (sprite builds): `sprite N decoded, N presses for N key steps and N
-  frames dropped, N invalidated, N renders of N ms in 60 s, speed 75%, lvgl pool
-  N allocated, N max, of N`. Presses × 8 = key steps + frames dropped, up to the
-  queue carried across the minute's edge. Renders is what the panel showed (LVGL
-  merges invalidations). A render took about 43 ms and a decode 11 ms a frame
-  (hardware 2026-09-28); the pool peaked 4.9 KB above the decoder (2026-09-27).
+- Sprite (sprite builds): `sprite N decoded (N us avg, N us max), N presses for
+  N key steps and N frames dropped, N invalidated, N renders of N ms in 60 s,
+  speed 75%, side N, lvgl pool N allocated, N max, of N`. Decoded counts
+  pictures inflated (a frame whose picture is on the canvas decodes nothing);
+  presses × 8 = key steps + frames dropped, up to the queue carried across the
+  minute's edge. Renders is what the panel showed (LVGL merges invalidations).
+  A render took 27-51 ms and a 153x94 picture 6-9 ms (hardware 2026-10-06);
+  the pool peaked 4.9 KB above the sprite's block (2026-09-27, 2026-10-06).
 - Screen off (Prospector Dongle): `screen off: no key press for N s` a second
   (the fade) after the last key press went N s back, or N + 1 s after boot
   without one, and `screen on: key press` at the next press. While the screen is
@@ -111,8 +115,10 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   failures, battery L/R, N keystrokes, in 60 s`. Healthy: `advertising`, 0
   failed, 0 start failures (hardware 2026-09-27); its keystrokes and the
   observer's grow alike (50 and 50 in a minute, 2026-09-29).
-- Once: `scanning`, `battery left L right R` (on change), `sprite WxH as WxH
-  (N.NNx) from a N byte GIF, N bytes of the lvgl pool` (measured),
+- Once: `scanning`, `battery left L right R` (on change), `sprite WxH, N bpp,
+  N colours, N pictures, N frames, side N of N, dictionary in N us, N bytes of
+  the lvgl pool for canvas and dictionary` and `sprite as WxH (N.NNx) from a N
+  byte pack, N bytes of the lvgl pool` (measured),
   `advertising every 200 ms`, `<uart>: 1200 baud touch, rebooting into the bootloader`,
   `screen dump: N bands, N bytes in N ms` (after each `shot`).
 
@@ -175,19 +181,21 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - Opt every LVGL widget and font in: ZMK implies `LV_CONF_MINIMAL`, and a widget
   used without its `CONFIG_LV_USE_*` fails at link time, not in Kconfig (the HP
   bar's are set in the shield conf, the sprite's selected by `BEACON_SPRITE`).
-- Keep `CONFIG_LV_GIF_CACHE_DECODE_DATA=y` with the sprite (`BEACON_SPRITE`
-  selects it): the other gifdec path of this LVGL drops every frame's last LZW
-  token ([src/sprite.c](src/sprite.c)).
+- Change the sprite pack only with a new magic (`SPK1`, tools/sprite_pack.py
+  and src/sprite_pack.h together): the player rejects a file it does not know
+  instead of drawing it wrong.
 - Keep the sprite the screen's first child and never render the screen through a
   layer (`opa_layered`, a transform, a blend mode, a bitmap mask): `blit()`
   writes into the display buffer and relies on the screen's fill having landed
   ([src/sprite.c](src/sprite.c)).
 - Size the LVGL pool in the shield's
-  [Kconfig.defconfig](boards/shields/prospector/Kconfig.defconfig) (88 KiB with a
+  [Kconfig.defconfig](boards/shields/prospector/Kconfig.defconfig) (64 KiB with a
   sprite, 48 KiB without), never in a `.conf`: a conf line, the consumer's too,
-  fixes one size for both. More pool takes a logging sprite build (89.71% RAM)
-  over 90%. [CMakeLists.txt](CMakeLists.txt) refuses a GIF whose decoder does not
-  fit, [src/prospector_screen.c](src/prospector_screen.c) one larger than the box.
+  fixes one size for both. The player keeps two bytes a pixel at most (its
+  canvas and dictionary); the 88 KiB of the gifdec player took a logging sprite
+  build to 89.71% RAM. [CMakeLists.txt](CMakeLists.txt) refuses a GIF whose
+  player does not fit, [src/prospector_screen.c](src/prospector_screen.c) one
+  larger than the box.
 - The panel's SPI runs at 32 MHz on SPIM3 with high drive on its pins (overlay),
   above the ST7789V data sheet's 15 MHz write cycle, as 16 MHz already was: a
   render takes about 43 ms against 63 at 16 MHz (hardware 2026-09-28). If the
