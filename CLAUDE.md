@@ -20,6 +20,13 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   `CONFIG_BEACON_STATUS_BROADCAST=y`, `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`,
   `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y`); a merge here reaches the dongles with
   canon's pin bump.
+- `tools/`: `sprite_pack.py` (the sprite pack, [docs/sprite-pack.md](docs/sprite-pack.md):
+  a GIF as its distinct pictures, for the player and the over-the-air swap) on
+  `gifpics.py` (GIF composition as browsers do it), standard library only so
+  that macOS's `/usr/bin/python3` (3.9) and the ZMK build image both run them;
+  `test_sprite_pack.py` writes its own GIFs (`python3 -m unittest discover
+  tools`, CI `tools-test.yml`). The 1,298-GIF checks against Pillow and the
+  round trips are local only: the GIFs are personal files.
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
 
 ## Build
@@ -43,7 +50,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   module compiles on the same tree; the weekly run of `build.yml` warns early.
 - FLASH / RAM of 788 / 256 KB (zmk 9ebbeff0, 2026-10-04): plain 25.30% / 67.98%,
   `--logging` 28.24% / 74.03%, an 84 KB sprite 36.26% / 83.60%, both 39.36% / 89.71%.
-- CI: `build.yml` → the local reusable `zmk-build.yml` (it says why not ZMK's).
+- CI: `build.yml` → the local reusable `zmk-build.yml` (it says why not ZMK's);
+  `tools-test.yml` runs `tools/`' unit tests.
   `release.yml` keeps a rolling draft release of `prospector.uf2`, tagged when
   published by hand. A ruleset requires `build / Build (xiao_ble/nrf52840/zmk, prospector)`.
 
@@ -188,10 +196,12 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 ## Privacy: the sprite
 
 - **The sprite GIF is a personal file, and its name names the subject.** Never
-  commit a GIF, an `.inc`, frames, previews or anything made from one, and never
-  write the GIF's path or file name, its subject or the sprite name into a
-  commit, a PR or a doc here. `.gitignore` has `*.[gG][iI][fF]`
-  (`core.ignorecase` is false on this case-sensitive volume).
+  commit a GIF, a sprite pack, an `.inc`, frames, previews or anything made from
+  one, and never write the GIF's path or file name, its subject, its source or
+  the sprite name into a commit, a PR, a doc, a test or a workflow here (the
+  user's collection is the user's; this repository is public). `.gitignore` has
+  `*.[gG][iI][fF]` and `*.spk` (`core.ignorecase` is false on this
+  case-sensitive volume). Tests use GIFs they write themselves.
 - `CONFIG_BEACON_SPRITE_GIF` takes an absolute path. `build.sh --sprite` copies
   the GIF to `$ZMK_WS/sprite/sprite.gif`, and the build embeds it as
   `build/<image name>/modules/zmk-beacon/beacon_sprite_gif.inc` (build tree only).

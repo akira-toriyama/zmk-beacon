@@ -99,6 +99,25 @@ Limits:
   repositories like the GIF, and the script prints neither. CI and the release
   build without a sprite or a name.
 
+### The sprite pack
+
+`tools/sprite_pack.py` turns a GIF, and optionally a second one for the back
+view, into a sprite pack (`.spk`): the distinct pictures the GIF shows, packed
+and deflated against the first, with the order and delays, the name, a length
+and a CRC-32. It is the unit the player is moving to, for a sprite swapped
+over the air without a reboot; [docs/sprite-pack.md](docs/sprite-pack.md)
+explains the format and what was measured. Standard library Python 3.9 or
+later:
+
+```sh
+python3 tools/sprite_pack.py pack --name <text> -o <out.spk> <front.gif> [<back.gif>]
+python3 tools/sprite_pack.py check <pack.spk> <front.gif> [<back.gif>]   # every frame against the GIFs
+python3 tools/sprite_pack.py info <pack.spk>
+```
+
+The GIF, the pack and the name are personal and stay out of repositories,
+as above; the tool prints sizes only.
+
 ## What the module provides
 
 | Path | What |
