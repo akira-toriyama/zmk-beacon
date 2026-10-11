@@ -2,8 +2,8 @@
 
 A sprite pack (`.spk`) holds a sprite animation as the distinct pictures it
 shows and the order it shows them in, for the Prospector Dongle to play from
-flash: embedded at build time or, later, received over Bluetooth into a flash
-room and swapped without a reboot. `tools/sprite_pack.py` writes one from a
+flash: embedded at build time (`src/sprite.c` plays it) or, later, received
+over Bluetooth into a flash room and swapped without a reboot. `tools/sprite_pack.py` writes one from a
 GIF (and a second GIF for the back view), checks one against its GIFs, and
 prints one's sizes; its docstring is the byte layout. This page is the why.
 
@@ -62,8 +62,7 @@ pays because a match then covers twice the pixels. A better dictionary than
 picture 0 (the best of five candidates, or of all pictures) would save another
 2-4%, not worth a rule. zlib does the encoding, so the converter is standard
 library only and runs on macOS's `/usr/bin/python3` (3.9) and in the ZMK build
-image; the device's inflater (`src/sprite_pack.c`, once the player uses it)
-is about 400 lines and checks every write against the band, so erased or
+image; the device's inflater (`src/sprite_pack.c`) is about 400 lines and checks every write against the band, so erased or
 foreign flash decodes to an error.
 
 ## Correctness

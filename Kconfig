@@ -83,36 +83,32 @@ config BEACON_SPRITE_GIF
     default ""
     depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
     help
-      Absolute path of a GIF89a file with a global colour table (the only
-      kind LVGL's gifdec opens). The build embeds its bytes in the image and
-      the status screen plays it above the HP bar, scaled to fill the space
-      between the panel's top edge and the bar: at SPEED_PCT of its own tempo
-      (src/sprite.c) while nobody types, and stepped by the key presses the
-      keyboard's broadcaster counts
-      while it is typed on (src/sprite.c). Empty: no sprite, which is what CI
-      and the release build.
+      Absolute path of a GIF (any that a browser plays, up to 255 colours in
+      all). The build converts it into a sprite pack (tools/sprite_pack.py,
+      docs/sprite-pack.md), embeds that in the image, and the status screen
+      plays it above the HP bar, scaled to fill the space between the panel's
+      top edge and the bar: at SPEED_PCT of its own tempo (src/sprite.c)
+      while nobody types, and stepped by the key presses the keyboard's
+      broadcaster counts while it is typed on (src/sprite.c). Empty: no
+      sprite, which is what CI and the release build.
 
       The build fails when the GIF does not fit that space at 1x
-      (src/prospector_screen.c), or when its decoder's share of the LVGL
-      pool, kept for the whole run, does not fit CONFIG_LV_Z_MEM_POOL_SIZE
-      next to the screen (CMakeLists.txt; the prospector shield's default
-      grows with a sprite). Local builds: scripts/build.sh --sprite <gif>
-      [--sprite-name <text>].
+      (src/prospector_screen.c), or when the player's share of the LVGL
+      pool, kept for the whole run (two bytes a pixel at 8 bits a pixel, one
+      at 4), does not fit CONFIG_LV_Z_MEM_POOL_SIZE next to the screen
+      (CMakeLists.txt; the prospector shield's default grows with a sprite).
+      Local builds: scripts/build.sh --sprite <gif> [--sprite-name <text>].
 
 config BEACON_SPRITE
     bool
     default y if BEACON_SPRITE_GIF != ""
-    select LV_USE_IMAGE
-    select LV_USE_GIF
-    select LV_GIF_CACHE_DECODE_DATA
     select SYS_HEAP_RUNTIME_STATS if LOG
     help
-      Set when BEACON_SPRITE_GIF names a file. LV_GIF_CACHE_DECODE_DATA is a
-      correctness requirement here, not a speed option (src/sprite.c).
-      LV_USE_IMAGE only lets LVGL's lv_gif.c, which LV_USE_GIF compiles,
-      build: the sprite draws itself. With logging on, the sprite's minute
-      line reports the LVGL pool's allocated and peak bytes, the numbers the
-      pool size is chosen from.
+      Set when BEACON_SPRITE_GIF names a file. The sprite decodes and draws
+      itself (src/sprite.c, src/sprite_pack.c); no LVGL image or GIF library
+      is built. With logging on, the sprite's minute line reports the LVGL
+      pool's allocated and peak bytes, the numbers the pool size is chosen
+      from.
 
 config BEACON_SPRITE_NAME
     string "Name of the sprite, shown under the HP bar (empty = none)"
