@@ -158,9 +158,10 @@ config BEACON_SPRITE_NAME
       (src/hp_bar.h). 15 glyphs fit; a longer name is cut. Printable ASCII
       only: the font has no other glyphs, a double quote or a backslash would
       need Kconfig escaping, and "??" would be a C trigraph in autoconf.h.
-      Empty: no second row, the screen of CI and the release build, which
-      have no sprite. A received pack brings its own name
-      (BEACON_SPRITE_RECEIVE), and that build always has the row.
+      Empty: no name for the embedded sprite. A received pack brings its own
+      name (BEACON_SPRITE_RECEIVE), and that build always has the row, so
+      the screen of CI and the release build has an empty one until a pack
+      plays.
 
       No dependency on purpose: kconfig.py prints the value of any assigned
       symbol whose value did not take, so a dependency on BEACON_SPRITE

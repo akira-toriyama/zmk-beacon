@@ -17,13 +17,15 @@
  * - control, write with response:
  *     0x01 BEGIN  u32 length  the pack's length. Freezes the sprite, erases
  *                             the room for it (a 4 KiB page takes about
- *                             0.25 s: 21 s for a full room, within ATT's 30 s
+ *                             0.22 s: 21 s for a full room, within ATT's 30 s
  *                             transaction timeout) and responds after the
- *                             erase. Rejected during a transfer, and for 0 or
- *                             more than the room.
+ *                             erase. Rejected during a transfer, for 0 or
+ *                             more than the room, and when the display work
+ *                             queue did not freeze the sprite in time.
  *     0x02 COMMIT             writes the bytes received since the last
- *                             COMMIT, a page at most, to flash. The central
- *                             sends no data until the response.
+ *                             COMMIT, a page at most and a multiple of 4 (the
+ *                             flash write block; else rejected), to flash.
+ *                             The central sends no data until the response.
  *     0x03 END                commits the rest and, when the room holds the
  *                             pack BEGIN announced (length, header, CRC-32)
  *                             and the player opens it, shows it. The response
@@ -32,8 +34,8 @@
  *   control, read: struct report, the device's state and the last transfer's
  *   result (a long read: it exceeds the default ATT MTU, which CoreBluetooth
  *   handles in one readValue).
- * - data, write without response: the pack's bytes in order, any chunking,
- *   at most a page between COMMITs.
+ * - data, write without response: the pack's bytes in order, any chunking
+ *   that COMMITs at multiples of 4 bytes, at most a page between COMMITs.
  * A sender: connect; read the report until `interval` is 12 (15 ms: the
  * device asks the central for the shield's preferred parameters
  * CONFIG_BT_CONN_PARAM_UPDATE_TIMEOUT after the connection, and a Mac applies
@@ -59,9 +61,12 @@
  * - BEGIN freezes the sprite on the display work queue before the erase, so
  *   no decode reads erased flash, and the last picture stays on the screen
  *   through the transfer; END shows the new pack on that queue and waits for
- *   it. Both waits are bounded (DISPLAY_WAIT_MS): a stalled display queue
- *   must not hold the BT RX queue. A disconnect during a transfer falls back
- *   to the embedded pack, or no sprite.
+ *   it, as does the fallback after a failure. Each wait is bounded
+ *   (DISPLAY_WAIT_MS: a stalled display queue, say a screen dump the host
+ *   stopped reading, must not hold the BT RX queue), and while an item is
+ *   still outstanding the next one is refused: BEGIN never erases under a
+ *   sprite that may still be decoding. A disconnect during a transfer falls
+ *   back to the embedded pack, or no sprite.
  * - Advertising restarts from recycled(), not disconnected(): the connection
  *   object is still held there and bt_le_adv_start() fails with -ENOMEM.
  * - The GATT and connection callbacks run on the BT RX work queue one at a
@@ -79,6 +84,7 @@
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
@@ -198,35 +204,48 @@ static void flush_page(void) {
 }
 
 /* The display work queue's part: freeze before the erase, show after END,
- * fall back after a failure. The control callback waits for the first two. */
+ * fall back after a failure; the control callbacks wait for each. One item
+ * at a time: display_busy is set for the item until it has run, so a wait
+ * that timed out leaves the next request refused rather than racing a late
+ * run (the semaphore alone would take that run for the new item's). */
 static K_SEM_DEFINE(display_done, 0, 1);
+static atomic_t display_busy;
 static bool shown;
+
+static void done(void) {
+    atomic_clear(&display_busy);
+    k_sem_give(&display_done);
+}
 
 static void freeze(struct k_work *work) {
     ARG_UNUSED(work);
     beacon_sprite_freeze();
-    k_sem_give(&display_done);
+    done();
 }
 
 static void show(struct k_work *work) {
     ARG_UNUSED(work);
     shown = beacon_sprite_show(room(), ROOM_SIZE);
-    k_sem_give(&display_done);
+    done();
 }
 
 static void fall_back(struct k_work *work) {
     ARG_UNUSED(work);
     beacon_sprite_show(NULL, 0);
+    done();
 }
 
 static K_WORK_DEFINE(freeze_work, freeze);
 static K_WORK_DEFINE(show_work, show);
 static K_WORK_DEFINE(fall_back_work, fall_back);
 
-/* Runs work on the display work queue and waits for it; false on a timeout,
- * after which the work still runs and the semaphore is reset before the
- * next wait. */
+/* Runs work on the display work queue and waits for it: false when an
+ * earlier item is still outstanding or this one does not finish in time. */
 static bool on_display(struct k_work *work) {
+    if (!atomic_cas(&display_busy, 0, 1)) {
+        LOG_WRN("the display work queue still owes an answer");
+        return false;
+    }
     k_sem_reset(&display_done);
     k_work_submit_to_queue(zmk_display_work_q(), work);
     if (k_sem_take(&display_done, K_MSEC(DISPLAY_WAIT_MS)) == 0) {
@@ -272,8 +291,11 @@ static void fill_report(struct bt_conn *conn) {
 
     xfer.source = pack == NULL ? SOURCE_NONE : pack == room() ? SOURCE_ROOM : SOURCE_EMBEDDED;
     /* During a transfer the room's pack is being erased under the frozen
-     * sprite: its name is gone, the picture is still on the screen. */
-    if (pack != NULL && (pack != room() || xfer.state != STATE_RECEIVING)) {
+     * sprite: its name is gone, the picture is still on the screen. After a
+     * failed one the fallback has run (end(), disconnected() wait for it)
+     * unless the display queue stalled; then the name is as unreliable. */
+    if (pack != NULL && (pack != room() || (xfer.state != STATE_RECEIVING &&
+                                              !atomic_get(&display_busy)))) {
         name = sprite_pack_name(pack, &len);
     }
     memset(xfer.name, 0, sizeof(xfer.name));
@@ -286,8 +308,9 @@ static void fill_report(struct bt_conn *conn) {
 
 static ssize_t read_control(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf,
                             uint16_t len, uint16_t offset) {
-    /* A long read comes as several requests; only the first takes a snapshot,
-     * so the parts belong to one report. */
+    /* A long read comes as several requests; the first fills the live
+     * fields (a write between the parts would still show in the later
+     * ones; a sender reads between its own writes). */
     if (offset == 0) {
         fill_report(conn);
     }
@@ -307,6 +330,10 @@ static ssize_t begin(const uint8_t *in, uint16_t len) {
     if (expected == 0 || expected > ROOM_SIZE || xfer.state == STATE_RECEIVING) {
         return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
     }
+    if (!on_display(&freeze_work)) {
+        /* The sprite may still read the room: no erase under it. */
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
     xfer.state = STATE_RECEIVING;
     xfer.result = RESULT_NONE;
     xfer.expected = expected;
@@ -316,7 +343,6 @@ static ssize_t begin(const uint8_t *in, uint16_t len) {
     xfer.flash_err = 0;
     page_fill = 0;
     stored = 0;
-    on_display(&freeze_work);
     const uint32_t start = k_uptime_get_32();
     note_flash(flash_erase(flash, ROOM_OFFSET, ROUND_UP(expected, PAGE_SIZE)));
     xfer.erase_ms = k_uptime_get_32() - start;
@@ -345,7 +371,7 @@ static ssize_t end(uint16_t len) {
     }
     /* The player falls back by itself when it refuses a pack. */
     if (xfer.result != RESULT_SHOWN && xfer.result != RESULT_REJECTED) {
-        k_work_submit_to_queue(zmk_display_work_q(), &fall_back_work);
+        on_display(&fall_back_work);
     }
     LOG_INF("end: %u of %u bytes, flash %u ms (%d), result %u", xfer.received, xfer.expected,
             xfer.store_ms, xfer.flash_err, xfer.result);
@@ -369,7 +395,9 @@ static ssize_t write_control(struct bt_conn *conn, const struct bt_gatt_attr *at
     case OP_BEGIN:
         return begin(in, len);
     case OP_COMMIT:
-        if (xfer.state != STATE_RECEIVING) {
+        /* The flash writes in blocks of 4: a page that ends between them
+         * would put every later write off its alignment. */
+        if (xfer.state != STATE_RECEIVING || page_fill % sizeof(uint32_t) != 0) {
             return BT_GATT_ERR(BT_ATT_ERR_WRITE_REQ_REJECTED);
         }
         flush_page();
@@ -412,7 +440,8 @@ static void connected(struct bt_conn *conn, uint8_t err) {
         return;
     }
     current = bt_conn_ref(conn);
-    /* Before any GATT traffic (header). */
+    /* Scheduled before any GATT traffic (header); the system work queue
+     * stops the scan. */
     beacon_observer_scan_pause(true);
     LOG_INF("connected");
 }
@@ -426,7 +455,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason) {
     current = NULL;
     if (xfer.state == STATE_RECEIVING) {
         end_transfer(RESULT_DISCONNECTED);
-        k_work_submit_to_queue(zmk_display_work_q(), &fall_back_work);
+        on_display(&fall_back_work);
     }
     beacon_observer_scan_pause(false);
 }

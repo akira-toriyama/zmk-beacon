@@ -353,7 +353,8 @@ bool sprite_pack_open(const uint8_t *file, int index, struct sprite_pack_anim *a
         return false;
     }
     uint32_t base = le32(file + SPRITE_PACK_HEADER + 4 * index);
-    if (base % 4 != 0 || base + 16 > total) {
+    /* Written so that no sum can wrap: total is at least the header. */
+    if (base % 4 != 0 || base > total - 16) {
         return false;
     }
     const uint8_t *h = file + base;
@@ -385,7 +386,7 @@ bool sprite_pack_open(const uint8_t *file, int index, struct sprite_pack_anim *a
         struct sprite_pack_picture p;
         sprite_pack_picture(a, i, &p);
         uint32_t off = (uint32_t)(p.stream - file);
-        if (off < pos || off + p.length > total || p.first_row + p.rows > a->height ||
+        if (off < pos || off > total || p.length > total - off || p.first_row + p.rows > a->height ||
             (i == 0 && (p.first_row != 0 || p.rows != a->height))) {
             return false;
         }
@@ -425,6 +426,11 @@ int sprite_pack_decode(const struct sprite_pack_anim *a, uint16_t index, uint8_t
         return -20;
     }
     sprite_pack_picture(a, index, &p);
+    /* Checked at open, read again here: the file may be flash erased since
+     * (0xff rows would run past the canvas). */
+    if (p.first_row + p.rows > a->height) {
+        return -21;
+    }
     memset(canvas, 0, p.first_row * stride);
     memset(canvas + (p.first_row + p.rows) * stride, 0, (a->height - p.first_row - p.rows) * stride);
     return sprite_pack_inflate(p.stream, p.length, canvas + p.first_row * stride, p.rows * stride,
