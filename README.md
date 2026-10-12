@@ -4,10 +4,11 @@ A [ZMK](https://zmk.dev) module for the **Prospector Dongle**: a Seeed XIAO
 nRF52840 with a Waveshare 1.69" 240x280 LCD (the
 [beekeeb pre-soldered Prospector](https://shop.beekeeb.com/products/pre-soldered-prospector-zmk-dongle))
 that sits next to a keyboard and shows its battery, received over BLE from the
-keyboard's status advertisement. It only listens: it never advertises, pairs
-or connects, and its scan is passive. Its USB-C carries power and one serial
-port, used to reflash it, to take a picture of its screen and, in a logging
-build, for its log.
+keyboard's status advertisement, under a sprite that a Mac can swap over BLE.
+It listens passively for the keyboard and advertises connectably for the
+sprite; it never pairs. Its USB-C carries power and one serial port, used to
+reflash it, to take a picture of its screen and, in a logging build, for its
+log.
 
 It is built for the Cyboard Imprint through its Imprint Dongle
 ([akira-toriyama/canon](https://github.com/akira-toriyama/canon)). Both ends
@@ -24,7 +25,9 @@ observer and shows the keyboard's battery (on the Prospector Dongle since
 2026-09-26). The broadcaster sends that advertisement from the Imprint Dongle
 on a second advertising set next to ZMK's own (on hardware since 2026-09-27).
 A local build can embed a GIF sprite that plays above the HP bar and steps
-with the key presses on the keyboard (on hardware since 2026-09-29).
+with the key presses on the keyboard (on hardware since 2026-09-29), and any
+build takes a new sprite over BLE into flash and plays it without a reboot
+(on hardware since 2026-10-12).
 
 ## The screen
 
@@ -49,13 +52,22 @@ key, lights it at once. Only the keyboard's key presses count, so the screen
 also goes dark while only a pointing device is in use, and five minutes after
 the Prospector Dongle started when no key press has reached it by then.
 
+The name row shows the name of the sprite playing: the one a received pack
+carries, or the embedded sprite's (`CONFIG_BEACON_SPRITE_NAME`). The row
+exists in every build that can receive a sprite, empty until one plays, and
+in a build with a named embedded sprite.
+
 ## The sprite
 
-With `CONFIG_BEACON_SPRITE_GIF="<absolute path>"` the build converts a GIF
-into a sprite pack (below), embeds that, and the screen plays it above the HP
-bar: centred, standing on the bar, and scaled to the largest size of its own
-proportions that fits the space above it, 2 px in from the panel's top and
-sides (a 90x90 px GIF shows at 198x198, or 180x180 above a bar with a name).
+The screen plays a sprite pack (below) above the HP bar: centred, standing on
+the bar, and scaled to the largest size of its own proportions that fits the
+space above it, 2 px in from the panel's top and sides (a 90x90 px GIF shows
+at 198x198, or 180x180 above a bar with a name row). The pack comes from one
+of two places: the sprite room in flash, where a Mac put it over BLE (next
+section), or the image, when `CONFIG_BEACON_SPRITE_GIF="<absolute path>"`
+made the build convert a GIF and embed the pack. At boot the room's pack
+plays when it is whole, else the embedded one, else nothing until a pack
+arrives.
 
 While nobody types it plays at three quarters of the GIF's own tempo and stops
 only while the screen is off. While the keyboard is typed on it runs on the key
@@ -99,7 +111,40 @@ Limits:
   `--sprite-name <text>` adds the name (printable ASCII without a double quote,
   a backslash or `??`); it names the GIF's subject, so it stays out of
   repositories like the GIF, and the script prints neither. CI and the release
-  build without a sprite or a name.
+  build without an embedded sprite or a name: that image shows the sprite
+  received last, or none.
+- A received pack has the same limits, checked when it is opened: one that
+  exceeds the box or the pool is refused, and the report says so.
+
+### Swapping the sprite over BLE
+
+With `CONFIG_BEACON_SPRITE_RECEIVE` (on by default for the shield; `=n` in a
+consumer's `prospector.conf` turns it off) the device advertises connectably
+as `Prospector Dongle` about once a second and offers one GATT service through
+which a central writes a sprite pack into the sprite room, a 384 KiB flash
+partition the shield overlay cuts from the code partition; every pack of the
+user's collection fits (the largest is 206 KB). The new sprite plays as soon
+as the transfer ends, named as the pack says, and plays again after a reboot
+or a reflash (the UF2 bootloader leaves the room alone). During the transfer
+the last picture stays on the screen; a transfer that fails, or a pack that
+does not fit the box or the LVGL pool, brings the embedded sprite back, or no
+sprite. The keyboard's status is not received while a central is connected,
+and the screen greys only after a minute without it.
+
+There is no pairing and no encryption: anyone in range can connect and write
+the room, and nothing else. Timings on hardware (2026-10-12): a 206 KB pack
+took 20 s from the first command to the picture, 11 s of it erasing flash and
+9 s transferring at 24 kB/s; a 7 KB pack took 0.8 s.
+
+The protocol, for a sender, is the header of `src/ble_receiver.c`: a control
+characteristic takes BEGIN with the pack's length (the device erases the room
+and answers), COMMIT after every 4 KiB written to the data characteristic
+(the device writes the page to flash and answers), and END (the device checks
+the pack and shows it, and its report says how it went); the control
+characteristic's read is that report, with the name of the sprite playing.
+The device asks the central for a 15 ms connection interval itself, a second
+into the connection; a Mac applies it within another second, and a sender
+that waits for it (the report shows the interval) transfers at full speed.
 
 ### The sprite pack
 
@@ -107,9 +152,9 @@ Limits:
 view, into a sprite pack (`.spk`): the distinct pictures the GIF shows, packed
 and deflated against the first, with the order and delays, the name, a length
 and a CRC-32. It is what the player plays, embedded by the build from
-`CONFIG_BEACON_SPRITE_GIF`, and the unit of a sprite swapped over the air
-without a reboot; [docs/sprite-pack.md](docs/sprite-pack.md) explains the
-format and what was measured. Standard library Python 3.9 or
+`CONFIG_BEACON_SPRITE_GIF`, and the unit a sender writes over BLE;
+[docs/sprite-pack.md](docs/sprite-pack.md) explains the format and what was
+measured. Standard library Python 3.9 or
 later:
 
 ```sh
@@ -126,17 +171,18 @@ as above; the tool prints sizes only.
 | Path | What |
 | --- | --- |
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
-| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery and the key press count from the status payload. |
+| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery and the key press count from the status payload. The scan pauses while the sprite receiver has a central connected. |
+| `src/ble_receiver.c` | `CONFIG_BEACON_SPRITE_RECEIVE`: advertises connectably, takes a sprite pack over one GATT service into the sprite room (the shield overlay's `sprite_partition`, 384 KiB), shows it, and gives it back at boot. The protocol is its header. |
 | `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press refreshes the payload for the next advertising event. |
 | `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name and the key press counter are used. |
-| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that the GIF fits. |
-| `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with `CONFIG_BEACON_SPRITE_NAME`, the name on a second row; and the mapping of both halves' batteries to its one level. |
-| `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, and its own nearest-neighbour draw into the display buffer; and the pack's reader and inflater, plain C that also compiles on the host. |
+| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that an embedded GIF fits. |
+| `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on a second row; and the mapping of both halves' batteries to its one level. |
+| `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, and its own nearest-neighbour draw into the display buffer; it plays the room's pack, the embedded one or a received one, and names the HP bar. The pack's reader and inflater are plain C that also compiles on the host. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
 | `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite stands still. |
 | `src/backlight.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) at boot, before LVGL and ZMK's display start, and sets it for `src/screen_off.c`. |
-| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SCREEN_OFF_AFTER_S`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_STATUS_BROADCAST`. |
+| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SCREEN_OFF_AFTER_S`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_SPRITE_RECEIVE`, `BEACON_STATUS_BROADCAST`. |
 
 ## Flashing
 
@@ -197,7 +243,8 @@ include:
 ```
 
 `config/prospector.conf` in the consuming repository overrides any line of the
-shield's own `prospector.conf`.
+shield's own `prospector.conf`; `CONFIG_BEACON_SPRITE_RECEIVE=n` there builds
+the observer-only device that neither advertises nor connects.
 
 On the keyboard side, the split central's config (canon:
 `config/imprint_dongle.conf`) turns the broadcaster on:

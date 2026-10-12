@@ -51,6 +51,11 @@ struct sprite_pack_picture {
  * fits in avail bytes, else 0 animations. */
 int sprite_pack_count(const uint8_t *file, size_t avail, uint32_t *total);
 
+/* True when file holds a whole, intact pack: a sound header whose total
+ * length fits in avail bytes and whose CRC-32 matches; *total its length.
+ * Bit by bit over the file: about 150 ms for 200 KB on the nRF52840. */
+bool sprite_pack_valid(const uint8_t *file, size_t avail, uint32_t *total);
+
 /* The file's name: at most SPRITE_PACK_NAME_LEN bytes, not NUL-terminated
  * before that; *len its length. */
 const char *sprite_pack_name(const uint8_t *file, size_t *len);

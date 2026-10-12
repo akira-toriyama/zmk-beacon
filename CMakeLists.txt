@@ -8,6 +8,8 @@ if(CONFIG_SHIELD_PROSPECTOR)
   target_sources(app PRIVATE src/backlight.c src/status_observer.c)
   target_sources_ifdef(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM app PRIVATE src/prospector_screen.c src/hp_bar.c)
   target_sources_ifdef(CONFIG_BEACON_SCREEN_OFF app PRIVATE src/screen_off.c)
+  target_sources_ifdef(CONFIG_BEACON_SPRITE app PRIVATE src/sprite.c src/sprite_pack.c)
+  target_sources_ifdef(CONFIG_BEACON_SPRITE_RECEIVE app PRIVATE src/ble_receiver.c)
 endif()
 
 target_sources_ifdef(CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD app PRIVATE src/bootloader_on_1200_baud.c)
@@ -25,8 +27,10 @@ target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broad
 # canvas size goes to the sources as BEACON_SPRITE_GIF_W/_H, and
 # prospector_screen.c asserts that it fits the sprite box it lays out. The
 # name goes into the pack too, cut to what the HP bar shows; no message here
-# echoes the path or the name.
-if(CONFIG_BEACON_SPRITE)
+# echoes the path or the name. A build without a GIF (CI, the release) has no
+# embedded pack: with CONFIG_BEACON_SPRITE_RECEIVE the player then waits for a
+# received one, whose size is checked at run time (src/sprite.c).
+if(CONFIG_BEACON_SPRITE_EMBEDDED)
   set(sprite_gif "${CONFIG_BEACON_SPRITE_GIF}")
   set(sprite_pack_py "${CMAKE_CURRENT_SOURCE_DIR}/tools/sprite_pack.py")
   set(sprite_bin "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite.spk")
@@ -78,5 +82,4 @@ if(CONFIG_BEACON_SPRITE)
   set(sprite_inc "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite_pack.inc")
   generate_inc_file_for_target(app "${sprite_bin}" "${sprite_inc}")
   target_include_directories(app PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-  target_sources(app PRIVATE src/sprite.c src/sprite_pack.c)
 endif()

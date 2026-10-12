@@ -49,4 +49,53 @@ config BEACON_BOOTLOADER_ON_1200_BAUD
 config BEACON_SCREEN_DUMP
     default y
 
+config BEACON_SPRITE_RECEIVE
+    default y
+
+# The sprite receiver's link (src/ble_receiver.c). Measured on hardware
+# 2026-10-05 (canon t-fvqx) with a 122 KB transfer: the controller's defaults
+# (27 byte PDUs, one RX buffer, the central's 30 ms interval) took 28 s; 251
+# byte PDUs with ten RX buffers at a 15 ms interval, the scan stopped, 1.6 s.
+# The data length and the L2CAP MTU must follow the ACL buffer size, or the
+# host keeps 27 byte PDUs. The RX stack: the control callbacks erase and write
+# flash on that thread. The preferred parameters are what the device asks the
+# central for, BT_CONN_PARAM_UPDATE_TIMEOUT after the connection: 15 ms is
+# Apple's floor, and 4 s of supervision timeout rides out a flash erase.
+if BEACON_SPRITE_RECEIVE
+
+config BT_BUF_ACL_RX_SIZE
+    default 251
+
+config BT_BUF_ACL_TX_SIZE
+    default 251
+
+config BT_L2CAP_TX_MTU
+    default 247
+
+config BT_CTLR_DATA_LENGTH_MAX
+    default 251
+
+config BT_CTLR_RX_BUFFERS
+    default 10
+
+config BT_RX_STACK_SIZE
+    default 2048
+
+config BT_PERIPHERAL_PREF_MIN_INT
+    default 12
+
+config BT_PERIPHERAL_PREF_MAX_INT
+    default 12
+
+config BT_PERIPHERAL_PREF_LATENCY
+    default 0
+
+config BT_PERIPHERAL_PREF_TIMEOUT
+    default 400
+
+config BT_CONN_PARAM_UPDATE_TIMEOUT
+    default 1000
+
+endif # BEACON_SPRITE_RECEIVE
+
 endif

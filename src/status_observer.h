@@ -33,3 +33,8 @@ struct beacon_status {
 };
 
 void beacon_status_get(struct beacon_status *out);
+
+/* Stops the scan (true) or starts it again (false), on the system work queue:
+ * the sprite receiver pauses it for a connection (ble_receiver.c). While
+ * paused the status goes stale: nothing else feeds it. */
+void beacon_observer_scan_pause(bool pause);
