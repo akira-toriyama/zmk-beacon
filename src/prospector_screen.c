@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  *
  * ZMK custom status screen for the prospector shield: the HP bar (hp_bar.h)
- * along the bottom and, with CONFIG_BEACON_SPRITE, the GIF sprite (sprite.h)
+ * along the bottom and, with CONFIG_BEACON_SPRITE, the sprite (sprite.h)
  * above it, filling the space between the panel's top edge and the bar,
  * SPRITE_INSET_PX in from the edges and standing on the bar.
  *
@@ -65,9 +65,10 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE),
  * often, so a long run's log shows the display thread alive. */
 #define LOG_PERIOD_MS 60000
 
-#if IS_ENABLED(CONFIG_BEACON_SPRITE)
-/* CMakeLists.txt passes the GIF's size; sprite.c scales it up, never down.
- * The messages avoid apostrophes, which GCC prints escaped. */
+#if IS_ENABLED(CONFIG_BEACON_SPRITE_EMBEDDED)
+/* CMakeLists.txt passes the GIF's size; sprite.c scales it up, never down,
+ * and checks a received pack against the same box at run time. The messages
+ * avoid apostrophes, which GCC prints escaped. */
 BUILD_ASSERT(BEACON_SPRITE_GIF_W <= SPRITE_BOX_W,
              "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box: the panel width less "
              "SPRITE_INSET_PX on each side (prospector_screen.c)");
@@ -104,6 +105,9 @@ lv_obj_t *zmk_display_status_screen(void) {
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
+    /* The HP bar first: the sprite names it, and moves itself to the front
+     * of the screen's children (sprite.c). */
+    beacon_hp_bar_create(screen, SCREEN_W);
 #if IS_ENABLED(CONFIG_BEACON_SPRITE)
     const lv_area_t box = {
         .x1 = SPRITE_INSET_PX,
@@ -113,8 +117,6 @@ lv_obj_t *zmk_display_status_screen(void) {
     };
     beacon_sprite_create(screen, &box);
 #endif
-
-    beacon_hp_bar_create(screen, SCREEN_W);
     lv_timer_create(refresh, REFRESH_MS, NULL);
 #if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
     beacon_screen_off_start();

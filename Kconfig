@@ -90,7 +90,9 @@ config BEACON_SPRITE_GIF
       top edge and the bar: at SPEED_PCT of its own tempo (src/sprite.c)
       while nobody types, and stepped by the key presses the keyboard's
       broadcaster counts while it is typed on (src/sprite.c). Empty: no
-      sprite, which is what CI and the release build.
+      embedded sprite, which is what CI and the release build; with
+      BEACON_SPRITE_RECEIVE the screen then shows the pack received last, or
+      no sprite until one arrives.
 
       The build fails when the GIF does not fit that space at 1x
       (src/prospector_screen.c), or when the player's share of the LVGL
@@ -99,29 +101,66 @@ config BEACON_SPRITE_GIF
       (CMakeLists.txt; the prospector shield's default grows with a sprite).
       Local builds: scripts/build.sh --sprite <gif> [--sprite-name <text>].
 
-config BEACON_SPRITE
+config BEACON_SPRITE_EMBEDDED
     bool
     default y if BEACON_SPRITE_GIF != ""
+    help
+      Set when BEACON_SPRITE_GIF names a file: the image carries a sprite
+      pack, which the screen shows when the sprite room holds none
+      (BEACON_SPRITE_RECEIVE) and falls back to after a failed transfer.
+
+config BEACON_SPRITE_RECEIVE
+    bool "Receive a sprite pack over BLE into flash and play it"
+    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM && BT
+    select BT_PERIPHERAL
+    select FLASH
+    select FLASH_MAP
+    select SOC_FLASH_NRF_PARTIAL_ERASE if HAS_HW_NRF_NVMC_PE
+    help
+      The Prospector Dongle advertises connectably under BT_DEVICE_NAME and
+      offers one GATT service through which a central writes a sprite pack
+      (tools/sprite_pack.py) into the sprite room, a 384 KiB flash
+      partition the shield overlay cuts from the code partition; the screen
+      then plays that pack, named as the pack says, without a reboot, and at
+      the next boot plays it again when it is whole (src/ble_receiver.c, its
+      header is the protocol). No pairing and no encryption: anyone in range
+      can connect and write the room, and nothing else. On by default for the
+      prospector shield; a consumer's prospector.conf turns it off with =n.
+
+      Costs on the nRF52840 against the observer-only build (2026-10-12):
+      about 80 KB of flash and 40 KB of RAM, 16 KB of it the LVGL pool a
+      sprite build grows (Kconfig.defconfig), the rest BT_PERIPHERAL, the
+      251 byte ACL buffers and the BT RX stack the shield's Kconfig.defconfig
+      sets, and one flash page as the write buffer. The observer's scan stops
+      while a central is connected (seconds a day). The flash erase needs
+      SOC_FLASH_NRF_PARTIAL_ERASE (selected; a page erase without it halts
+      the CPU, and a long erase drops the connection); a SoC without partial
+      erase fails src/ble_receiver.c's BUILD_ASSERT.
+
+config BEACON_SPRITE
+    bool
+    default y if BEACON_SPRITE_EMBEDDED || BEACON_SPRITE_RECEIVE
     select SYS_HEAP_RUNTIME_STATS if LOG
     help
-      Set when BEACON_SPRITE_GIF names a file. The sprite decodes and draws
-      itself (src/sprite.c, src/sprite_pack.c); no LVGL image or GIF library
-      is built. With logging on, the sprite's minute line reports the LVGL
-      pool's allocated and peak bytes, the numbers the pool size is chosen
-      from.
+      Set when the image plays a sprite: embedded, received, or both. The
+      sprite decodes and draws itself (src/sprite.c, src/sprite_pack.c); no
+      LVGL image or GIF library is built. With logging on, the sprite's
+      minute line reports the LVGL pool's allocated and peak bytes, the
+      numbers the pool size is chosen from.
 
 config BEACON_SPRITE_NAME
     string "Name of the sprite, shown under the HP bar (empty = none)"
     default ""
     help
-      The name is a second row of the HP bar's box, at the left in unscii
+      Written into the embedded sprite pack (BEACON_SPRITE_GIF), from which
+      the HP bar shows it on a second row of its box, at the left in unscii
       16: the box grows by that row and the sprite's space above it shrinks
       (src/hp_bar.h). 15 glyphs fit; a longer name is cut. Printable ASCII
       only: the font has no other glyphs, a double quote or a backslash would
       need Kconfig escaping, and "??" would be a C trigraph in autoconf.h.
       Empty: no second row, the screen of CI and the release build, which
-      have no sprite. The HP bar shows the name only with a sprite
-      (src/hp_bar.h).
+      have no sprite. A received pack brings its own name
+      (BEACON_SPRITE_RECEIVE), and that build always has the row.
 
       No dependency on purpose: kconfig.py prints the value of any assigned
       symbol whose value did not take, so a dependency on BEACON_SPRITE
@@ -134,6 +173,13 @@ config BEACON_SPRITE_NAME
       configure step, whose command line west prints, shows only the
       fragment's path; canon derives it from the GIF's file name with its
       assets/sprite-name.sh).
+
+config BEACON_HP_BAR_NAME_ROW
+    bool
+    default y if BEACON_SPRITE && (BEACON_SPRITE_NAME != "" || BEACON_SPRITE_RECEIVE)
+    help
+      Set when the HP bar's box has the name row: an embedded sprite with a
+      name, or the receiver, whose packs name themselves (src/hp_bar.h).
 
 config BEACON_STATUS_BROADCAST
     bool "Broadcast the keyboard's status on a second advertising set"

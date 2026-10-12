@@ -7,8 +7,9 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
 
 - A ZMK module for both ends of the status advertisement: the **Prospector
   Dongle** (shield `prospector`: a BLE observer showing the keyboard's battery as
-  an HP bar, optionally under a GIF sprite) and the **Imprint Dongle**'s
-  broadcaster (`CONFIG_BEACON_STATUS_BROADCAST`). Device names follow canon's
+  an HP bar under a sprite, which a Mac swaps over BLE into the sprite room,
+  `CONFIG_BEACON_SPRITE_RECEIVE`) and the **Imprint Dongle**'s broadcaster
+  (`CONFIG_BEACON_STATUS_BROADCAST`). Device names follow canon's
   [docs/glossary.md](https://github.com/akira-toriyama/canon/blob/main/docs/glossary.md):
   Cyboard Imprint (the halves), Imprint Dongle (the split central), Prospector
   Dongle; never "XIAO dongle" or "scanner".
@@ -115,12 +116,23 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   failures, battery L/R, N keystrokes, in 60 s`. Healthy: `advertising`, 0
   failed, 0 start failures (hardware 2026-09-27); its keystrokes and the
   observer's grow alike (50 and 50 in a minute, 2026-09-29).
-- Once: `scanning`, `battery left L right R` (on change), `sprite WxH, N bpp,
-  N colours, N pictures, N frames, side N of N, dictionary in N us, N bytes of
-  the lvgl pool for canvas and dictionary` and `sprite as WxH (N.NNx) from a N
-  byte pack, N bytes of the lvgl pool` (measured),
-  `advertising every 200 ms`, `<uart>: 1200 baud touch, rebooting into the bootloader`,
-  `screen dump: N bands, N bytes in N ms` (after each `shot`).
+- Receiver (Prospector Dongle, per transfer): `connected`, `scan paused (0)`,
+  `parameters: interval 12 latency 0 timeout 400` (about a second later: the
+  central took 15 ms), `begin: N bytes expected, N pages erased in N ms (0)`
+  (about 220 ms a page), `end: N of N bytes, flash N ms (0), result 1`
+  (`result`: 1 shown, 2 short, 3 not a pack, 4 refused by the player, 5 flash
+  error, 6 disconnected; the sprite's `sprite WxH ...` and `sprite as ...` lines
+  come between), `disconnected: reason 0x13, N of N bytes`, `scanning`,
+  `advertising, connectable, every 1022 ms`. A 206 KB pack: erase 11.1 s,
+  transfer 8.5 s, 24 kB/s (hardware 2026-10-12).
+- Once: `scanning`, `advertising, connectable, every 1022 ms`, `sprite room: a
+  whole pack` or `no pack`, `battery left L right R` (on change), `sprite WxH,
+  N bpp, N colours, N pictures, N frames, side N of N, dictionary in N us, N
+  bytes of the lvgl pool for canvas and dictionary` and `sprite as WxH (N.NNx)
+  from a N byte pack` (also after each received pack; `sprite: none` when
+  nothing plays), `advertising every 200 ms` (the broadcaster), `<uart>: 1200
+  baud touch, rebooting into the bootloader`, `screen dump: N bands, N bytes
+  in N ms` (after each `shot`).
 
 ## Invariants
 
@@ -164,8 +176,27 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   `config/prospector.conf` and `BEACON_SPRITE_FILL`, 2026-09-29).
 - Keep `CONFIG_ZMK_BLE=n` (shield conf): it removes ZMK's `bt_enable()` callers
   and its connectable advertisement; the observer brings Bluetooth up and scans
-  passively. Never scan with a `BT_LE_SCAN_*` helper: they set `FILTER_DUPLICATE`
-  and each address is reported once ([src/status_observer.c](src/status_observer.c)).
+  passively, and the sprite receiver advertises on its own
+  ([src/ble_receiver.c](src/ble_receiver.c)). Never scan with a `BT_LE_SCAN_*`
+  helper: they set `FILTER_DUPLICATE` and each address is reported once
+  ([src/status_observer.c](src/status_observer.c)).
+- The receiver erases and writes flash only from its control callbacks, while
+  the central waits for a response: a page written from the data callback,
+  with more data arriving, hung the device (2026-10-05, twice, not diagnosed).
+  Keep `SOC_FLASH_NRF_PARTIAL_ERASE` (the option selects it, the file asserts
+  it): a blocking erase of 51 pages (4.4 s) outlasted the 4 s supervision
+  timeout (2026-10-06); sliced, the same erase takes 11 s and the link holds.
+- The sprite room is `sprite_partition` in the shield overlay, 0x80000-0xdffff
+  (384 KiB, above it the UF2 bootloader's staging), cut from `code_partition`,
+  which ends at 0x80000 (356 KiB): the linker stops an image that would reach
+  the room. A logging sprite build with the receiver is at 96% of it
+  (2026-10-12); if a ZMK bump overflows, a logging build can drop the embedded
+  sprite before the room shrinks. The player reads the room in place
+  (memory-mapped flash), so BEGIN freezes it before the erase
+  ([src/sprite.c](src/sprite.c)).
+- Change the receiver's protocol or report only with a new `REPORT_VERSION`
+  ([src/ble_receiver.c](src/ble_receiver.c)): the sender (canon t-mxb7) reads
+  it first.
 - Touch LVGL only on ZMK's display work queue (`LV_USE_OS=0`): the scan callback
   runs on the BT RX queue and only copies under a spinlock; the screen reads the
   state from an `lv_timer` ([src/prospector_screen.c](src/prospector_screen.c)).
@@ -190,12 +221,14 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   ([src/sprite.c](src/sprite.c)).
 - Size the LVGL pool in the shield's
   [Kconfig.defconfig](boards/shields/prospector/Kconfig.defconfig) (64 KiB with a
-  sprite, 48 KiB without), never in a `.conf`: a conf line, the consumer's too,
-  fixes one size for both. The player keeps two bytes a pixel at most (its
-  canvas and dictionary); the 88 KiB of the gifdec player took a logging sprite
-  build to 89.71% RAM. [CMakeLists.txt](CMakeLists.txt) refuses a GIF whose
-  player does not fit, [src/prospector_screen.c](src/prospector_screen.c) one
-  larger than the box.
+  sprite, the receiver included, 48 KiB without), never in a `.conf`: a conf
+  line, the consumer's too, fixes one size for both. The player keeps two bytes
+  a pixel at most (its canvas and dictionary); the 88 KiB of the gifdec player
+  took a logging sprite build to 89.71% RAM. [CMakeLists.txt](CMakeLists.txt)
+  refuses an embedded GIF whose player does not fit,
+  [src/prospector_screen.c](src/prospector_screen.c) one larger than the box;
+  a received pack beyond either is refused when opened, and the embedded
+  sprite, or none, comes back.
 - The panel's SPI runs at 32 MHz on SPIM3 with high drive on its pins (overlay),
   above the ST7789V data sheet's 15 MHz write cycle, as 16 MHz already was: a
   render takes about 43 ms against 63 at 16 MHz (hardware 2026-09-28). If the

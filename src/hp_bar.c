@@ -22,11 +22,13 @@
  * (LV_USE_THEME_* off), so every style is set here.
  */
 
+#include <string.h>
+
 #include <lvgl.h>
+#include <zephyr/sys/util.h>
 
 #include "hp_bar.h"
 
-#define NAMED (sizeof(BEACON_HP_BAR_NAME) > 1)
 #define BORDER_PX 2
 #define ROW_Y 6
 #define NAME_Y 24
@@ -41,7 +43,7 @@
 #define VALUE_W (VALUE_CHARS * GLYPH_W)
 /* Whole cells from LABEL_X that stay inside the 252 px content width; a
  * longer name is cut after them, off the border's corner. */
-#define NAME_GLYPHS 15
+#define NAME_GLYPHS BEACON_HP_BAR_NAME_GLYPHS
 #define YELLOW_BELOW 50
 #define RED_BELOW 20
 
@@ -49,9 +51,10 @@ static struct {
     lv_obj_t *label;
     lv_obj_t *bar;
     lv_obj_t *value;
-    /* NULL without a name. */
+    /* NULL without the name row. */
     lv_obj_t *name;
     char value_text[VALUE_CHARS + 1];
+    char name_text[NAME_GLYPHS + 1];
     /* 0 = no reading. */
     uint8_t shown;
     bool dim;
@@ -153,17 +156,28 @@ void beacon_hp_bar_create(lv_obj_t *parent, int32_t screen_w) {
     set_value(0);
 
     hp.name = NULL;
-    if (NAMED) {
+    if (BEACON_HP_BAR_NAME_ROW) {
         /* One row of NAME_GLYPHS cells; the user accepted that a longer
-         * name is cut (2026-09-28). */
+         * name is cut (2026-09-28). Empty until a pack names itself. */
         hp.name = lv_label_create(box);
         lv_obj_set_style_text_font(hp.name, &lv_font_unscii_16, 0);
         lv_obj_set_style_text_color(hp.name, name_color(hp.dim), 0);
         lv_label_set_long_mode(hp.name, LV_LABEL_LONG_MODE_CLIP);
         lv_obj_set_width(hp.name, NAME_GLYPHS * GLYPH_W);
-        lv_label_set_text_static(hp.name, BEACON_HP_BAR_NAME);
+        lv_label_set_text_static(hp.name, hp.name_text);
         lv_obj_set_pos(hp.name, LABEL_X, NAME_Y);
     }
+}
+
+void beacon_hp_bar_set_name(const char *name, size_t len) {
+    if (hp.name == NULL) {
+        return;
+    }
+    len = MIN(len, (size_t)NAME_GLYPHS);
+    memcpy(hp.name_text, name, len);
+    hp.name_text[len] = '\0';
+    /* Set again: the label measures the text when it is set. */
+    lv_label_set_text_static(hp.name, hp.name_text);
 }
 
 bool beacon_hp_bar_show(const struct beacon_status *now, bool fresh) {

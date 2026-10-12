@@ -2,10 +2,11 @@
 
 A sprite pack (`.spk`) holds a sprite animation as the distinct pictures it
 shows and the order it shows them in, for the Prospector Dongle to play from
-flash: embedded at build time (`src/sprite.c` plays it) or, later, received
-over Bluetooth into a flash room and swapped without a reboot. `tools/sprite_pack.py` writes one from a
-GIF (and a second GIF for the back view), checks one against its GIFs, and
-prints one's sizes; its docstring is the byte layout. This page is the why.
+flash: embedded at build time, or received over BLE into the sprite room and
+swapped without a reboot (`src/sprite.c` plays either, `src/ble_receiver.c`
+receives). `tools/sprite_pack.py` writes one from a GIF (and a second GIF for
+the back view), checks one against its GIFs, and prints one's sizes; its
+docstring is the byte layout. This page is the why.
 
 ## Why not the GIF itself
 

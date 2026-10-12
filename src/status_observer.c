@@ -7,8 +7,9 @@
  * which status_broadcaster.c sends from canon's Imprint Dongle. This file owns
  * the Bluetooth bring-up: CONFIG_ZMK_BLE=n compiles out ZMK's bt_enable()
  * callers (ble.c, and split/bluetooth/peripheral.c through ZMK_SPLIT_BLE) and
- * with them the connectable advertisement, so the device never advertises,
- * and the scan is passive, so it transmits nothing at all.
+ * with them ZMK's connectable advertisement; the scan is passive and
+ * transmits nothing. The sprite receiver (ble_receiver.c) advertises on its
+ * own and pauses the scan while a central is connected.
  *
  * Only the prefix, the version byte, both halves' battery bytes and the
  * keystroke counter are read. 0 = no reading. No charging state is carried.
@@ -77,6 +78,8 @@ static uint8_t key_restart_jump;
 
 /* Valid payloads since the last stats line (logging builds only). */
 static atomic_t payload_count;
+/* The receiver's request to keep the scan off (beacon_observer_scan_pause). */
+static atomic_t scan_paused;
 
 void beacon_status_get(struct beacon_status *out) {
     k_spinlock_key_t key = k_spin_lock(&status_lock);
@@ -176,6 +179,14 @@ static K_WORK_DELAYABLE_DEFINE(start_scan_work, start_scan);
 static void start_scan(struct k_work *work) {
     ARG_UNUSED(work);
 
+    if (atomic_get(&scan_paused)) {
+        /* Not inside LOG_INF(): without CONFIG_LOG its arguments are not evaluated. */
+        int stop_err = bt_le_scan_stop();
+        LOG_INF("scan paused (%d)", stop_err);
+        ARG_UNUSED(stop_err);
+        return;
+    }
+
     int err = bt_le_scan_start(&scan_param, scan_cb);
     if (err == 0 || err == -EALREADY) {
         LOG_INF("scanning");
@@ -184,6 +195,11 @@ static void start_scan(struct k_work *work) {
 
     LOG_ERR("scan start failed (%d), retrying in %d ms", err, SCAN_RETRY_MS);
     k_work_schedule(&start_scan_work, K_MSEC(SCAN_RETRY_MS));
+}
+
+void beacon_observer_scan_pause(bool pause) {
+    atomic_set(&scan_paused, pause);
+    k_work_reschedule(&start_scan_work, K_NO_WAIT);
 }
 
 static int status_observer_init(void) {

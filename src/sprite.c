@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: MIT
  *
  * The status screen's sprite: a sprite pack (sprite_pack.h; the GIF named by
- * CONFIG_BEACON_SPRITE_GIF is converted at build time, CMakeLists.txt),
- * decoded picture by picture into a packed canvas and drawn by blit() straight
- * into the display buffer, scaled by nearest neighbour to fill its box. An own
+ * CONFIG_BEACON_SPRITE_GIF is converted at build time, CMakeLists.txt, and the
+ * receiver brings others into the sprite room, ble_receiver.c), decoded
+ * picture by picture into a packed canvas and drawn by blit() straight into
+ * the display buffer, scaled by nearest neighbour to fill its box. An own
  * player and an own draw rather than lv_gif and lv_image: the widget
  * invalidates on every frame even when nothing changed, has no tempo control,
  * and its software transform cost about 70 of the 105 ms a render of the 2x
@@ -16,11 +17,18 @@
  * 16 KiB LZW cache.
  *
  * - The pack is memory that stays readable and unchanged while shown: the
- *   embedded array. The pool holds one block for the animation with the
- *   largest canvas in the file: that canvas (stride x height bytes, 4 or 8
- *   bits a pixel) and the decoded picture 0, the dictionary every other
- *   picture inflates against. The front animation plays; a back one in the
- *   file waits for its switch.
+ *   embedded array, or the room's flash until the receiver erases it (it
+ *   freezes the sprite first). At creation the room's pack comes first when
+ *   it is whole, then the embedded one; a received pack replaces either,
+ *   and a failed transfer falls back to the embedded one or to no sprite.
+ *   The pool holds one block for the animation with the largest canvas in
+ *   the file: that canvas (stride x height bytes, 4 or 8 bits a pixel) and
+ *   the decoded picture 0, the dictionary every other picture inflates
+ *   against. The front animation plays; a back one in the file waits for
+ *   its switch. The pack's name goes to the HP bar (hp_bar.h).
+ * - The sprite's object and timer exist while a pack is open: a build
+ *   without an embedded pack shows nothing until one is received, and
+ *   malformed data removes the sprite until the next pack.
  * - Every frame names a picture, so the player never decodes to move: the
  *   tempo advances the frame index for the time elapsed and decodes once,
  *   the frame that is due now, when its picture is not the canvas's. A frame
@@ -48,10 +56,13 @@
  *   screen's first child, and the screen renders through no layer. A pixel's
  *   value indexes lut (RGB565, built from the palette); 0 is skipped and
  *   shows the screen's black.
- * - Display work queue only (LV_USE_OS=0): creation, the timer and the draw
- *   event.
- * - A picture that does not inflate: the sprite is removed and its pool
- *   memory freed; the rest of the screen stays.
+ * - Frozen (beacon_sprite_freeze(), the receiver about to erase the room):
+ *   the canvas stays as it is and nothing is decoded until the next
+ *   beacon_sprite_show().
+ * - Display work queue only (LV_USE_OS=0): creation, the timer, the draw
+ *   event, show and freeze.
+ * - A picture that does not inflate (foreign or erased flash): the sprite
+ *   is removed and its pool memory freed; the rest of the screen stays.
  */
 
 #include <stdint.h>
@@ -63,6 +74,10 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 
+#if IS_ENABLED(CONFIG_BEACON_SPRITE_RECEIVE)
+#include "ble_receiver.h"
+#endif
+#include "hp_bar.h"
 #if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
 #include "screen_off.h"
 #endif
@@ -100,12 +115,16 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
 #define SPEED_FULL_PCT 100
 #define LOG_PERIOD_MS 60000
 
+#if IS_ENABLED(CONFIG_BEACON_SPRITE_EMBEDDED)
 static const uint8_t sprite_embedded[] = {
 #include <beacon_sprite_pack.inc>
 };
+#endif
 
 static struct {
+    /* The pack being played, NULL while none is open, and its length. */
     const uint8_t *file;
+    uint32_t total;
     struct sprite_pack_anim anim;
     uint8_t side;
     uint8_t sides;
@@ -121,7 +140,9 @@ static struct {
     uint16_t shown;
     /* The current frame's delay at 100 %. */
     uint32_t frame_ms;
+    lv_obj_t *screen;
     lv_area_t box;
+    /* Both exist while a pack is open. */
     lv_obj_t *obj;
     lv_timer_t *timer;
     /* lv_tick in 1/SUB_PER_MS ms: when the current frame became due. */
@@ -129,6 +150,7 @@ static struct {
     uint32_t keys_seen;
     uint32_t frames_due;
     bool render_pending;
+    bool frozen;
     uint32_t decoded;
     uint32_t decode_us;
     uint32_t decode_max_us;
@@ -213,22 +235,24 @@ static void free_buffers(void) {
     }
 }
 
-static void remove_sprite(const char *why) {
-    LOG_ERR("sprite removed: %s", why);
-    lv_timer_delete(sprite.timer);
-    sprite.timer = NULL;
-    lv_obj_delete(sprite.obj);
-    sprite.obj = NULL;
+static void detach(void) {
+    if (sprite.timer != NULL) {
+        lv_timer_delete(sprite.timer);
+        sprite.timer = NULL;
+    }
+    if (sprite.obj != NULL) {
+        lv_obj_delete(sprite.obj);
+        sprite.obj = NULL;
+    }
     free_buffers();
     sprite.file = NULL;
+    sprite.frozen = false;
+    beacon_hp_bar_set_name("", 0);
 }
 
-/* Logging builds only: BEACON_SPRITE selects SYS_HEAP_RUNTIME_STATS with LOG. */
-static size_t pool_allocated(void) {
-    struct sys_memory_stats heap;
-
-    lvgl_heap_stats(&heap);
-    return heap.allocated_bytes;
+static void remove_sprite(const char *why) {
+    LOG_ERR("sprite removed: %s", why);
+    detach();
 }
 
 static void log_stats(void) {
@@ -274,6 +298,10 @@ static void tick(lv_timer_t *timer) {
     if (IS_ENABLED(CONFIG_LOG) && now - sprite.logged_at >= LOG_PERIOD_MS) {
         sprite.logged_at = now;
         log_stats();
+    }
+    if (sprite.frozen) {
+        sprite.frame_at = now_sub;
+        return;
     }
 
     beacon_status_get(&status);
@@ -461,15 +489,18 @@ static bool set_side(uint8_t side) {
 }
 
 /* Opens file as sprite.file with its animation `side` decoded; every
- * animation in the file must fit sprite.box at 1x: blit() never scales down. */
+ * animation in the file must fit sprite.box at 1x: blit() never scales down.
+ * The previous pack's buffers go first, open or not. */
 static bool open_file(const uint8_t *file, size_t avail, uint8_t side) {
     uint32_t total;
     const int sides = sprite_pack_count(file, avail, &total);
     size_t buffer = 0;
+    size_t name_len;
 
     if (sides <= 0 || side >= sides) {
         return false;
     }
+    const char *name = sprite_pack_name(file, &name_len);
     for (int i = 0; i < sides; i++) {
         struct sprite_pack_anim a;
 
@@ -487,12 +518,14 @@ static bool open_file(const uint8_t *file, size_t avail, uint8_t side) {
     sprite.dict = sprite.canvas + buffer;
     sprite.buffer = buffer;
     sprite.file = file;
+    sprite.total = total;
     sprite.sides = (uint8_t)sides;
     if (!set_side(side)) {
         free_buffers();
         sprite.file = NULL;
         return false;
     }
+    beacon_hp_bar_set_name(name, name_len);
     return true;
 }
 
@@ -516,21 +549,14 @@ static void fit(void) {
     lv_obj_set_pos(sprite.obj, sprite.box.x1 + (box_w - w) / 2, sprite.box.y1 + box_h - h);
 }
 
-void beacon_sprite_create(lv_obj_t *screen, const lv_area_t *box) {
-    const size_t pool_before = IS_ENABLED(CONFIG_LOG) ? pool_allocated() : 0;
-
-    sprite.box = *box;
-    if (!open_file(sprite_embedded, sizeof(sprite_embedded), 0)) {
-        LOG_ERR("sprite: pack rejected or no pool memory for it (%u byte file)",
-                (unsigned int)sizeof(sprite_embedded));
+/* The sprite's object and timer, once. The object is a plain one that draws
+ * nothing of its own; blit() paints its area. The first child, whatever the
+ * screen held before: blit()'s second condition (header). */
+static void attach(void) {
+    if (sprite.obj != NULL) {
         return;
     }
-    const size_t pool_sprite = IS_ENABLED(CONFIG_LOG) ? pool_allocated() - pool_before : 0;
-
-    /* A plain object that draws nothing of its own; blit() paints its area.
-     * The first child, whatever the screen held before: blit()'s second
-     * condition (header). */
-    lv_obj_t *obj = lv_obj_create(screen);
+    lv_obj_t *obj = lv_obj_create(sprite.screen);
     lv_obj_move_to_index(obj, 0);
     lv_obj_remove_flag(obj, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
@@ -539,28 +565,77 @@ void beacon_sprite_create(lv_obj_t *screen, const lv_area_t *box) {
     lv_obj_set_style_shadow_width(obj, 0, 0);
     lv_obj_set_style_pad_all(obj, 0, 0);
     sprite.obj = obj;
-    fit();
     lv_obj_add_event_cb(obj, blit, LV_EVENT_DRAW_MAIN, NULL);
 
     struct beacon_status status;
     beacon_status_get(&status);
-
     sprite.keys_seen = status.keystrokes;
-    sprite.frame_at = lv_tick_get() * SUB_PER_MS;
     sprite.logged_at = lv_tick_get();
-    sprite.shown = sprite.picture;
     sprite.timer = lv_timer_create(tick, TICK_MS, NULL);
-    lv_display_t *disp = lv_obj_get_display(obj);
+}
+
+/* The open pack from its first frame, on the screen. */
+static void restart(void) {
+    attach();
+    fit();
+    sprite.frozen = false;
+    sprite.frames_due = 0;
+    sprite.frame_at = lv_tick_get() * SUB_PER_MS;
+    sprite.shown = sprite.picture;
+    sprite.render_pending = true;
+    lv_obj_invalidate(sprite.obj);
+
+    const int32_t h = lv_obj_get_style_height(sprite.obj, 0);
+    LOG_INF("sprite as %dx%d (%d.%02dx) from a %u byte pack",
+            (int)lv_obj_get_style_width(sprite.obj, 0), (int)h, (int)(h / sprite.anim.height),
+            (int)(h * 100 / sprite.anim.height % 100), (unsigned int)sprite.total);
+}
+
+/* Opens and shows data; on failure, the embedded pack if there is one, else
+ * nothing. True when data is what shows. */
+static bool show(const uint8_t *data, size_t avail) {
+    if (data != NULL && open_file(data, avail, 0)) {
+        restart();
+        return true;
+    }
+    if (data != NULL) {
+        LOG_ERR("sprite: pack rejected or no pool memory for it (%u bytes readable)",
+                (unsigned int)avail);
+    }
+#if IS_ENABLED(CONFIG_BEACON_SPRITE_EMBEDDED)
+    if (open_file(sprite_embedded, sizeof(sprite_embedded), 0)) {
+        restart();
+        return false;
+    }
+    LOG_ERR("sprite: the embedded pack does not open (%u bytes)",
+            (unsigned int)sizeof(sprite_embedded));
+#endif
+    detach();
+    LOG_INF("sprite: none");
+    return false;
+}
+
+void beacon_sprite_create(lv_obj_t *screen, const lv_area_t *box) {
+    const uint8_t *data = NULL;
+    size_t avail = 0;
+
+    sprite.screen = screen;
+    sprite.box = *box;
+    lv_display_t *disp = lv_obj_get_display(screen);
     lv_display_add_event_cb(disp, render_ready, LV_EVENT_RENDER_READY, NULL);
     if (IS_ENABLED(CONFIG_LOG)) {
         lv_display_add_event_cb(disp, count_render, LV_EVENT_RENDER_START, NULL);
         lv_display_add_event_cb(disp, count_render, LV_EVENT_RENDER_READY, NULL);
     }
-
-    const int32_t h = lv_obj_get_style_height(obj, 0);
-
-    LOG_INF("sprite as %dx%d (%d.%02dx) from a %u byte pack, %u bytes of the lvgl pool",
-            (int)lv_obj_get_style_width(obj, 0), (int)h, (int)(h / sprite.anim.height),
-            (int)(h * 100 / sprite.anim.height % 100), (unsigned int)sizeof(sprite_embedded),
-            (unsigned int)pool_sprite);
+#if IS_ENABLED(CONFIG_BEACON_SPRITE_RECEIVE)
+    data = beacon_receiver_stored_pack(&avail);
+    LOG_INF("sprite room: %s", data != NULL ? "a whole pack" : "no pack");
+#endif
+    show(data, avail);
 }
+
+bool beacon_sprite_show(const uint8_t *data, size_t avail) { return show(data, avail); }
+
+void beacon_sprite_freeze(void) { sprite.frozen = true; }
+
+const uint8_t *beacon_sprite_pack(void) { return sprite.file; }

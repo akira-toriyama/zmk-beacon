@@ -329,6 +329,11 @@ int sprite_pack_count(const uint8_t *file, size_t avail, uint32_t *total) {
     return (int)n;
 }
 
+bool sprite_pack_valid(const uint8_t *file, size_t avail, uint32_t *total) {
+    return sprite_pack_count(file, avail, total) > 0 &&
+           sprite_pack_crc(file, *total) == le32(file + 12);
+}
+
 const char *sprite_pack_name(const uint8_t *file, size_t *len) {
     const char *name = (const char *)file + 16;
     size_t n = 0;

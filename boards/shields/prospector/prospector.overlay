@@ -138,3 +138,23 @@
         };
     };
 };
+
+/* The sprite room (src/ble_receiver.c): one 384 KiB partition for a sprite
+ * pack received over BLE, cut from the code partition so that the linker
+ * stops an image that would reach it (356 KiB stay for the code: a logging
+ * sprite build with the receiver took 316 KB, 2026-10-06). Above 0xdffff the
+ * UF2 bootloader stages its self-update (0xe0000-0xe9fff) and keeps its
+ * reserve; the storage partition at 0xec000 is untouched. A UF2 flash leaves
+ * the room alone: the bootloader writes only the pages an image carries. */
+&code_partition {
+    reg = <0x00027000 0x00059000>;
+};
+
+&flash0 {
+    partitions {
+        sprite_partition: partition@80000 {
+            label = "Sprite";
+            reg = <0x00080000 0x00060000>;
+        };
+    };
+};
