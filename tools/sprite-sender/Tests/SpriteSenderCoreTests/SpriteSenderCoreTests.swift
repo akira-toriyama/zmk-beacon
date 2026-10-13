@@ -35,6 +35,16 @@ final class RotationTests: XCTestCase {
         XCTAssertEqual(Rotation.candidates(entries), ["C.GIF", "a.gif", "b.gif"])
     }
 
+    func testOrderListsFirstThenTheRestInByteOrder() {
+        let order = ["b.gif", "zz.gif", "b.gif", "C.GIF"]
+        let c = Rotation.candidates(entries, order: order)
+        XCTAssertEqual(c, ["b.gif", "C.GIF", "a.gif"], "listed in order, once each, missing skipped")
+        XCTAssertEqual(Rotation.next(after: "a.gif", in: c, order: order), "b.gif")
+        XCTAssertEqual(Rotation.next(after: "zz.gif", in: c, order: order), "C.GIF", "a gone listed name continues down the list")
+        XCTAssertEqual(Rotation.next(after: "a.gif~", in: c, order: order), "b.gif", "a gone unlisted name past the unlisted ones wraps")
+        XCTAssertEqual(Rotation.order(in: Data("b.gif\r\n\nzz.gif\n".utf8)), ["b.gif", "zz.gif"])
+    }
+
     func testNextWrapsAndStartsOverOnUnknownState() {
         let c = Rotation.candidates(entries)
         XCTAssertEqual(Rotation.next(after: nil, in: c), "C.GIF")

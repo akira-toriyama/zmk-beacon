@@ -184,9 +184,11 @@ as above; the tool prints sizes only.
 `tools/sprite-sender/` is the Mac side of the swap: a Swift app that picks the
 next GIF of a collection, packs it (with its back view when the collection has
 one) through `sprite_pack.py`, and writes the pack into the sprite room over
-BLE. It goes through the collection in file-name order, one GIF a run, around
-and around, and a LaunchAgent runs it once a day (the user's dotfiles). The
-collection and the sender's config stay off every repository:
+BLE. It goes through the collection in the order of the config's order file
+(one file name a line; the user's lists the species in National Pokédex
+order), then the rest in file-name order, one GIF a run, around and around,
+and a LaunchAgent runs it once a day (the user's dotfiles). The collection,
+the order file and the sender's config stay off every repository:
 
 ```sh
 cd tools/sprite-sender && ./package.sh          # SpriteSender.app, signed (its header)
@@ -196,7 +198,7 @@ SpriteSender.app/Contents/MacOS/sprite-sender report            # the device's r
 ```
 
 `sender.json` sits next to the collection, with paths relative to itself:
-`{"front": "<dir>", "back": "<dir>", "state": "<file>"}` (`back` optional).
+`{"front": "<dir>", "back": "<dir>", "state": "<file>", "order": "<file>"}` (`back` and `order` optional).
 The sprite name is the GIF's file name without its extension, trimmed, with
 its first letter upper-cased, cut to 15 characters; the state file holds the
 name of the GIF tried last, written before the transfer, so a GIF the device
