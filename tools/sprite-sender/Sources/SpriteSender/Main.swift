@@ -89,13 +89,20 @@ enum Main {
         } catch {
             Exit.failure("cannot list the front directory")
         }
-        let candidates = Rotation.candidates(entries)
+        var order: [String] = []
+        if let orderFile = config.orderFile {
+            guard let data = fm.contents(atPath: orderFile.path) else {
+                Exit.usage("cannot read the order file the config names")
+            }
+            order = Rotation.order(in: data)
+        }
+        let candidates = Rotation.candidates(entries, order: order)
         let last = fm.contents(atPath: config.stateFile.path).flatMap(Rotation.name(inState:))
-        guard let chosen = Rotation.next(after: last, in: candidates) else {
+        guard let chosen = Rotation.next(after: last, in: candidates, order: order) else {
             Exit.failure("the front directory has no GIF")
         }
         let index = candidates.firstIndex(of: chosen)! + 1
-        Log.line("rotation: \(index) of \(candidates.count)\(last == nil ? ", no state" : "")")
+        Log.line("rotation: \(index) of \(candidates.count)\(order.isEmpty ? "" : " (\(order.count) listed)")\(last == nil ? ", no state" : "")")
 
         let name: String
         do {
