@@ -517,10 +517,8 @@ static bool set_side(uint8_t side) {
     if (!load_picture(frame_picture(0))) {
         return false;
     }
-    LOG_INF("sprite %ux%u, %u bpp, %u colours, %u pictures, %u frames, side %u of %u, "
-            "dictionary in %u us, %u bytes of the lvgl pool for canvas and dictionary",
-            a->width, a->height, a->bpp, a->colours, a->pictures, a->frames, side, sprite.sides,
-            dict_us, (unsigned int)(2 * sprite.buffer));
+    LOG_DBG("side %u: %ux%u, %u pictures, %u frames, dictionary in %u us", side, a->width,
+            a->height, a->pictures, a->frames, dict_us);
     return true;
 }
 
@@ -561,6 +559,12 @@ static bool open_file(const uint8_t *file, size_t avail, uint8_t side) {
         sprite.file = NULL;
         return false;
     }
+    const struct sprite_pack_anim *a = &sprite.anim;
+
+    LOG_INF("sprite %ux%u, %u bpp, %u colours, %u pictures, %u frames, side %u of %u, "
+            "%u bytes of the lvgl pool for canvas and dictionary",
+            a->width, a->height, a->bpp, a->colours, a->pictures, a->frames, side, sprite.sides,
+            (unsigned int)(2 * sprite.buffer));
     beacon_hp_bar_set_name(name, name_len);
     return true;
 }

@@ -52,8 +52,9 @@
  *   submit_to_queue_locked()). Until the set advertises the kick is skipped:
  *   creating the set must not overlap ZMK's first bt_le_adv_start() (above),
  *   and a failed start retries at RETRY_MS, not at typing rate.
- * - Modifiers: the explicit modifiers of zmk_keycode_state_changed (a
- *   modifier key, a mod-tap's hold, a sticky key; not the LS(A) kind) go
+ * - Modifiers: the modifier keys of zmk_keycode_state_changed (a modifier
+ *   key, a mod-tap's hold, a sticky key, and the explicit LS(LCTRL) kind;
+ *   not the implicit modifiers of LS(A)) go
  *   into the payload once confirmed as held: pressed for MOD_CONFIRM_MS, or
  *   another, non-modifier keycode pressed meanwhile. The second is the
  *   hold-tap's interrupt: it decides before it lets the captured key through,
@@ -88,6 +89,7 @@
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/events/position_state_changed.h>
 #include <zmk/keymap.h>
+#include <zmk/keys.h>
 
 #include "status_payload.h"
 
@@ -350,8 +352,20 @@ static void confirm_due(struct k_work *work) {
     }
 }
 
+/* The modifier bits a keycode event holds or releases: a modifier key's own
+ * (its usage id, LEFTCONTROL..RIGHT_GUI, maps to bit 0..7, which hid.c does the
+ * same way; the event's explicit_modifiers carry only the LS(x)-style ones). */
+static uint8_t event_mods(const struct zmk_keycode_state_changed *ev) {
+    uint8_t mods = ev->explicit_modifiers;
+
+    if (is_mod(ev->usage_page, ev->keycode)) {
+        mods |= BIT(ev->keycode - HID_USAGE_KEY_KEYBOARD_LEFTCONTROL);
+    }
+    return mods;
+}
+
 static void on_keycode(const struct zmk_keycode_state_changed *ev) {
-    const uint8_t mods = ev->explicit_modifiers;
+    const uint8_t mods = event_mods(ev);
 
     if (mods == 0) {
         if (ev->state && mods_pending) {

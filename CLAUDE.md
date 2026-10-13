@@ -143,7 +143,7 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   transfer 8.5 s, 24 kB/s (hardware 2026-10-12).
 - Once: `scanning`, `advertising, connectable, every 1022 ms`, `sprite room: a
   whole pack` or `no pack`, `battery left L right R` (on change), `sprite WxH,
-  N bpp, N colours, N pictures, N frames, side N of N, dictionary in N us, N
+  N bpp, N colours, N pictures, N frames, side N of N, N
   bytes of the lvgl pool for canvas and dictionary` and `sprite as WxH (N.NNx)
   from a N byte pack` (also after each received pack; `sprite: none` when
   nothing plays), `advertising every 200 ms` (the broadcaster), `<uart>: 1200
