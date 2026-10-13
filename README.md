@@ -136,7 +136,8 @@ the room, and nothing else. Timings on hardware (2026-10-12): a 206 KB pack
 took 20 s from the first command to the picture, 11 s of it erasing flash and
 9 s transferring at 24 kB/s; a 7 KB pack took 0.8 s.
 
-The protocol, for a sender, is the header of `src/ble_receiver.c`: a control
+The protocol, for a sender (the sprite sender below is one), is the header
+of `src/ble_receiver.c`: a control
 characteristic takes BEGIN with the pack's length (the device erases the room
 and answers), COMMIT after every 4 KiB written to the data characteristic
 (the device writes the page to flash and answers), and END (the device checks
@@ -165,6 +166,34 @@ python3 tools/sprite_pack.py info <pack.spk>
 
 The GIF, the pack and the name are personal and stay out of repositories,
 as above; the tool prints sizes only.
+
+### The sprite sender
+
+`tools/sprite-sender/` is the Mac side of the swap: a Swift app that picks the
+next GIF of a collection, packs it (with its back view when the collection has
+one) through `sprite_pack.py`, and writes the pack into the sprite room over
+BLE. It goes through the collection in file-name order, one GIF a run, around
+and around, and a LaunchAgent runs it once a day (the user's dotfiles). The
+collection and the sender's config stay off every repository:
+
+```sh
+cd tools/sprite-sender && ./package.sh          # SpriteSender.app, signed (its header)
+SpriteSender.app/Contents/MacOS/sprite-sender daily --config <sender.json> [--dry-run]
+SpriteSender.app/Contents/MacOS/sprite-sender send <pack.spk>   # one pack as it is
+SpriteSender.app/Contents/MacOS/sprite-sender report            # the device's report
+```
+
+`sender.json` sits next to the collection, with paths relative to itself:
+`{"front": "<dir>", "back": "<dir>", "state": "<file>"}` (`back` optional).
+The sprite name is the GIF's file name without its extension, trimmed, with
+its first letter upper-cased, cut to 15 characters; the state file holds the
+name of the GIF tried last, written before the transfer, so a GIF the device
+refuses costs one day. Exit 0 when the device shows the pack, 1 when it does
+not (no device in range, the drive not mounted, a refused pack: the next day
+tries the next GIF), 2 for bad usage or config. Its log names no GIF and no
+sprite. macOS asks once for Bluetooth; the app is signed with a persistent
+identity so that the answer survives a rebuild. A 35 KB pack showed 3.5 s
+after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).
 
 ## What the module provides
 

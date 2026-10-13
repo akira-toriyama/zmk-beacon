@@ -1,0 +1,137 @@
+import Foundation
+import XCTest
+@testable import SpriteSenderCore
+
+final class ConfigTests: XCTestCase {
+    func testRelativePathsResolveAgainstTheConfigDirectory() throws {
+        let base = URL(fileURLWithPath: "/Volumes/X/sprites/")
+        let json = Data(#"{"front": "col/front", "back": "col/back", "state": "state"}"#.utf8)
+        let c = try SenderConfig(json: json, base: base)
+        XCTAssertEqual(c.frontDirectory.path, "/Volumes/X/sprites/col/front")
+        XCTAssertEqual(c.backDirectory?.path, "/Volumes/X/sprites/col/back")
+        XCTAssertEqual(c.stateFile.path, "/Volumes/X/sprites/state")
+    }
+
+    func testBackIsOptionalAndAbsolutePathsStay() throws {
+        let json = Data(#"{"front": "/a/front", "state": "/b/state"}"#.utf8)
+        let c = try SenderConfig(json: json, base: URL(fileURLWithPath: "/x/"))
+        XCTAssertNil(c.backDirectory)
+        XCTAssertEqual(c.frontDirectory.path, "/a/front")
+        XCTAssertEqual(c.stateFile.path, "/b/state")
+    }
+
+    func testBadJSONAndEmptyPathAreErrors() {
+        XCTAssertThrowsError(try SenderConfig(json: Data("[]".utf8), base: URL(fileURLWithPath: "/")))
+        XCTAssertThrowsError(try SenderConfig(json: Data(#"{"front": "", "state": "s"}"#.utf8), base: URL(fileURLWithPath: "/"))) {
+            XCTAssertEqual($0 as? SenderConfig.Error, .emptyPath("front"))
+        }
+    }
+}
+
+final class RotationTests: XCTestCase {
+    let entries = ["b.gif", "._a.gif", "README.md", "a.gif", "C.GIF", "notes.txt"]
+
+    func testCandidatesAreGIFsInByteOrderWithoutSidecars() {
+        XCTAssertEqual(Rotation.candidates(entries), ["C.GIF", "a.gif", "b.gif"])
+    }
+
+    func testNextWrapsAndStartsOverOnUnknownState() {
+        let c = Rotation.candidates(entries)
+        XCTAssertEqual(Rotation.next(after: nil, in: c), "C.GIF")
+        XCTAssertEqual(Rotation.next(after: "C.GIF", in: c), "a.gif")
+        XCTAssertEqual(Rotation.next(after: "b.gif", in: c), "C.GIF")
+        XCTAssertEqual(Rotation.next(after: "gone.gif", in: c), "C.GIF")
+        XCTAssertNil(Rotation.next(after: nil, in: []))
+    }
+
+    func testStateRoundTrip() {
+        XCTAssertEqual(Rotation.name(inState: Rotation.state(for: "a b.gif")), "a b.gif")
+        XCTAssertEqual(Rotation.name(inState: Data("x.gif\nignored\n".utf8)), "x.gif")
+        XCTAssertNil(Rotation.name(inState: Data()))
+        XCTAssertNil(Rotation.name(inState: Data("  \n".utf8)))
+    }
+}
+
+final class SpriteNameTests: XCTestCase {
+    func testRuleOfSpriteNameSh() throws {
+        XCTAssertEqual(try SpriteName.from(fileName: "my sprite.gif"), "My sprite")
+        XCTAssertEqual(try SpriteName.from(fileName: "  Nidoran F .GIF"), "Nidoran F")
+        XCTAssertEqual(try SpriteName.from(fileName: "Farfetch'd.gif"), "Farfetch'd")
+        XCTAssertEqual(try SpriteName.from(fileName: "abcdefghijklmnopqrs.gif"), "Abcdefghijklmno")
+        XCTAssertEqual(try SpriteName.from(fileName: "noext"), "Noext")
+    }
+
+    func testRejectsEmptyAndNonASCII() {
+        XCTAssertThrowsError(try SpriteName.from(fileName: ".gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
+        XCTAssertThrowsError(try SpriteName.from(fileName: "   .gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
+        XCTAssertThrowsError(try SpriteName.from(fileName: "Nidoran♀.gif")) {
+            XCTAssertEqual($0 as? SpriteName.Error, .notPrintableASCII)
+        }
+    }
+}
+
+final class ReportTests: XCTestCase {
+    func testDecodesVersionOne() {
+        var b = [UInt8](repeating: 0, count: 44)
+        b[0] = 1; b[1] = 0; b[2] = 1; b[3] = 2
+        b[4] = 0x2c; b[5] = 0x26; b[6] = 0x03          // expected 206_380
+        b[8] = 0x2c; b[9] = 0x26; b[10] = 0x03
+        b[12] = 12; b[14] = 0x90; b[15] = 0x01          // interval 12, timeout 400
+        b[16] = 0x5e; b[17] = 0x2b                      // erase 11102
+        b[20] = 0x10; b[21] = 0x27                      // store 10000
+        b[24] = 0xfe; b[25] = 0xff; b[26] = 0xff; b[27] = 0xff  // -2
+        for (i, c) in "Nidoran F".utf8.enumerated() { b[28 + i] = c }
+        let r = Report(Data(b))!
+        XCTAssertTrue(r.isIdle && r.shown)
+        XCTAssertEqual(r.source, Report.Source.room.rawValue)
+        XCTAssertEqual(r.expected, 206_380)
+        XCTAssertEqual(r.received, 206_380)
+        XCTAssertEqual(r.interval, 12)
+        XCTAssertEqual(r.timeout, 400)
+        XCTAssertEqual(r.eraseMs, 11102)
+        XCTAssertEqual(r.storeMs, 10000)
+        XCTAssertEqual(r.flashError, -2)
+        XCTAssertEqual(r.name, "Nidoran F")
+        XCTAssertFalse(r.line.contains("Nidoran"))
+        XCTAssertTrue(r.line.contains("name_chars=9"))
+    }
+
+    func testRejectsShortAndOtherVersions() {
+        XCTAssertNil(Report(Data(repeating: 1, count: 43)))
+        var b = [UInt8](repeating: 0, count: 44)
+        b[0] = 2
+        XCTAssertNil(Report(Data(b)))
+    }
+}
+
+final class TransferTests: XCTestCase {
+    func testBeginIsLittleEndian() {
+        XCTAssertEqual(Transfer.begin(length: 0x0003_262c), [0x01, 0x2c, 0x26, 0x03, 0x00])
+    }
+
+    func testPlanCommitsAfterEveryFullPageButTheLast() {
+        let plan = Transfer.plan(count: 4096 + 100, chunk: 512)
+        XCTAssertEqual(plan.count, 8 + 1 + 1)
+        XCTAssertEqual(plan[7], .write(3584..<4096))
+        XCTAssertEqual(plan[8], .commit)
+        XCTAssertEqual(plan[9], .write(4096..<4196))
+        XCTAssertEqual(Transfer.plan(count: 4096, chunk: 4096), [.write(0..<4096)])
+        XCTAssertEqual(Transfer.plan(count: 8192, chunk: 4096), [.write(0..<4096), .commit, .write(4096..<8192)])
+    }
+
+    func testChunksNeverCrossAPageAndAreWriteBlockMultiples() {
+        let plan = Transfer.plan(count: 10_000, chunk: 509)
+        var offset = 0
+        for step in plan {
+            if case .write(let r) = step {
+                XCTAssertEqual(r.lowerBound, offset)
+                XCTAssertEqual(r.lowerBound / 4096, (r.upperBound - 1) / 4096)
+                XCTAssertTrue(r.count % 4 == 0 || r.upperBound == 10_000)
+                XCTAssertLessThanOrEqual(r.count, 508)
+                offset = r.upperBound
+            }
+        }
+        XCTAssertEqual(offset, 10_000)
+        XCTAssertEqual(plan.filter { $0 == .commit }.count, 2)
+    }
+}
