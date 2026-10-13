@@ -48,12 +48,15 @@ public enum Rotation {
     }
 
     /// The order file's names: one a line, exactly (as the state), empty
-    /// lines skipped.
+    /// lines skipped, a name's first line its place.
     public static func order(in data: Data) -> [String] {
-        data.split(separator: 0x0a, omittingEmptySubsequences: true).compactMap { line in
+        var seen = Set<String>()
+        return data.split(separator: 0x0a, omittingEmptySubsequences: true).compactMap { line in
             var line = line
             if line.last == 0x0d { line.removeLast() }
-            return line.isEmpty ? nil : String(decoding: line, as: UTF8.self)
+            guard !line.isEmpty else { return nil }
+            let name = String(decoding: line, as: UTF8.self)
+            return seen.insert(name).inserted ? name : nil
         }
     }
 
