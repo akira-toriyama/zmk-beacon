@@ -9,7 +9,8 @@
  * prospector-zmk-module v2.2.3's layout (include/zmk/status_advertisement.h
  * there, CENTRAL_SIDE="AUX"). Only the fields below are written and read;
  * every other byte stays 0. A new layout is a new version byte (canon task
- * t-xe2q), both ends in one commit.
+ * t-xe2q), both ends in one commit; a field that takes over a byte of the
+ * layout keeps the version (keystrokes, modifiers).
  */
 
 #pragma once
@@ -48,3 +49,9 @@
  * carries both. The field took over the layout's wpm_value byte without a new
  * version byte (canon task t-7c05). */
 #define BEACON_PAYLOAD_OFFSET_KEYSTROKES 24
+
+/* Modifiers held, as the HID modifier byte (bit 0 LCTRL .. bit 7 RGUI; the
+ * layout's modifier_flags byte): only those confirmed as held, a modifier
+ * tapped on a mod-tap thumb never shows (status_broadcaster.c, "Modifiers").
+ * The sprite shows its back animation while this is not 0 (sprite.c). */
+#define BEACON_PAYLOAD_OFFSET_MODIFIERS 23

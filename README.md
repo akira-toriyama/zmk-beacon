@@ -81,6 +81,18 @@ the tempo resumes from the frame shown; the sprite never steps back. As that
 frames before the tempo takes over. Every physical press counts once, at the
 press, whether or not a hold-tap or a combo later holds it back or consumes it.
 
+A pack with a back view (the pack section) shows it while a modifier is held
+on the keyboard and the front view otherwise. The keyboard reports a
+modifier once it is a hold: pressed for the tapping term (0.2 s), or
+another key pressed while it is down, so a tap on a mod-tap thumb never
+flips the sprite, a lone modifier flips it 0.2 s late, and a quick
+Shift+letter flips it for about half a second; a release flips it back
+within an advertising interval or two. Each switch starts the other view
+from its first frame. Both views are drawn at one scale, the one at which
+the larger fills the space, so the switch changes the drawing's size but
+not its pixels'. A keyboard that falls silent for a second leaves the front
+view.
+
 The sprite draws itself: the player inflates the frame's picture into a
 packed canvas and scales it straight into the display buffer by nearest
 neighbour (`src/sprite.c`), and the panel's SPI runs at 32 MHz. Redrawing a
@@ -200,13 +212,13 @@ after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).
 | Path | What |
 | --- | --- |
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
-| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery and the key press count from the status payload. The scan pauses while the sprite receiver has a central connected. |
+| `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery, the key press count and the modifiers held from the status payload. The scan pauses while the sprite receiver has a central connected. |
 | `src/ble_receiver.c` | `CONFIG_BEACON_SPRITE_RECEIVE`: advertises connectably, takes a sprite pack over one GATT service into the sprite room (the shield overlay's `sprite_partition`, 384 KiB), shows it, and gives it back at boot. The protocol is its header. |
-| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press refreshes the payload for the next advertising event. |
-| `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name and the key press counter are used. |
+| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press, a modifier confirmed as held (the tapping term over, or another key pressed under it) and its release refresh the payload for the next advertising event. |
+| `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name, the key press counter and the modifier byte are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that an embedded GIF fits. |
 | `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on a second row; and the mapping of both halves' batteries to its one level. |
-| `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, and its own nearest-neighbour draw into the display buffer; it plays the room's pack, the embedded one or a received one, and names the HP bar. The pack's reader and inflater are plain C that also compiles on the host. |
+| `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, the back view while a modifier is held, and its own nearest-neighbour draw into the display buffer; it plays the room's pack, the embedded one or a received one, and names the HP bar. The pack's reader and inflater are plain C that also compiles on the host. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
 | `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite stands still. |

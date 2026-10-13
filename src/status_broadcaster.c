@@ -52,8 +52,27 @@
  *   submit_to_queue_locked()). Until the set advertises the kick is skipped:
  *   creating the set must not overlap ZMK's first bt_le_adv_start() (above),
  *   and a failed start retries at RETRY_MS, not at typing rate.
+ * - Modifiers: the modifier keys of zmk_keycode_state_changed (a modifier
+ *   key, a mod-tap's hold, a sticky key, and the explicit LS(LCTRL) kind;
+ *   not the implicit modifiers of LS(A)) go
+ *   into the payload once confirmed as held: pressed for MOD_CONFIRM_MS, or
+ *   another, non-modifier keycode pressed meanwhile. The second is the
+ *   hold-tap's interrupt: it decides before it lets the captured key through,
+ *   so the keycode order tells; the first is its timer (the keymap's
+ *   tapping-term-ms, hold-preferred mod-taps on the thumbs with
+ *   hold-while-undecided, which press the modifier at key down and release
+ *   it again when the key turns out a tap, canon config/imprint.keymap). A
+ *   tap on such a thumb thus never shows, and a lone modifier shows
+ *   MOD_CONFIRM_MS late. A confirmation and a release both kick the tick;
+ *   a confirmed modifier stays in the payload for MOD_LATCH_MS from its
+ *   confirmation even when released sooner, because a set_data before the
+ *   next advertising event replaces the one before it (above): a short
+ *   Shift+letter would otherwise never go on air. Keycode events and the
+ *   confirm timer run on the system work queue; what the tick reads is
+ *   atomic.
  */
 
+#include <stdint.h>
 #include <string.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
@@ -67,8 +86,10 @@
 
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
+#include <zmk/events/keycode_state_changed.h>
 #include <zmk/events/position_state_changed.h>
 #include <zmk/keymap.h>
+#include <zmk/keys.h>
 
 #include "status_payload.h"
 
@@ -81,6 +102,12 @@ BUILD_ASSERT(CONFIG_BT_EXT_ADV_MAX_ADV_SET >= 2,
 #define LOG_PERIOD_MS 60000
 #define STACK_SIZE 1536
 #define SLOT_COUNT 2
+/* The keymap's tapping term: a modifier held this long is a hold. */
+#define MOD_CONFIRM_MS 200
+/* One advertising interval, the controller's random delay (up to 10 ms) and
+ * a margin, so that a confirmed modifier goes on air at least once. */
+#define MOD_LATCH_MS 250
+#define MOD_COUNT 8
 
 /* Flags 0x06 (general discoverable, no BR/EDR) as the module sent; with the
  * 26-byte manufacturer data the AD is exactly the 31-byte legacy maximum. */
@@ -106,6 +133,18 @@ static atomic_t battery[SLOT_COUNT];
 static atomic_t keystrokes;
 /* Set once the set advertises: from then on a press may kick the tick. */
 static atomic_t advertising;
+
+/* Modifiers (header). System work queue: the bits pressed and not yet
+ * confirmed, when each was pressed, and the bits confirmed and still held.
+ * Read by the tick: the confirmed bits, the bits latched by the last
+ * confirmation and until when (k_uptime_get_32() ms). */
+static uint8_t mods_pending;
+static int64_t mods_pressed_at[MOD_COUNT];
+static uint8_t mods_held;
+static atomic_t mods_confirmed;
+static atomic_t mods_latched;
+static atomic_t mods_latch_until;
+static atomic_t mods_confirmations;
 
 /* The last presses counted, so that a re-raised one is not counted again
  * (header). Combos capture a few presses at most, even with an undecided
@@ -137,10 +176,20 @@ static atomic_t updates_ok;
 static atomic_t updates_err;
 static atomic_t start_failures;
 
+static uint8_t modifiers_on_air(void) {
+    uint8_t mods = (uint8_t)atomic_get(&mods_confirmed);
+
+    if ((int32_t)(atomic_get(&mods_latch_until) - k_uptime_get_32()) > 0) {
+        mods |= (uint8_t)atomic_get(&mods_latched);
+    }
+    return mods;
+}
+
 static void fill_payload(void) {
     payload[BEACON_PAYLOAD_OFFSET_LEFT] = (uint8_t)atomic_get(&battery[0]);
     payload[BEACON_PAYLOAD_OFFSET_RIGHT] = (uint8_t)atomic_get(&battery[1]);
     payload[BEACON_PAYLOAD_OFFSET_KEYSTROKES] = (uint8_t)atomic_get(&keystrokes);
+    payload[BEACON_PAYLOAD_OFFSET_MODIFIERS] = modifiers_on_air();
 
     zmk_keymap_layer_index_t index = zmk_keymap_highest_layer_active();
     const char *name = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(index));
@@ -215,11 +264,12 @@ static K_WORK_DELAYABLE_DEFINE(stats_work, log_stats);
 static void log_stats(struct k_work *work) {
     ARG_UNUSED(work);
     LOG_INF("%s, %ld updates ok, %ld failed, %ld start failures, battery %u/%u, %lu keystrokes, "
-            "in %d s",
+            "%lu modifiers confirmed, in %d s",
             adv != NULL ? "advertising" : "not advertising", (long)atomic_set(&updates_ok, 0),
             (long)atomic_set(&updates_err, 0), (long)atomic_get(&start_failures),
             (unsigned int)atomic_get(&battery[0]), (unsigned int)atomic_get(&battery[1]),
-            (unsigned long)atomic_get(&keystrokes), LOG_PERIOD_MS / 1000);
+            (unsigned long)atomic_get(&keystrokes), (unsigned long)atomic_get(&mods_confirmations),
+            LOG_PERIOD_MS / 1000);
     k_work_schedule(&stats_work, K_MSEC(LOG_PERIOD_MS));
 }
 
@@ -256,7 +306,104 @@ static int status_broadcaster_init(void) {
 /* After ZMK's bt_enable() at APPLICATION 50. */
 SYS_INIT(status_broadcaster_init, APPLICATION, 90);
 
+static void kick(k_timeout_t delay) {
+    if (atomic_get(&advertising)) {
+        k_work_reschedule_for_queue(&bcast_q, &tick_work, delay);
+    }
+}
+
+static void confirm_mods(uint8_t mods) {
+    mods_pending &= ~mods;
+    mods_held |= mods;
+    atomic_or(&mods_confirmed, mods);
+    atomic_set(&mods_latched, mods_held);
+    atomic_set(&mods_latch_until, k_uptime_get_32() + MOD_LATCH_MS);
+    atomic_inc(&mods_confirmations);
+    kick(K_NO_WAIT);
+}
+
+static void confirm_due(struct k_work *work);
+
+static K_WORK_DELAYABLE_DEFINE(confirm_work, confirm_due);
+
+/* Confirms the pending modifiers whose term is over and waits for the next. */
+static void confirm_due(struct k_work *work) {
+    ARG_UNUSED(work);
+    const int64_t now = k_uptime_get();
+    int64_t next = INT64_MAX;
+    uint8_t due = 0;
+
+    for (unsigned int i = 0; i < MOD_COUNT; i++) {
+        if (mods_pending & BIT(i)) {
+            const int64_t at = mods_pressed_at[i] + MOD_CONFIRM_MS;
+
+            if (at <= now) {
+                due |= BIT(i);
+            } else {
+                next = MIN(next, at);
+            }
+        }
+    }
+    if (due) {
+        confirm_mods(due);
+    }
+    if (next != INT64_MAX) {
+        k_work_schedule(&confirm_work, K_MSEC(next - now));
+    }
+}
+
+/* The modifier bits a keycode event holds or releases: a modifier key's own
+ * (its usage id, LEFTCONTROL..RIGHT_GUI, maps to bit 0..7, which hid.c does the
+ * same way; the event's explicit_modifiers carry only the LS(x)-style ones). */
+static uint8_t event_mods(const struct zmk_keycode_state_changed *ev) {
+    uint8_t mods = ev->explicit_modifiers;
+
+    if (is_mod(ev->usage_page, ev->keycode)) {
+        mods |= BIT(ev->keycode - HID_USAGE_KEY_KEYBOARD_LEFTCONTROL);
+    }
+    return mods;
+}
+
+static void on_keycode(const struct zmk_keycode_state_changed *ev) {
+    const uint8_t mods = event_mods(ev);
+
+    if (mods == 0) {
+        if (ev->state && mods_pending) {
+            confirm_mods(mods_pending);
+        }
+        return;
+    }
+    if (ev->state) {
+        for (unsigned int i = 0; i < MOD_COUNT; i++) {
+            if (mods & BIT(i)) {
+                mods_pressed_at[i] = ev->timestamp;
+            }
+        }
+        mods_pending |= mods;
+        /* A pending work item is due no later than this one's term. */
+        if (!k_work_delayable_is_pending(&confirm_work)) {
+            k_work_schedule(&confirm_work, K_MSEC(MOD_CONFIRM_MS));
+        }
+        return;
+    }
+    mods_pending &= ~mods;
+    if (mods_held & mods) {
+        mods_held &= ~mods;
+        atomic_and(&mods_confirmed, (atomic_val_t) ~(unsigned int)mods);
+        /* The release goes out when the latch is over, now if it is. */
+        const int32_t latched_ms = (int32_t)(atomic_get(&mods_latch_until) - k_uptime_get_32());
+
+        kick(K_MSEC(MAX(latched_ms, 0)));
+    }
+}
+
 static int event_listener(const zmk_event_t *eh) {
+    const struct zmk_keycode_state_changed *kc = as_zmk_keycode_state_changed(eh);
+    if (kc != NULL) {
+        on_keycode(kc);
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
     const struct zmk_peripheral_battery_state_changed *bat =
         as_zmk_peripheral_battery_state_changed(eh);
     if (bat != NULL) {
@@ -269,9 +416,7 @@ static int event_listener(const zmk_event_t *eh) {
     const struct zmk_position_state_changed *pos = as_zmk_position_state_changed(eh);
     if (pos != NULL && pos->state && !seen_before(pos)) {
         atomic_inc(&keystrokes);
-        if (atomic_get(&advertising)) {
-            k_work_reschedule_for_queue(&bcast_q, &tick_work, K_NO_WAIT);
-        }
+        kick(K_NO_WAIT);
     }
     return ZMK_EV_EVENT_BUBBLE;
 }
@@ -279,3 +424,4 @@ static int event_listener(const zmk_event_t *eh) {
 ZMK_LISTENER(beacon_broadcaster, event_listener);
 ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_peripheral_battery_state_changed);
 ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_position_state_changed);
+ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_keycode_state_changed);

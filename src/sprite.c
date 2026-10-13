@@ -24,8 +24,15 @@
  *   The pool holds one block for the animation with the largest canvas in
  *   the file: that canvas (stride x height bytes, 4 or 8 bits a pixel) and
  *   the decoded picture 0, the dictionary every other picture inflates
- *   against. The front animation plays; a back one in the file waits for
- *   its switch. The pack's name goes to the HP bar (hp_bar.h).
+ *   against. The front animation plays while no modifier is held on the
+ *   keyboard and the back one, when the file has it, while one is
+ *   (status_observer.h modifiers, which the keyboard confirms as held so a
+ *   thumb's mod-tap never flips it; a payload older than MOD_STALE_MS counts
+ *   as none, so a keyboard that went away leaves the front). A switch
+ *   decodes the other animation's dictionary and starts it from its first
+ *   frame. Both are drawn at one scale, the largest at which the larger
+ *   fills its box (fit()), so a switch changes the drawing's size, not its
+ *   pixels'. The pack's name goes to the HP bar (hp_bar.h).
  * - The sprite's object and timer exist while a pack is open: a build
  *   without an embedded pack shows nothing until one is received, and
  *   malformed data removes the sprite until the next pack.
@@ -84,6 +91,7 @@
 #include "sprite.h"
 #include "sprite_pack.h"
 #include "status_observer.h"
+#include "status_payload.h"
 
 LOG_MODULE_REGISTER(beacon_sprite, LOG_LEVEL_INF);
 
@@ -114,6 +122,9 @@ BUILD_ASSERT(LV_USE_OS == LV_OS_NONE,
 #define SUB_PER_MS 100
 #define SPEED_FULL_PCT 100
 #define LOG_PERIOD_MS 60000
+/* A modifier reported by a payload older than this no longer counts: five
+ * intervals, so a few lost payloads do not flip the sprite. */
+#define MOD_STALE_MS (5 * BEACON_PAYLOAD_INTERVAL_MS)
 
 #if IS_ENABLED(CONFIG_BEACON_SPRITE_EMBEDDED)
 static const uint8_t sprite_embedded[] = {
@@ -128,6 +139,10 @@ static struct {
     struct sprite_pack_anim anim;
     uint8_t side;
     uint8_t sides;
+    /* The scale every animation of the file is drawn at, as a fraction
+     * (fit()); at least 1, as the box holds each canvas at 1x. */
+    int32_t scale_num;
+    int32_t scale_den;
     /* One pool block: the canvas, then the dictionary, `buffer` bytes each. */
     uint8_t *canvas;
     uint8_t *dict;
@@ -158,6 +173,7 @@ static struct {
     uint32_t stepped;
     uint32_t dropped;
     uint32_t invalidated;
+    uint32_t switches;
     uint32_t logged_at;
     uint32_t render_start;
     uint32_t renders;
@@ -260,13 +276,13 @@ static void log_stats(void) {
 
     lvgl_heap_stats(&heap);
     LOG_INF("sprite %u decoded (%u us avg, %u us max), %u presses for %u key steps and %u frames "
-            "dropped, %u invalidated, %u renders of %u ms in %d s, speed %u%%, side %u, "
-            "lvgl pool %u allocated, %u max, of %d",
+            "dropped, %u invalidated, %u renders of %u ms in %d s, speed %u%%, side %u after "
+            "%u switches, lvgl pool %u allocated, %u max, of %d",
             sprite.decoded, sprite.decoded ? sprite.decode_us / sprite.decoded : 0,
             sprite.decode_max_us, sprite.presses, sprite.stepped, sprite.dropped,
             sprite.invalidated, sprite.renders,
             sprite.renders ? sprite.render_us / sprite.renders / 1000 : 0, LOG_PERIOD_MS / 1000,
-            SPEED_PCT, sprite.side, (unsigned int)heap.allocated_bytes,
+            SPEED_PCT, sprite.side, sprite.switches, (unsigned int)heap.allocated_bytes,
             (unsigned int)heap.max_allocated_bytes, CONFIG_LV_Z_MEM_POOL_SIZE);
     sprite.decoded = 0;
     sprite.decode_us = 0;
@@ -275,9 +291,14 @@ static void log_stats(void) {
     sprite.stepped = 0;
     sprite.dropped = 0;
     sprite.invalidated = 0;
+    sprite.switches = 0;
     sprite.renders = 0;
     sprite.render_us = 0;
 }
+
+static bool set_side(uint8_t side);
+static void fit(void);
+static void retime(void);
 
 static bool screen_dark(void) {
 #if IS_ENABLED(CONFIG_BEACON_SCREEN_OFF)
@@ -305,8 +326,23 @@ static void tick(lv_timer_t *timer) {
     }
 
     beacon_status_get(&status);
+    const int64_t uptime = k_uptime_get();
     /* key_ms is 0 until the first press arrives. */
-    const bool typing = status.key_ms != 0 && k_uptime_get() - status.key_ms < KEY_GRACE_MS;
+    const bool typing = status.key_ms != 0 && uptime - status.key_ms < KEY_GRACE_MS;
+    const uint8_t side =
+        sprite.sides > 1 && status.modifiers != 0 && uptime - status.last_ms < MOD_STALE_MS ? 1
+                                                                                             : 0;
+
+    if (side != sprite.side) {
+        if (!set_side(side)) {
+            remove_sprite("malformed animation data");
+            return;
+        }
+        sprite.switches++;
+        fit();
+        retime();
+        return;
+    }
 
     const uint32_t presses = status.keystrokes - sprite.keys_seen;
 
@@ -481,10 +517,8 @@ static bool set_side(uint8_t side) {
     if (!load_picture(frame_picture(0))) {
         return false;
     }
-    LOG_INF("sprite %ux%u, %u bpp, %u colours, %u pictures, %u frames, side %u of %u, "
-            "dictionary in %u us, %u bytes of the lvgl pool for canvas and dictionary",
-            a->width, a->height, a->bpp, a->colours, a->pictures, a->frames, side, sprite.sides,
-            dict_us, (unsigned int)(2 * sprite.buffer));
+    LOG_DBG("side %u: %ux%u, %u pictures, %u frames, dictionary in %u us", side, a->width,
+            a->height, a->pictures, a->frames, dict_us);
     return true;
 }
 
@@ -525,26 +559,60 @@ static bool open_file(const uint8_t *file, size_t avail, uint8_t side) {
         sprite.file = NULL;
         return false;
     }
+    const struct sprite_pack_anim *a = &sprite.anim;
+
+    LOG_INF("sprite %ux%u, %u bpp, %u colours, %u pictures, %u frames, side %u of %u, "
+            "%u bytes of the lvgl pool for canvas and dictionary",
+            a->width, a->height, a->bpp, a->colours, a->pictures, a->frames, side, sprite.sides,
+            (unsigned int)(2 * sprite.buffer));
     beacon_hp_bar_set_name(name, name_len);
     return true;
 }
 
-/* The largest size of the animation's proportions inside the box, whole
- * factor or not, centred, on the box's bottom edge. The box holds the canvas
- * at 1x (open_file()), so w and h are at least its, which blit() relies on. */
+/* The scale at which animation a fills the box, as a fraction. */
+static void box_scale(const struct sprite_pack_anim *a, int32_t *num, int32_t *den) {
+    const int32_t box_w = lv_area_get_width(&sprite.box);
+    const int32_t box_h = lv_area_get_height(&sprite.box);
+
+    if ((int64_t)box_w * a->height <= (int64_t)box_h * a->width) {
+        *num = box_w;
+        *den = a->width;
+    } else {
+        *num = box_h;
+        *den = a->height;
+    }
+}
+
+/* The smallest box_scale() over the file's animations: the one at which the
+ * larger fills the box, which every other then fits at. The box holds each
+ * canvas at 1x (open_file()), so the scale is at least 1. */
+static void set_scale(void) {
+    sprite.scale_num = 1;
+    sprite.scale_den = 1;
+    for (uint8_t i = 0; i < sprite.sides; i++) {
+        struct sprite_pack_anim a;
+        int32_t num, den;
+
+        if (!sprite_pack_open(sprite.file, i, &a)) {
+            return;
+        }
+        box_scale(&a, &num, &den);
+        if (i == 0 || (int64_t)num * sprite.scale_den < (int64_t)sprite.scale_num * den) {
+            sprite.scale_num = num;
+            sprite.scale_den = den;
+        }
+    }
+}
+
+/* The animation at the file's scale, centred, on the box's bottom edge. w
+ * and h are at least the canvas's, which blit() relies on. */
 static void fit(void) {
     const struct sprite_pack_anim *a = &sprite.anim;
     const int32_t box_w = lv_area_get_width(&sprite.box);
     const int32_t box_h = lv_area_get_height(&sprite.box);
-    int32_t w, h;
+    const int32_t w = (int32_t)((int64_t)a->width * sprite.scale_num / sprite.scale_den);
+    const int32_t h = (int32_t)((int64_t)a->height * sprite.scale_num / sprite.scale_den);
 
-    if ((int64_t)box_w * a->height <= (int64_t)box_h * a->width) {
-        w = box_w;
-        h = (int32_t)((int64_t)box_w * a->height / a->width);
-    } else {
-        h = box_h;
-        w = (int32_t)((int64_t)box_h * a->width / a->height);
-    }
     lv_obj_set_size(sprite.obj, w, h);
     lv_obj_set_pos(sprite.obj, sprite.box.x1 + (box_w - w) / 2, sprite.box.y1 + box_h - h);
 }
@@ -574,16 +642,22 @@ static void attach(void) {
     sprite.timer = lv_timer_create(tick, TICK_MS, NULL);
 }
 
-/* The open pack from its first frame, on the screen. */
-static void restart(void) {
-    attach();
-    fit();
-    sprite.frozen = false;
+/* The open animation from the frame in the canvas, the tempo from now. */
+static void retime(void) {
     sprite.frames_due = 0;
     sprite.frame_at = lv_tick_get() * SUB_PER_MS;
     sprite.shown = sprite.picture;
     sprite.render_pending = true;
     lv_obj_invalidate(sprite.obj);
+}
+
+/* The open pack from its first frame, on the screen. */
+static void restart(void) {
+    attach();
+    set_scale();
+    fit();
+    sprite.frozen = false;
+    retime();
 
     const int32_t h = lv_obj_get_style_height(sprite.obj, 0);
     LOG_INF("sprite as %dx%d (%d.%02dx) from a %u byte pack",
