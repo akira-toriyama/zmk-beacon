@@ -4,7 +4,7 @@ import Foundation
 /// (its paths name the collection). Relative paths resolve against the file's
 /// directory, so the whole collection moves as one.
 ///
-///   { "front": "pokeapi-bw/front", "back": "pokeapi-bw/back", "state": "sender-state" }
+///   { "front": "front", "back": "back", "state": "sender-state" }
 ///
 /// `back` is optional: without it every pack holds the front animation only.
 /// `state` is the file the rotation keeps its position in (Rotation).
