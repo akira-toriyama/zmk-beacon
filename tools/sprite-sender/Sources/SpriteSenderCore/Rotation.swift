@@ -37,9 +37,9 @@ public enum Rotation {
     }
 
     public static func name(inState data: Data) -> String? {
-        let text = String(decoding: data, as: UTF8.self)
-        var line = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
-        if line.hasSuffix("\r") { line.removeLast() }
-        return line.isEmpty ? nil : line
+        // On bytes: Swift's String takes "\r\n" for one character.
+        var line = data.prefix { $0 != 0x0a }
+        if line.last == 0x0d { line.removeLast() }
+        return line.isEmpty ? nil : String(decoding: line, as: UTF8.self)
     }
 }

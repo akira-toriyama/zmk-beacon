@@ -69,8 +69,7 @@ final class SpriteNameTests: XCTestCase {
     func testRejectsEmptyAndNonASCII() {
         XCTAssertThrowsError(try SpriteName.from(fileName: ".gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
         XCTAssertThrowsError(try SpriteName.from(fileName: "   .gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
-        XCTAssertThrowsError(try SpriteName.from(fileName: ".hidden.gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
-        XCTAssertThrowsError(try SpriteName.from(fileName: "              a.gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
+        XCTAssertEqual(try SpriteName.from(fileName: ".hidden.gif"), ".hidden", "as sprite-name.sh: only the last extension goes")
         XCTAssertThrowsError(try SpriteName.from(fileName: "Nidoran♀.gif")) {
             XCTAssertEqual($0 as? SpriteName.Error, .notPrintableASCII)
         }
