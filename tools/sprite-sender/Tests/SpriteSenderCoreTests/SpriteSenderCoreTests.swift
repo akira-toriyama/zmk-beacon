@@ -40,15 +40,19 @@ final class RotationTests: XCTestCase {
         XCTAssertEqual(Rotation.next(after: nil, in: c), "C.GIF")
         XCTAssertEqual(Rotation.next(after: "C.GIF", in: c), "a.gif")
         XCTAssertEqual(Rotation.next(after: "b.gif", in: c), "C.GIF")
-        XCTAssertEqual(Rotation.next(after: "gone.gif", in: c), "C.GIF")
+        XCTAssertEqual(Rotation.next(after: "a.gif~", in: c), "b.gif", "a gone name continues after its place")
+        XCTAssertEqual(Rotation.next(after: "z.gif", in: c), "C.GIF", "a gone name past the end wraps")
         XCTAssertNil(Rotation.next(after: nil, in: []))
     }
 
-    func testStateRoundTrip() {
-        XCTAssertEqual(Rotation.name(inState: Rotation.state(for: "a b.gif")), "a b.gif")
+    func testStateRoundTripKeepsEveryByteOfTheName() {
+        for name in ["a b.gif", "  Nidoran F .GIF", "trailing .gif"] {
+            XCTAssertEqual(Rotation.name(inState: Rotation.state(for: name)), name)
+        }
         XCTAssertEqual(Rotation.name(inState: Data("x.gif\nignored\n".utf8)), "x.gif")
+        XCTAssertEqual(Rotation.name(inState: Data("x.gif\r\n".utf8)), "x.gif")
         XCTAssertNil(Rotation.name(inState: Data()))
-        XCTAssertNil(Rotation.name(inState: Data("  \n".utf8)))
+        XCTAssertNil(Rotation.name(inState: Data("\n".utf8)))
     }
 }
 
@@ -58,12 +62,15 @@ final class SpriteNameTests: XCTestCase {
         XCTAssertEqual(try SpriteName.from(fileName: "  Nidoran F .GIF"), "Nidoran F")
         XCTAssertEqual(try SpriteName.from(fileName: "Farfetch'd.gif"), "Farfetch'd")
         XCTAssertEqual(try SpriteName.from(fileName: "abcdefghijklmnopqrs.gif"), "Abcdefghijklmno")
+        XCTAssertEqual(try SpriteName.from(fileName: "abcdefghijklmn opq.gif"), "Abcdefghijklmn", "the cut leaves no trailing space")
         XCTAssertEqual(try SpriteName.from(fileName: "noext"), "Noext")
     }
 
     func testRejectsEmptyAndNonASCII() {
         XCTAssertThrowsError(try SpriteName.from(fileName: ".gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
         XCTAssertThrowsError(try SpriteName.from(fileName: "   .gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
+        XCTAssertThrowsError(try SpriteName.from(fileName: ".hidden.gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
+        XCTAssertThrowsError(try SpriteName.from(fileName: "              a.gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
         XCTAssertThrowsError(try SpriteName.from(fileName: "Nidoran♀.gif")) {
             XCTAssertEqual($0 as? SpriteName.Error, .notPrintableASCII)
         }
@@ -119,19 +126,29 @@ final class TransferTests: XCTestCase {
         XCTAssertEqual(Transfer.plan(count: 8192, chunk: 4096), [.write(0..<4096), .commit, .write(4096..<8192)])
     }
 
-    func testChunksNeverCrossAPageAndAreWriteBlockMultiples() {
-        let plan = Transfer.plan(count: 10_000, chunk: 509)
-        var offset = 0
-        for step in plan {
-            if case .write(let r) = step {
-                XCTAssertEqual(r.lowerBound, offset)
-                XCTAssertEqual(r.lowerBound / 4096, (r.upperBound - 1) / 4096)
-                XCTAssertTrue(r.count % 4 == 0 || r.upperBound == 10_000)
-                XCTAssertLessThanOrEqual(r.count, 508)
-                offset = r.upperBound
+    /// The device's side: one page buffer, filled by the data writes, written
+    /// by COMMIT (a full page, a multiple of the write block) and by END.
+    func testPlanFillsTheDevicePageExactly() {
+        for (count, chunk) in [(10_000, 509), (206_444, 182), (4096, 20), (1, 4), (8193, 4096)] {
+            var fill = 0, offset = 0, commits = 0
+            for step in Transfer.plan(count: count, chunk: chunk) {
+                switch step {
+                case .write(let r):
+                    XCTAssertEqual(r.lowerBound, offset)
+                    XCTAssertLessThanOrEqual(fill + r.count, 4096, "a write overflows the page")
+                    fill += r.count
+                    offset = r.upperBound
+                case .commit:
+                    XCTAssertEqual(fill, 4096, "COMMIT before the page is full")
+                    fill = 0
+                    commits += 1
+                }
             }
+            XCTAssertEqual(offset, count)
+            XCTAssertEqual(commits, (count - 1) / 4096)
+            XCTAssertEqual(fill, count - commits * 4096, "what END commits")
+            XCTAssertGreaterThan(fill, 0)
         }
-        XCTAssertEqual(offset, 10_000)
-        XCTAssertEqual(plan.filter { $0 == .commit }.count, 2)
+        XCTAssertEqual(Transfer.plan(count: 0, chunk: 512), [])
     }
 }

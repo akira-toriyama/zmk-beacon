@@ -30,7 +30,7 @@ public enum Transfer {
     /// COMMIT follows every full page but the last partial or full one, which
     /// END commits.
     public static func plan(count: Int, chunk: Int) -> [Step] {
-        precondition(count > 0 && chunk >= writeBlock)
+        guard count > 0, chunk >= writeBlock else { return [] }
         let chunk = min(chunk - chunk % writeBlock, page)
         var steps: [Step] = []
         var offset = 0

@@ -33,7 +33,7 @@ if security find-certificate -c "$identity" "$HOME/Library/Keychains/login.keych
   codesign --force --options runtime --sign "$identity" "$app"
 else
   echo "package.sh: no '$identity' identity in the login keychain; signing ad hoc (the Bluetooth permission will not survive a rebuild)" >&2
-  codesign --force --sign - "$app"
+  codesign --force --options runtime --sign - "$app"
 fi
 codesign --verify --strict "$app"
 echo "$PWD/$app"

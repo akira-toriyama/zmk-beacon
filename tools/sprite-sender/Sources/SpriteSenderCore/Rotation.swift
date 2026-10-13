@@ -14,23 +14,32 @@ public enum Rotation {
             .sorted { Array($0.utf8).lexicographicallyPrecedes(Array($1.utf8)) }
     }
 
-    /// The GIF after `last` in the rotation, the first when `last` is unknown
-    /// (no state yet, or a file renamed away), nil when there is no GIF.
+    /// The GIF after `last` in the rotation: the first without a state, the
+    /// first that sorts after `last` when `last` is gone (renamed or deleted:
+    /// the rotation goes on instead of starting over), the first again after
+    /// the last one, nil when there is no GIF.
     public static func next(after last: String?, in candidates: [String]) -> String? {
         guard let first = candidates.first else { return nil }
-        guard let last, let i = candidates.firstIndex(of: last) else { return first }
-        return candidates[(i + 1) % candidates.count]
+        guard let last else { return first }
+        if let i = candidates.firstIndex(of: last) {
+            return candidates[(i + 1) % candidates.count]
+        }
+        let lastBytes = Array(last.utf8)
+        return candidates.first { lastBytes.lexicographicallyPrecedes(Array($0.utf8)) } ?? first
     }
 
-    /// The state file's content for a GIF, and the GIF a state file names.
+    /// The state file's content for a GIF, and the GIF a state file names:
+    /// its first line, exactly (a file name may begin or end with a space;
+    /// trimming it would turn the name into a stranger and the rotation
+    /// would stay on that GIF for good).
     public static func state(for name: String) -> Data {
         Data((name + "\n").utf8)
     }
 
     public static func name(inState data: Data) -> String? {
         let text = String(decoding: data, as: UTF8.self)
-        let line = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
-        let name = line.trimmingCharacters(in: .whitespaces)
-        return name.isEmpty ? nil : name
+        var line = text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        if line.hasSuffix("\r") { line.removeLast() }
+        return line.isEmpty ? nil : line
     }
 }

@@ -19,8 +19,11 @@ final class Sender: NSObject {
     /// permission dialog; the scan deadline runs from poweredOn, after it.
     static let authorizationSeconds = 600.0
     /// A device that advertises once a second is found within a few seconds;
-    /// one that is off never is. A 206 KB pack took 20 s (hardware 2026-10-12).
+    /// one that is off never is.
     static let scanSeconds = 30.0
+    /// Connecting, discovering the service and the interval wait.
+    static let connectSeconds = 20.0
+    /// A 206 KB pack took 20 s (hardware 2026-10-12).
     static let transferSeconds = 120.0
     /// The device asks for the interval a second after connecting and a Mac
     /// applies it within another (hardware 2026-10-12); the transfer runs at
@@ -48,11 +51,16 @@ final class Sender: NSObject {
         super.init()
     }
 
-    func run() -> Never {
+    /// Before the rotation moves: a denied permission must not cost a GIF a day.
+    static func checkAuthorization() {
         let auth = CBCentralManager.authorization
         if auth == .denied || auth == .restricted {
             Exit.failure("Bluetooth is not allowed for this app (System Settings > Privacy & Security > Bluetooth)")
         }
+    }
+
+    func run() -> Never {
+        Self.checkAuthorization()
         Log.line("start bytes=\(payload?.count ?? 0)")
         central = CBCentralManager(delegate: self, queue: nil)
         arm(seconds: Self.authorizationSeconds, "Bluetooth did not become available (permission dialog unanswered?)")
@@ -196,6 +204,7 @@ extension Sender: CBCentralManagerDelegate, CBPeripheralDelegate {
                                     advertisementData: [String: Any], rssi RSSI: NSNumber) {
         guard self.peripheral == nil else { return }
         Log.line("found rssi=\(RSSI) after \(elapsed(started)) s")
+        arm(seconds: Self.connectSeconds, "the connection or the service discovery did not finish")
         self.peripheral = peripheral
         peripheral.delegate = self
         central.stopScan()
@@ -248,6 +257,11 @@ extension Sender: CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        // A failed read leaves the characteristic's cached value in place:
+        // yesterday's report would pass for today's.
+        if let error {
+            Exit.failure("the report could not be read: \(error)")
+        }
         guard let value = characteristic.value, let report = Report(value) else {
             Exit.failure("no report of version \(Report.version) from the device (\(characteristic.value?.count ?? 0) bytes): \(error.map { "\($0)" } ?? "")")
         }

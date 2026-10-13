@@ -106,18 +106,25 @@ enum Main {
         }
         let front = config.frontDirectory.appendingPathComponent(chosen)
         var back = config.backDirectory?.appendingPathComponent(chosen)
-        if let b = back, !fm.isReadableFile(atPath: b.path) {
+        if let b = back, !isRegularFile(b) {
             Log.line("no back view for this GIF: front only")
             back = nil
         }
 
-        if !dryRun { moveState(config, to: chosen) }
+        if !dryRun {
+            Sender.checkAuthorization()
+            moveState(config, to: chosen)
+        }
+        guard isRegularFile(front) else {
+            Exit.failure("the chosen entry is not a readable file")
+        }
         let pack: Data
         do {
             pack = try Packer.pack(front: front, back: back, name: name)
         } catch {
             Exit.failure("the converter refused the GIF: \(error)")
         }
+        guard !pack.isEmpty else { Exit.failure("the converter wrote an empty pack") }
         Log.line("pack: \(pack.count) bytes, \(back == nil ? 1 : 2) animations, name of \(name.count) characters")
         if dryRun {
             Exit.ok()
@@ -125,12 +132,18 @@ enum Main {
         Sender(payload: pack).run()
     }
 
-    /// The rotation moves before the transfer (Rotation).
+    /// The rotation moves before the transfer (Rotation). The error is not
+    /// printed: Foundation's names the path.
     static func moveState(_ config: SenderConfig, to chosen: String) {
         do {
             try Rotation.state(for: chosen).write(to: config.stateFile, options: .atomic)
         } catch {
-            Exit.failure("cannot write the state file: \(error)")
+            Exit.failure("cannot write the state file")
         }
+    }
+
+    static func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+            && FileManager.default.isReadableFile(atPath: url.path)
     }
 }
