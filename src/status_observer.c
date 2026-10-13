@@ -11,8 +11,9 @@
  * transmits nothing. The sprite receiver (ble_receiver.c) advertises on its
  * own and pauses the scan while a central is connected.
  *
- * Only the prefix, the version byte, both halves' battery bytes and the
- * keystroke counter are read. 0 = no reading. No charging state is carried.
+ * Only the prefix, the version byte, both halves' battery bytes, the
+ * keystroke counter and the modifier byte are read. 0 = no reading. No
+ * charging state is carried.
  *
  * - Passive scan: the broadcaster sends the payload in the AD of a
  *   non-connectable, non-scannable ADV_NONCONN_IND (status_broadcaster.c),
@@ -143,6 +144,7 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     const uint8_t left = payload[BEACON_PAYLOAD_OFFSET_LEFT];
     const uint8_t right = payload[BEACON_PAYLOAD_OFFSET_RIGHT];
     const uint8_t keys = payload[BEACON_PAYLOAD_OFFSET_KEYSTROKES];
+    const uint8_t modifiers = payload[BEACON_PAYLOAD_OFFSET_MODIFIERS];
     const int64_t now_ms = k_uptime_get();
 
     k_spinlock_key_t key = k_spin_lock(&status_lock);
@@ -161,6 +163,7 @@ static void scan_cb(const bt_addr_le_t *addr, int8_t rssi, uint8_t adv_type,
     status.received = true;
     status.left = left;
     status.right = right;
+    status.modifiers = modifiers;
     status.last_ms = now_ms;
     k_spin_unlock(&status_lock, key);
 

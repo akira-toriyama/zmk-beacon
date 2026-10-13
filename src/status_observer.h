@@ -30,6 +30,9 @@ struct beacon_status {
     uint32_t keystrokes;
     /* k_uptime_get() of the last payload that raised keystrokes. */
     int64_t key_ms;
+    /* Modifiers held on the keyboard, as the HID modifier byte; those the
+     * keyboard confirmed as held (status_payload.h). As of last_ms. */
+    uint8_t modifiers;
 };
 
 void beacon_status_get(struct beacon_status *out);

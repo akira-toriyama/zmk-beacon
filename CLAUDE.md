@@ -109,8 +109,11 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   keystrokes)` on every HP bar change and once a minute; `stale` (grey) after 60 s.
 - Sprite (sprite builds): `sprite N decoded (N us avg, N us max), N presses for
   N key steps and N frames dropped, N invalidated, N renders of N ms in 60 s,
-  speed 75%, side N, lvgl pool N allocated, N max, of N`. Decoded counts
+  speed 75%, side N after N switches, lvgl pool N allocated, N max, of N`.
+  Decoded counts
   pictures inflated (a frame whose picture is on the canvas decodes nothing);
+  side 1 is the back view (a modifier held on the keyboard), switches the
+  side changes in the minute;
   presses × 8 = key steps + frames dropped, up to the queue carried across the
   minute's edge. Renders is what the panel showed (LVGL merges invalidations).
   A render took 27-51 ms and a 153x94 picture 6-9 ms (hardware 2026-10-06);
@@ -123,9 +126,12 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   `--kconfig CONFIG_BEACON_SCREEN_OFF_AFTER_S=20` (off at 00:00:21.0 and on
   at the next press, log and eye, hardware 2026-10-04).
 - Broadcaster (Imprint Dongle): `advertising, N updates ok, N failed, N start
-  failures, battery L/R, N keystrokes, in 60 s`. Healthy: `advertising`, 0
+  failures, battery L/R, N keystrokes, N modifiers confirmed, in 60 s`.
+  Healthy: `advertising`, 0
   failed, 0 start failures (hardware 2026-09-27); its keystrokes and the
-  observer's grow alike (50 and 50 in a minute, 2026-09-29).
+  observer's grow alike (50 and 50 in a minute, 2026-09-29). Modifiers
+  confirmed counts, since boot, the modifier holds that reached the payload
+  (a thumb's tap is not one).
 - Receiver (Prospector Dongle, per transfer): `connected`, `scan paused (0)`,
   `parameters: interval 12 latency 0 timeout 400` (about a second later: the
   central took 15 ms), `begin: N bytes expected, N pages erased in N ms (0)`
