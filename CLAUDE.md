@@ -27,7 +27,16 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   that macOS's `/usr/bin/python3` (3.9) and the ZMK build image both run them;
   `test_sprite_pack.py` writes its own GIFs (`python3 -m unittest discover
   tools`, CI `tools-test.yml`). The 1,298-GIF checks against Pillow and the
-  round trips are local only: the GIFs are personal files.
+  round trips are local only: the GIFs are personal files. `sprite-sender/`
+  (Swift, no dependencies; README "The sprite sender"): `SpriteSenderCore` is
+  pure (config, rotation, name rule, report v1, page plan; `swift test` on
+  CI's macOS runner, `tools-test.yml`, as a Mac with only CommandLineTools
+  has no XCTest) and `SpriteSender` does files, the converter as a child
+  process and CoreBluetooth (Swift 5 language mode: CoreBluetooth's delegate
+  types are not Sendable). `package.sh` makes `SpriteSender.app` with the
+  converter in its Resources, signed with the `chord-dev` identity (canon
+  t-3cf6: the Bluetooth permission is keyed to identity and bundle id).
+  Nothing it logs names a GIF or the sprite.
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
 
 ## Build
@@ -54,7 +63,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   one with `--logging` 32.48% / 81.70%; the gifdec player's 84 KB sprite took
   36.26% / 83.60% and 39.36% / 89.71% with logging (2026-10-04).
 - CI: `build.yml` → the local reusable `zmk-build.yml` (it says why not ZMK's);
-  `tools-test.yml` runs `tools/`' unit tests.
+  `tools-test.yml` runs `tools/`' unit tests (Python on Ubuntu, the sprite
+  sender's `swift build` and `swift test` on macOS).
   `release.yml` keeps a rolling draft release of `prospector.uf2`, tagged when
   published by hand. A ruleset requires `build / Build (xiao_ble/nrf52840/zmk, prospector)`.
 
@@ -195,8 +205,9 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   (memory-mapped flash), so BEGIN freezes it before the erase
   ([src/sprite.c](src/sprite.c)).
 - Change the receiver's protocol or report only with a new `REPORT_VERSION`
-  ([src/ble_receiver.c](src/ble_receiver.c)): the sender (canon t-mxb7) reads
-  it first.
+  ([src/ble_receiver.c](src/ble_receiver.c)) and the sender's `Report` and
+  `Transfer` (tools/sprite-sender's `SpriteSenderCore`) in the same change:
+  the sender rejects a report of another version.
 - Touch LVGL only on ZMK's display work queue (`LV_USE_OS=0`): the scan callback
   runs on the BT RX queue and only copies under a spinlock; the screen reads the
   state from an `lv_timer` ([src/prospector_screen.c](src/prospector_screen.c)).

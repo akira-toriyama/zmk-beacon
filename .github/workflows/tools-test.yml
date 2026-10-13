@@ -1,8 +1,10 @@
 name: Tools
 
-# The unit tests of tools/ (sprite_pack.py, gifpics.py) on the Python that
-# ships with the GitHub Ubuntu runner: standard library only, nothing to
-# install. The GIFs they read are written by the tests themselves.
+# The unit tests of tools/: sprite_pack.py and gifpics.py on the Python that
+# ships with the GitHub Ubuntu runner (standard library only, nothing to
+# install; the GIFs they read are written by the tests themselves), and the
+# sprite sender's build and tests on the macOS runner (its Xcode has XCTest,
+# which a Mac with only CommandLineTools lacks).
 on:
   # push only on main: a PR branch is checked once, through pull_request.
   push:
@@ -29,3 +31,18 @@ jobs:
           persist-credentials: false
       - name: Run the tests
         run: python3 -m unittest discover -v -s tools -p 'test_*.py'
+
+  sender:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: tools/sprite-sender
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Test-only, never pushes.
+          persist-credentials: false
+      - name: Build
+        run: swift build
+      - name: Run the tests
+        run: swift test
