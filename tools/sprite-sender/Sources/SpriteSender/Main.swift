@@ -79,6 +79,8 @@ enum Main {
         let config: SenderConfig
         do {
             config = try SenderConfig(json: json, base: configURL.deletingLastPathComponent())
+        } catch SenderConfig.Error.badRange {
+            Exit.usage("bad config file: range is not \"<first> ~ <last>\" or \"<first> ~\" (ASCII digits from 1, the ASCII tilde)")
         } catch {
             Exit.usage("bad config file: \(error)")
         }

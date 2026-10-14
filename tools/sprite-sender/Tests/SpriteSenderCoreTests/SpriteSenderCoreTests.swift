@@ -41,7 +41,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertNil(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o"}"#.utf8), base: base).range)
         for bad in ["1, 3, 5", "151", "~ 151", "0 ~ 5", "151 ~ 1", "1 ~ 151 ~ 200", "-1 ~ 5", "+1 ~ 5", "1 〜 151", "１ ~ １５１", ""] {
             XCTAssertThrowsError(try config(range: "\"\(bad)\""), bad) {
-                XCTAssertEqual($0 as? SenderConfig.Error, .badRange(bad))
+                XCTAssertEqual($0 as? SenderConfig.Error, .badRange)
             }
         }
         XCTAssertThrowsError(try config(range: "[1, 151]"), "a string, not a list")

@@ -44,7 +44,8 @@ public struct SenderConfig: Equatable, Sendable {
     public enum Error: Swift.Error, Equatable {
         case notAnObject(String)
         case emptyPath(String)
-        case badRange(String)
+        /// Without the text: it may name GIFs, and this error reaches the log.
+        case badRange
         case rangeWithoutOrder
     }
 
@@ -66,7 +67,7 @@ public struct SenderConfig: Equatable, Sendable {
         stateFile = try resolve(file.state, "state")
         orderFile = try file.order.map { try resolve($0, "order") }
         if let text = file.range {
-            guard let places = Rotation.PlaceRange(text) else { throw Error.badRange(text) }
+            guard let places = Rotation.PlaceRange(text) else { throw Error.badRange }
             guard orderFile != nil else { throw Error.rangeWithoutOrder }
             range = places
         }
