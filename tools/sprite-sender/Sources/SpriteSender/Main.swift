@@ -96,13 +96,19 @@ enum Main {
             }
             order = Rotation.order(in: data)
         }
-        let candidates = Rotation.candidates(entries, order: order)
+        if let range = config.range, range.first > order.count {
+            Exit.usage("the range starts after the order file's \(order.count) names")
+        }
+        let candidates = Rotation.candidates(entries, order: order, range: config.range)
         let last = fm.contents(atPath: config.stateFile.path).flatMap(Rotation.name(inState:))
         guard let chosen = Rotation.next(after: last, in: candidates, order: order) else {
-            Exit.failure("the front directory has no GIF")
+            Exit.failure(config.range == nil ? "the front directory has no GIF" : "the front directory has no GIF in the range")
         }
         let index = candidates.firstIndex(of: chosen)! + 1
-        Log.line("rotation: \(index) of \(candidates.count)\(order.isEmpty ? "" : " (\(order.count) listed)")\(last == nil ? ", no state" : "")")
+        var about: [String] = []
+        if !order.isEmpty { about.append("\(order.count) listed") }
+        if let range = config.range { about.append("range \(range)") }
+        Log.line("rotation: \(index) of \(candidates.count)\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")\(last == nil ? ", no state" : "")")
 
         let name: String
         do {

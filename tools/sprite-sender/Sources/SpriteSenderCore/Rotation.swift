@@ -1,34 +1,85 @@
 import Foundation
 
 /// The daily rotation: the front directory's GIFs in the order file's order,
-/// then the rest in file-name order, one a day, around and around. The
-/// state is the name of the GIF tried last, and it moves BEFORE the
-/// transfer: a GIF the device refuses costs one day, not the rest of the
-/// rotation (canon t-mxb7, 2026-10-13).
+/// then the rest in file-name order, or only those at a range of the order's
+/// places; one a day, around and around. The state is the name of the GIF
+/// tried last, and it moves BEFORE the transfer: a GIF the device refuses
+/// costs one day, not the rest of the rotation (canon t-mxb7, 2026-10-13).
 public enum Rotation {
+    /// Places of the order, counted from 1 over its names (Rotation.order),
+    /// written as the user writes them: "1 ~ 151", or "100 ~" for every place
+    /// from 100 to the order's end. The user wanted no list such as "1, 3, 5"
+    /// (canon t-m7nh, 2026-10-14).
+    public struct PlaceRange: Equatable, Sendable, CustomStringConvertible {
+        public let first: Int
+        /// nil: through the order's last name.
+        public let last: Int?
+
+        public init?(first: Int, last: Int?) {
+            guard first >= 1, last.map({ first <= $0 }) ?? true else { return nil }
+            self.first = first
+            self.last = last
+        }
+
+        /// "first ~ last" or "first ~": ASCII digits and the ASCII tilde,
+        /// spaces around them free.
+        public init?(_ text: String) {
+            let parts = text.split(separator: "~", maxSplits: 1, omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count == 2, let first = Self.number(parts[0]) else { return nil }
+            if parts[1].isEmpty {
+                self.init(first: first, last: nil)
+            } else {
+                guard let last = Self.number(parts[1]) else { return nil }
+                self.init(first: first, last: last)
+            }
+        }
+
+        public func contains(_ place: Int) -> Bool {
+            place >= first && last.map { place <= $0 } ?? true
+        }
+
+        public var description: String {
+            last.map { "\(first) ~ \($0)" } ?? "\(first) ~"
+        }
+
+        private static func number(_ text: String) -> Int? {
+            guard !text.isEmpty, text.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+            return Int(text)
+        }
+    }
+
     /// The GIFs among a directory's entries: those the order lists, in its
     /// order, then the others in byte order of their names (all of them
-    /// without an order; canon t-9aga, 2026-10-13). A listed name that is
-    /// no entry is skipped, a name listed twice counts once. macOS keeps a
-    /// file's attributes on an exFAT drive in a `._<name>` sidecar, which
-    /// is no GIF.
-    public static func candidates(_ entries: [String], order: [String] = []) -> [String] {
+    /// without an order; canon t-9aga, 2026-10-13). With a range, only the
+    /// listed ones at its places and none of the others (canon t-m7nh). A
+    /// listed name that is no entry is skipped, a name listed twice holds
+    /// its first place only. macOS keeps a file's attributes on an exFAT
+    /// drive in a `._<name>` sidecar, which is no GIF.
+    public static func candidates(
+        _ entries: [String], order: [String] = [], range: PlaceRange? = nil
+    ) -> [String] {
         let gifs = Set(entries.filter { $0.lowercased().hasSuffix(".gif") && !$0.hasPrefix("._") })
         var listed: [String] = []
         var seen = Set<String>()
-        for name in order where gifs.contains(name) && seen.insert(name).inserted {
-            listed.append(name)
+        var place = 0
+        for name in order where seen.insert(name).inserted {
+            place += 1
+            if gifs.contains(name), range?.contains(place) ?? true {
+                listed.append(name)
+            }
         }
+        guard range == nil else { return listed }
         let rest = gifs.subtracting(seen)
             .sorted { Array($0.utf8).lexicographicallyPrecedes(Array($1.utf8)) }
         return listed + rest
     }
 
     /// The GIF after `last` in the rotation: the first without a state; when
-    /// `last` is gone (renamed or deleted: the rotation goes on instead of
-    /// starting over), the next listed after it that exists, or the first
-    /// unlisted that sorts after it; the first again after the last one;
-    /// nil when there is no GIF.
+    /// `last` is not in it (renamed, deleted or outside the range: the
+    /// rotation goes on instead of starting over), the next listed after it
+    /// that is, or the first unlisted that sorts after it; the first again
+    /// after the last one; nil when there is no GIF.
     public static func next(after last: String?, in candidates: [String], order: [String] = [])
         -> String?
     {

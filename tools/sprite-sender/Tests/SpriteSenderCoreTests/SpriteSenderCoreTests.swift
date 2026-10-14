@@ -26,6 +26,29 @@ final class ConfigTests: XCTestCase {
             XCTAssertEqual($0 as? SenderConfig.Error, .emptyPath("front"))
         }
     }
+
+    func testRangeIsFirstTildeLastOrOpenAndNeedsTheOrder() throws {
+        let base = URL(fileURLWithPath: "/x/")
+        func config(range: String, order: Bool = true) throws -> SenderConfig {
+            let orderKey = order ? #", "order": "o""# : ""
+            let json = #"{"front": "f", "state": "s""# + orderKey + #", "range": "# + range + "}"
+            return try SenderConfig(json: Data(json.utf8), base: base)
+        }
+        XCTAssertEqual(try config(range: #""1 ~ 151""#).range, Rotation.PlaceRange(first: 1, last: 151))
+        XCTAssertEqual(try config(range: #""152~200""#).range, Rotation.PlaceRange(first: 152, last: 200))
+        XCTAssertEqual(try config(range: #"" 100 ~ ""#).range, Rotation.PlaceRange(first: 100, last: nil))
+        XCTAssertEqual(try config(range: #""7 ~ 7""#).range, Rotation.PlaceRange(first: 7, last: 7))
+        XCTAssertNil(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o"}"#.utf8), base: base).range)
+        for bad in ["1, 3, 5", "151", "~ 151", "0 ~ 5", "151 ~ 1", "1 ~ 151 ~ 200", "-1 ~ 5", "+1 ~ 5", "1 〜 151", "１ ~ １５１", ""] {
+            XCTAssertThrowsError(try config(range: "\"\(bad)\""), bad) {
+                XCTAssertEqual($0 as? SenderConfig.Error, .badRange(bad))
+            }
+        }
+        XCTAssertThrowsError(try config(range: "[1, 151]"), "a string, not a list")
+        XCTAssertThrowsError(try config(range: #""1 ~ 151""#, order: false)) {
+            XCTAssertEqual($0 as? SenderConfig.Error, .rangeWithoutOrder)
+        }
+    }
 }
 
 final class RotationTests: XCTestCase {
@@ -43,6 +66,30 @@ final class RotationTests: XCTestCase {
         XCTAssertEqual(Rotation.next(after: "a.gif", in: c, order: order), "b.gif")
         XCTAssertEqual(Rotation.next(after: "zz.gif", in: c, order: order), "C.GIF", "a gone listed name continues down the list")
         XCTAssertEqual(Rotation.next(after: "a.gif~", in: c, order: order), "b.gif", "a gone unlisted name past the unlisted ones wraps")
+    }
+
+    func testRangeKeepsOnlyItsPlacesAndWrapsToItsFirst() throws {
+        let entries = ["a.gif", "b.gif", "d.gif", "e.gif", "x.gif", "._b.gif"]
+        let order = ["a.gif", "b.gif", "gone.gif", "d.gif", "e.gif"]
+        let range = try XCTUnwrap(Rotation.PlaceRange("2 ~ 4"))
+        let c = Rotation.candidates(entries, order: order, range: range)
+        XCTAssertEqual(c, ["b.gif", "d.gif"], "places 2 to 4: a gone name skipped, the unlisted left out")
+        XCTAssertEqual(Rotation.next(after: "d.gif", in: c, order: order), "b.gif", "after the last place, the first")
+        XCTAssertEqual(Rotation.next(after: "b.gif", in: c, order: order), "d.gif")
+        XCTAssertEqual(Rotation.next(after: "a.gif", in: c, order: order), "b.gif", "a state before the range enters it")
+        XCTAssertEqual(Rotation.next(after: "e.gif", in: c, order: order), "b.gif", "a state after the range starts it over")
+        XCTAssertEqual(Rotation.next(after: "gone.gif", in: c, order: order), "d.gif", "a gone name inside goes on down the list")
+        XCTAssertEqual(Rotation.next(after: "x.gif", in: c, order: order), "b.gif", "an unlisted state starts it over")
+        XCTAssertEqual(Rotation.next(after: nil, in: c, order: order), "b.gif")
+
+        let open = try XCTUnwrap(Rotation.PlaceRange("4 ~"))
+        XCTAssertEqual(Rotation.candidates(entries, order: order, range: open), ["d.gif", "e.gif"], "to the order's end")
+        XCTAssertEqual(Rotation.candidates(entries, order: order, range: Rotation.PlaceRange("2 ~ 99")), ["b.gif", "d.gif", "e.gif"])
+        XCTAssertEqual(Rotation.candidates(entries, order: order, range: Rotation.PlaceRange("6 ~")), [])
+        XCTAssertEqual(
+            Rotation.candidates(entries, order: ["a.gif", "a.gif", "b.gif"], range: Rotation.PlaceRange("2 ~ 2")),
+            ["b.gif"], "a name listed twice holds one place")
+        XCTAssertEqual("\(range) / \(open)", "2 ~ 4 / 4 ~", "as the log prints it")
     }
 
     func testNextWrapsAndStartsOverOnUnknownState() {

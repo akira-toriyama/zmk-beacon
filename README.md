@@ -186,9 +186,10 @@ next GIF of a collection, packs it (with its back view when the collection has
 one) through `sprite_pack.py`, and writes the pack into the sprite room over
 BLE. It goes through the collection in the order of the config's order file
 (one file name a line; the user's lists the species in National Pokédex
-order), then the rest in file-name order, one GIF a run, around and around,
-and a LaunchAgent runs it once a day (the user's dotfiles). The collection,
-the order file and the sender's config stay off every repository:
+order), then the rest in file-name order, or through a range of the order's
+places only, one GIF a run, around and around, and a LaunchAgent runs it
+once a day (the user's dotfiles). The collection, the order file and the
+sender's config stay off every repository:
 
 ```sh
 cd tools/sprite-sender && ./package.sh          # SpriteSender.app, signed (its header)
@@ -198,7 +199,13 @@ SpriteSender.app/Contents/MacOS/sprite-sender report            # the device's r
 ```
 
 `sender.json` sits next to the collection, with paths relative to itself:
-`{"front": "<dir>", "back": "<dir>", "state": "<file>", "order": "<file>"}` (`back` and `order` optional).
+`{"front": "<dir>", "back": "<dir>", "state": "<file>", "order": "<file>", "range": "<first> ~ <last>"}`
+(`back`, `order` and `range` optional). `range` needs `order` and keeps only
+the GIFs at those places of it, counted from 1 over its names: `"1 ~ 151"`
+goes from the first to the 151st and back to the first, and `"100 ~"` runs
+from the 100th to the order's end; the GIFs the order does not list stay out.
+A state outside the range continues at the range's next place, wrapping to
+its first, and an older sender ignores the key.
 The sprite name is the GIF's file name without its extension, trimmed, with
 its first letter upper-cased, cut to 15 characters; the state file holds the
 name of the GIF tried last, written before the transfer, so a GIF the device
