@@ -78,8 +78,9 @@ public enum Rotation {
     /// The GIF after `last` in the rotation: the first without a state; when
     /// `last` is not in it (renamed, deleted or outside the range: the
     /// rotation goes on instead of starting over), the next listed after it
-    /// that is, or the first unlisted that sorts after it; the first again
-    /// after the last one; nil when there is no GIF.
+    /// that is, else the first unlisted; for an unlisted `last`, the first
+    /// unlisted that sorts after it; the first again after the last one; nil
+    /// when there is no GIF.
     public static func next(after last: String?, in candidates: [String], order: [String] = [])
         -> String?
     {
@@ -88,11 +89,12 @@ public enum Rotation {
         if let i = candidates.firstIndex(of: last) {
             return candidates[(i + 1) % candidates.count]
         }
+        let listed = Set(order)
         if let i = order.firstIndex(of: last) {
-            return order[(i + 1)...].first { candidates.contains($0) } ?? first
+            return order[(i + 1)...].first { candidates.contains($0) }
+                ?? candidates.first { !listed.contains($0) } ?? first
         }
         let lastBytes = Array(last.utf8)
-        let listed = Set(order)
         return candidates.first {
             !listed.contains($0) && lastBytes.lexicographicallyPrecedes(Array($0.utf8))
         } ?? first

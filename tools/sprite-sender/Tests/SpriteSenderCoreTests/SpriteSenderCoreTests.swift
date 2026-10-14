@@ -66,6 +66,10 @@ final class RotationTests: XCTestCase {
         XCTAssertEqual(Rotation.next(after: "a.gif", in: c, order: order), "b.gif")
         XCTAssertEqual(Rotation.next(after: "zz.gif", in: c, order: order), "C.GIF", "a gone listed name continues down the list")
         XCTAssertEqual(Rotation.next(after: "a.gif~", in: c, order: order), "b.gif", "a gone unlisted name past the unlisted ones wraps")
+        let tail = order + ["gone.gif"]
+        XCTAssertEqual(
+            Rotation.next(after: "gone.gif", in: Rotation.candidates(entries, order: tail), order: tail), "a.gif",
+            "a gone name past every listed one goes on to the unlisted")
     }
 
     func testRangeKeepsOnlyItsPlacesAndWrapsToItsFirst() throws {
