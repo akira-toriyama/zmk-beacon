@@ -327,8 +327,8 @@ they were built from.
 
 The dongles run canon's images, built against the revision canon pins. To try
 a change first, canon builds both against a local checkout of this repository,
-`./scripts/build-zmk.sh prospector imprint_dongle --beacon <path to zmk-beacon>`
-(the only build of the broadcaster), and flashes them with
+`./scripts/build-zmk.sh prospector imprint_dongle --module <path to zmk-beacon>`
+(the only build of the broadcaster; the images carry `-beacon`), and flashes them with
 `./scripts/flash-dongle.sh <image>`.
 
 CI builds every `build.yaml` target on pull requests and on `main`, and once a
