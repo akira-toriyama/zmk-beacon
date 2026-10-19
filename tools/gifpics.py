@@ -96,6 +96,8 @@ def read_frames(b):
     """(width, height, frames): the image descriptors with their control data."""
     if b[:6] not in (b"GIF89a", b"GIF87a"):
         raise GifError("not a GIF")
+    if len(b) < 13:
+        raise GifError("truncated header")
     width = b[6] | b[7] << 8
     height = b[8] | b[9] << 8
     if width == 0 or height == 0:

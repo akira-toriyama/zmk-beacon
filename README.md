@@ -180,13 +180,14 @@ The GIF, the pack and the name are personal and stay out of repositories,
 as above; the tool prints sizes only.
 
 `tools/sprite_colours.py [--count N] <front.gif>` prints the colours a GIF
-shows most, one line of `RRGGBB` words: the pixels of each colour summed over
-the frames, each weighted by its delay, transparent pixels left out, shades
-within a distance of a heavier colour merged into it, the heaviest five (or
-N) kept, and the heaviest lively one (saturation and value at least a
-quarter) put first. The key LEDs of the user's keyboard take the line as
-their palette (canon's `dongle.py palette`, slot 0 first; its t-0967); the
-docstring has the numbers and why.
+shows most, one line of five (or N) `RRGGBB` words: the pixels of each colour
+summed over the frames, each weighted by its delay, transparent pixels left
+out, shades within a distance of a heavier colour merged into it, the
+heaviest lively one (saturation and value at least a quarter) first and the
+rest heaviest after it, cycling through them when the GIF shows fewer. The
+key LEDs of the user's keyboard are to take the line as their palette
+(canon's `dongle.py palette`, slot 0 first; its t-0967); the docstring has
+the numbers and why.
 
 ### The sprite sender
 
@@ -224,8 +225,8 @@ not (no device in range, the drive not mounted, a refused pack: the next day
 tries the next GIF), 2 for bad usage or config. `colours` prints the colours
 of the GIF the state names, the sprite on the device after a `daily` that
 succeeded (`sprite_colours.py`, above), sends nothing and exits 1 with no
-state or no readable GIF; the user's LaunchAgent runs it after each
-successful swap and hands the line to the keyboard. Its log names no GIF and no
+state or no readable GIF; the user's LaunchAgent is to run it after each
+successful swap and hand the line to the keyboard (canon t-0967). Its log names no GIF and no
 sprite. macOS asks once for Bluetooth; the app is signed with a persistent
 identity so that the answer survives a rebuild. A 35 KB pack showed 3.5 s
 after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).

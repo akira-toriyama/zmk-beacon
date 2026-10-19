@@ -43,8 +43,17 @@ enum Tools {
         p.standardOutput = outPipe
         p.standardError = errPipe
         try p.run()
+        // Both pipes drained at once: a child that fills one while the parent
+        // reads the other to its end would block for good.
+        var err = Data()
+        let drained = DispatchGroup()
+        drained.enter()
+        DispatchQueue.global().async {
+            err = errPipe.fileHandleForReading.readDataToEndOfFile()
+            drained.leave()
+        }
         let out = outPipe.fileHandleForReading.readDataToEndOfFile()
-        let err = errPipe.fileHandleForReading.readDataToEndOfFile()
+        drained.wait()
         p.waitUntilExit()
         guard p.terminationStatus == 0 else {
             let prefix = name.hasSuffix(".py") ? String(name.dropLast(3)) + ":" : name + ":"

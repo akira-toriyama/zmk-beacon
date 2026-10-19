@@ -16,8 +16,8 @@ import SpriteSenderCore
 ///       The colours the sprite on the device shows most, from the GIF the
 ///       state names (the one tried last): one line on stdout, RRGGBB each,
 ///       the one to light the keys with first (tools/sprite_colours.py says
-///       how they are picked). canon's dongle.py palette takes the line as
-///       slots 0.. (its t-0967). Nothing is sent.
+///       how they are picked). canon's dongle.py palette is to take the
+///       line as slots 0.. (its t-0967). Nothing is sent.
 ///
 /// Exit codes: Exit.swift. Nothing it prints names a GIF or the sprite.
 @main
