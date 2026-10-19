@@ -95,6 +95,11 @@ def square(w, h, value):
 
 
 class GifPicsTest(unittest.TestCase):
+    def test_truncated_header_is_an_error(self):
+        for data in (b"", b"GIF89a", b"GIF89a\x03\x00\x01", b"GIF89a\x03\x00\x01\x00\x00\x00"):
+            with self.assertRaises(gifpics.GifError):
+                gifpics.animation(data)
+
     def test_one_frame_no_transparency(self):
         a = gifpics.animation(gif(3, 2, PAL4, [{"rect": (0, 0, 3, 2), "pixels": bytes([1, 2, 3, 3, 2, 1])}]))
         self.assertEqual((a.width, a.height), (3, 2))

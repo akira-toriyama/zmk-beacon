@@ -25,16 +25,21 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   a GIF as its distinct pictures, for the player and the over-the-air swap) on
   `gifpics.py` (GIF composition as browsers do it), standard library only so
   that macOS's `/usr/bin/python3` (3.9) and the ZMK build image both run them;
-  `test_sprite_pack.py` writes its own GIFs (`python3 -m unittest discover
+  `sprite_colours.py` (the colours a GIF shows most, for the key LEDs'
+  palette of canon's keyboard: its docstring holds the rule and the numbers
+  measured on the user's collection) on the same two;
+  `test_sprite_pack.py` and `test_sprite_colours.py` write their own GIFs
+  (`python3 -m unittest discover
   tools`, CI `tools-test.yml`). The 1,298-GIF checks against Pillow and the
   round trips are local only: the GIFs are personal files. `sprite-sender/`
   (Swift, no dependencies; README "The sprite sender"): `SpriteSenderCore` is
   pure (config, rotation, name rule, report v1, page plan; `swift test` on
   CI's macOS runner, `tools-test.yml`, as a Mac with only CommandLineTools
-  has no XCTest) and `SpriteSender` does files, the converter as a child
-  process and CoreBluetooth (Swift 5 language mode: CoreBluetooth's delegate
-  types are not Sendable). `package.sh` makes `SpriteSender.app` with the
-  converter in its Resources, signed with the `chord-dev` identity (canon
+  has no XCTest) and `SpriteSender` does files, the Python tools as child
+  processes (`Tools.swift`: the pack converter, the colours) and
+  CoreBluetooth (Swift 5 language mode: CoreBluetooth's delegate types are
+  not Sendable). `package.sh` makes `SpriteSender.app` with the Python
+  tools in its Resources, signed with the `chord-dev` identity (canon
   t-3cf6: the Bluetooth permission is keyed to identity and bundle id).
   Nothing it logs names a GIF or the sprite.
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
