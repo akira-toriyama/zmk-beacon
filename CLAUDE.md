@@ -76,7 +76,7 @@ dongle's serial port is silent unless it runs a `--logging` image.
 | Goal | Command | Healthy result |
 | --- | --- | --- |
 | Prospector image from this tree | `./scripts/build.sh --logging` | `images:` line with FLASH/RAM, `revisions: ... zmk-beacon <describe>` |
-| Both dongles' images from this tree; the only build of the broadcaster | canon: `./scripts/build-zmk.sh prospector imprint_dongle --beacon <this checkout> --logging` | `revisions:` ends `zmk-beacon <dir> @ <describe> (--beacon)` |
+| Both dongles' images from this tree; the only build of the broadcaster | canon: `./scripts/build-zmk.sh prospector imprint_dongle --module <this checkout> --logging` (`--beacon` until canon #267) | `revisions:` has `zmk-beacon <dir> @ <describe> (--module)`; the images carry `-beacon` |
 | Flash either dongle, no double-tap | canon: `./scripts/flash-dongle.sh <image.uf2>` (any directory; named `<device>.uf2` or `<device>-*.uf2`; `--dry-run` checks only) | last line `DONE <device> ... sha256=<the build summary's 12 hex>`, exit 0 |
 | Find the dongles | canon: `python3 scripts/dongle.py list` | each dongle with its `/dev/cu.*` port and `port free` |
 | Read the logs | canon: `python3 scripts/dongle.py log prospector imprint_dongle --seconds 130 [--grep RE] [--out FILE]` | the lines below, each after a timestamp and the device |
