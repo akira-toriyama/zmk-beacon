@@ -179,6 +179,15 @@ python3 tools/sprite_pack.py info <pack.spk>
 The GIF, the pack and the name are personal and stay out of repositories,
 as above; the tool prints sizes only.
 
+`tools/sprite_colours.py [--count N] <front.gif>` prints the colours a GIF
+shows most, one line of `RRGGBB` words: the pixels of each colour summed over
+the frames, each weighted by its delay, transparent pixels left out, shades
+within a distance of a heavier colour merged into it, the heaviest five (or
+N) kept, and the heaviest lively one (saturation and value at least a
+quarter) put first. The key LEDs of the user's keyboard take the line as
+their palette (canon's `dongle.py palette`, slot 0 first; its t-0967); the
+docstring has the numbers and why.
+
 ### The sprite sender
 
 `tools/sprite-sender/` is the Mac side of the swap: a Swift app that picks the
@@ -196,6 +205,7 @@ cd tools/sprite-sender && ./package.sh          # SpriteSender.app, signed (its 
 SpriteSender.app/Contents/MacOS/sprite-sender daily --config <sender.json> [--dry-run]
 SpriteSender.app/Contents/MacOS/sprite-sender send <pack.spk>   # one pack as it is
 SpriteSender.app/Contents/MacOS/sprite-sender report            # the device's report
+SpriteSender.app/Contents/MacOS/sprite-sender colours --config <sender.json> [--count N]
 ```
 
 `sender.json` sits next to the collection, with paths relative to itself:
@@ -211,7 +221,11 @@ its first letter upper-cased, cut to 15 characters; the state file holds the
 name of the GIF tried last, written before the transfer, so a GIF the device
 refuses costs one day. Exit 0 when the device shows the pack, 1 when it does
 not (no device in range, the drive not mounted, a refused pack: the next day
-tries the next GIF), 2 for bad usage or config. Its log names no GIF and no
+tries the next GIF), 2 for bad usage or config. `colours` prints the colours
+of the GIF the state names, the sprite on the device after a `daily` that
+succeeded (`sprite_colours.py`, above), sends nothing and exits 1 with no
+state or no readable GIF; the user's LaunchAgent runs it after each
+successful swap and hands the line to the keyboard. Its log names no GIF and no
 sprite. macOS asks once for Bluetooth; the app is signed with a persistent
 identity so that the answer survives a rebuild. A 35 KB pack showed 3.5 s
 after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).

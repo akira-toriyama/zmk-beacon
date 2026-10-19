@@ -12,6 +12,12 @@ import SpriteSenderCore
 ///       One pack as it is: the hardware check.
 ///   sprite-sender report
 ///       Connect, print the device's report, leave.
+///   sprite-sender colours --config <sender.json> [--count N]
+///       The colours the sprite on the device shows most, from the GIF the
+///       state names (the one tried last): one line on stdout, RRGGBB each,
+///       the one to light the keys with first (tools/sprite_colours.py says
+///       how they are picked). canon's dongle.py palette takes the line as
+///       slots 0.. (its t-0967). Nothing is sent.
 ///
 /// Exit codes: Exit.swift. Nothing it prints names a GIF or the sprite.
 @main
@@ -21,6 +27,7 @@ enum Main {
         usage: sprite-sender daily --config <sender.json> [--dry-run]
                sprite-sender send <pack.spk>
                sprite-sender report
+               sprite-sender colours --config <sender.json> [--count N]
                sprite-sender --help | --version
         """
 
@@ -65,25 +72,50 @@ enum Main {
         case "report":
             guard args.isEmpty else { Exit.usage("report takes no argument\n\(usage)") }
             Sender(payload: nil).run()
+        case "colours":
+            var config: String?
+            var count: Int?
+            var i = 0
+            while i < args.count {
+                switch args[i] {
+                case "--config":
+                    guard i + 1 < args.count else { Exit.usage("--config needs a path") }
+                    config = args[i + 1]
+                    i += 2
+                case "--count":
+                    guard i + 1 < args.count, let n = Int(args[i + 1]), n >= 1 else {
+                        Exit.usage("--count takes a whole number from 1")
+                    }
+                    count = n
+                    i += 2
+                default:
+                    Exit.usage("unknown argument '\(args[i])'\n\(usage)")
+                }
+            }
+            guard let config else { Exit.usage("colours needs --config <sender.json>") }
+            colours(configPath: config, count: count)
         default:
             Exit.usage("unknown command '\(verb)'\n\(usage)")
         }
     }
 
-    static func daily(configPath: String, dryRun: Bool) -> Never {
+    static func config(at configPath: String) -> SenderConfig {
         let configURL = URL(fileURLWithPath: configPath).standardizedFileURL
         guard let json = FileManager.default.contents(atPath: configURL.path) else {
             // The collection lives on an external drive: not mounted is a day skipped, not a config error.
             Exit.failure("cannot read the config file (the drive may not be mounted)")
         }
-        let config: SenderConfig
         do {
-            config = try SenderConfig(json: json, base: configURL.deletingLastPathComponent())
+            return try SenderConfig(json: json, base: configURL.deletingLastPathComponent())
         } catch SenderConfig.Error.badRange {
             Exit.usage("bad config file: range is not \"<first> ~ <last>\" or \"<first> ~\" (ASCII digits from 1, the ASCII tilde)")
         } catch {
             Exit.usage("bad config file: \(error)")
         }
+    }
+
+    static func daily(configPath: String, dryRun: Bool) -> Never {
+        let config = config(at: configPath)
         let fm = FileManager.default
         let entries: [String]
         do {
@@ -145,6 +177,27 @@ enum Main {
             Exit.ok()
         }
         Sender(payload: pack).run()
+    }
+
+    /// The GIF the state names is the sprite on the device, unless its
+    /// transfer failed today (the state moves before the transfer, Rotation):
+    /// then yesterday's sprite plays and the caller, which runs this after a
+    /// daily that succeeded, never asks.
+    static func colours(configPath: String, count: Int?) -> Never {
+        let config = config(at: configPath)
+        guard let last = FileManager.default.contents(atPath: config.stateFile.path).flatMap(Rotation.name(inState:)) else {
+            Exit.failure("no state: nothing has been sent yet")
+        }
+        let front = config.frontDirectory.appendingPathComponent(last)
+        guard isRegularFile(front) else {
+            Exit.failure("the GIF the state names is not a readable file")
+        }
+        do {
+            print(try Colours.line(front: front, count: count))
+        } catch {
+            Exit.failure("no colours: \(error)")
+        }
+        Exit.ok()
     }
 
     /// The rotation moves before the transfer (Rotation). The error is not
