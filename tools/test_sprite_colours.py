@@ -13,8 +13,9 @@ from test_sprite_pack import gif  # noqa: E402
 
 BLACK, RED, GREEN, BLUE = (0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255)
 PAL4 = [BLACK, RED, GREEN, BLUE]
-GREY, DARK_RED = (128, 128, 128), (200, 20, 20)
-PAL8 = [BLACK, RED, GREEN, BLUE, GREY, DARK_RED, (255, 255, 255), (0, 0, 0)]
+GREY, DARK_RED, WHITE = (128, 128, 128), (200, 20, 20), (255, 255, 255)
+PAL8 = [BLACK, RED, GREEN, BLUE, GREY, DARK_RED, WHITE, (0, 0, 0)]
+DIM, DEEP_RED = (20, 20, 20), (60, 0, 0)
 
 
 def frame(pixels, w, h, **kw):
@@ -48,6 +49,14 @@ class WeightsTest(unittest.TestCase):
         self.assertTrue(sprite_colours.lively((64, 48, 48)), "a quarter each, just")
         self.assertFalse(sprite_colours.lively((64, 49, 49)), "a shade under a quarter of saturation")
 
+    def test_dark(self):
+        self.assertTrue(sprite_colours.dark(BLACK))
+        self.assertTrue(sprite_colours.dark(DIM))
+        self.assertTrue(sprite_colours.dark((50, 50, 50)), "a shade under a fifth")
+        self.assertFalse(sprite_colours.dark((51, 0, 0)), "a fifth, just")
+        self.assertFalse(sprite_colours.dark(DEEP_RED))
+        self.assertFalse(sprite_colours.dark(GREY))
+
 
 class ColoursTest(unittest.TestCase):
     def test_heaviest_first_cycling_to_count(self):
@@ -56,20 +65,43 @@ class ColoursTest(unittest.TestCase):
         self.assertEqual(sprite_colours.colours([data]), [RED, GREEN, BLUE, RED, GREEN])
         self.assertEqual(sprite_colours.colours([data], 2), [RED, GREEN])
 
-    def test_a_lively_colour_leads_black_and_grey(self):
-        # Black 4, grey 3, red 2, blue 1: red leads, the rest keep their order.
+    def test_a_lively_colour_leads_grey_and_black_goes(self):
+        # Black 4, grey 3, red 2, blue 1: black is dark and goes, red leads,
+        # the rest keep their order.
         data = gif(10, 1, PAL8, [frame([0, 0, 0, 0, 4, 4, 4, 1, 1, 3], 10, 1)])
-        self.assertEqual(sprite_colours.colours([data]), [RED, BLACK, GREY, BLUE, RED])
+        self.assertEqual(sprite_colours.colours([data]), [RED, GREY, BLUE, RED, GREY])
 
     def test_greys_alone_keep_their_order(self):
-        data = gif(3, 1, PAL8, [frame([4, 4, 0], 3, 1)])
-        self.assertEqual(sprite_colours.colours([data], 2), [GREY, BLACK])
+        data = gif(3, 1, PAL8, [frame([4, 4, 6], 3, 1)])
+        self.assertEqual(sprite_colours.colours([data], 2), [GREY, WHITE])
 
     def test_a_lively_colour_past_count_still_leads(self):
-        # Black 2, grey 1, red 1 (grey before red: equal weights sort by value).
-        data = gif(4, 1, PAL8, [frame([0, 0, 4, 1], 4, 1)])
-        self.assertEqual(sprite_colours.shown([data]), [RED, BLACK, GREY])
-        self.assertEqual(sprite_colours.colours([data], 2), [RED, BLACK])
+        # Black 2 (goes), grey 2, white 2, red 1 (grey before white: equal
+        # weights sort by value).
+        data = gif(7, 1, PAL8, [frame([0, 0, 4, 4, 6, 6, 1], 7, 1)])
+        self.assertEqual(sprite_colours.shown([data]), [RED, GREY, WHITE])
+        self.assertEqual(sprite_colours.colours([data], 2), [RED, GREY])
+
+    def test_dark_counts_for_nothing_before_merging(self):
+        # Black 3, deep red 1, green 1: deep red is within MERGE_DISTANCE of
+        # black and would go with it merged first; left out before, black
+        # takes nothing, and deep red stays (green leads: equal weights sort
+        # by value, and green is lively).
+        pal = [BLACK, GREEN, DEEP_RED, BLUE]
+        data = gif(5, 1, pal, [frame([0, 0, 0, 1, 2], 5, 1)])
+        self.assertEqual(sprite_colours.shown([data]), [GREEN, DEEP_RED])
+
+    def test_all_dark_keeps_them(self):
+        # Black 2, dim 1: nothing else to show, so both count, and dim merges
+        # into black.
+        pal = [BLACK, DIM, GREY, WHITE]
+        data = gif(3, 1, pal, [frame([0, 0, 1], 3, 1)])
+        self.assertEqual(sprite_colours.shown([data]), [BLACK])
+        self.assertEqual(sprite_colours.colours([data], 2), [BLACK, BLACK])
+        # A dark view beside a lit one adds nothing, like an empty one.
+        lit = gif(2, 1, PAL4, [frame([1, 1], 2, 1)])
+        self.assertEqual(sprite_colours.shown([lit, data]), [RED])
+        self.assertEqual(sprite_colours.shown([data, lit]), [RED])
 
     def test_nothing_visible(self):
         data = gif(2, 1, PAL4, [frame([0, 0], 2, 1, transparent=0)])
