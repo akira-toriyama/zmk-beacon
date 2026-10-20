@@ -14,10 +14,12 @@ import SpriteSenderCore
 ///       Connect, print the device's report, leave.
 ///   sprite-sender colours --config <sender.json> [--count N]
 ///       The colours the sprite on the device shows most, from the GIF the
-///       state names (the one tried last): one line on stdout, RRGGBB each,
-///       the one to light the keys with first (tools/sprite_colours.py says
-///       how they are picked). canon's dongle.py palette is to take the
-///       line as slots 0.. (its t-0967). Nothing is sent.
+///       state names (the one tried last) and its back view when the
+///       collection has one, the two counted the same: one line on stdout,
+///       RRGGBB each, the one to light the keys with first
+///       (tools/sprite_colours.py says how they are picked). canon's
+///       dongle.py palette takes the line as slots 0.. (its t-0967).
+///       Nothing is sent.
 ///
 /// Exit codes: Exit.swift. Nothing it prints names a GIF or the sprite.
 @main
@@ -152,11 +154,7 @@ enum Main {
             Exit.failure("the GIF's file name gives no sprite name: \(error)")
         }
         let front = config.frontDirectory.appendingPathComponent(chosen)
-        var back = config.backDirectory?.appendingPathComponent(chosen)
-        if let b = back, !isRegularFile(b) {
-            Log.line("no back view for this GIF: front only")
-            back = nil
-        }
+        let back = backView(config, of: chosen)
 
         if !dryRun {
             Sender.checkAuthorization()
@@ -193,11 +191,23 @@ enum Main {
             Exit.failure("the GIF the state names is not a readable file")
         }
         do {
-            print(try Colours.line(front: front, count: count))
+            print(try Colours.line(front: front, back: backView(config, of: last), count: count))
         } catch {
             Exit.failure("no colours: \(error)")
         }
         Exit.ok()
+    }
+
+    /// The GIF's back view: the file of the same name in the config's back
+    /// directory, when the collection has one. The one rule for the pack
+    /// (daily) and the colours.
+    static func backView(_ config: SenderConfig, of name: String) -> URL? {
+        guard let back = config.backDirectory?.appendingPathComponent(name) else { return nil }
+        guard isRegularFile(back) else {
+            Log.line("no back view for this GIF: front only")
+            return nil
+        }
+        return back
     }
 
     /// The rotation moves before the transfer (Rotation). The error is not

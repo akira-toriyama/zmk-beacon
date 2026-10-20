@@ -25,9 +25,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   a GIF as its distinct pictures, for the player and the over-the-air swap) on
   `gifpics.py` (GIF composition as browsers do it), standard library only so
   that macOS's `/usr/bin/python3` (3.9) and the ZMK build image both run them;
-  `sprite_colours.py` (the colours a GIF shows most, for the key LEDs'
-  palette of canon's keyboard: its docstring holds the rule and the numbers
-  measured on the user's collection) on the same two;
+  `sprite_colours.py` (the colours a sprite's GIFs, its front and its back,
+  show most, for the key LEDs' palette of canon's keyboard: its docstring
+  holds the rule and the numbers measured on the user's collection) on the
+  same two;
   `test_sprite_pack.py` and `test_sprite_colours.py` write their own GIFs
   (`python3 -m unittest discover
   tools`, CI `tools-test.yml`). The 1,298-GIF checks against Pillow and the
