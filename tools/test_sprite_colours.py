@@ -52,28 +52,46 @@ class WeightsTest(unittest.TestCase):
 class ColoursTest(unittest.TestCase):
     def test_heaviest_first_cycling_to_count(self):
         data = gif(6, 1, PAL4, [frame([1, 1, 1, 2, 2, 3], 6, 1)])
-        self.assertEqual(sprite_colours.shown(data), [RED, GREEN, BLUE])
-        self.assertEqual(sprite_colours.colours(data), [RED, GREEN, BLUE, RED, GREEN])
-        self.assertEqual(sprite_colours.colours(data, 2), [RED, GREEN])
+        self.assertEqual(sprite_colours.shown([data]), [RED, GREEN, BLUE])
+        self.assertEqual(sprite_colours.colours([data]), [RED, GREEN, BLUE, RED, GREEN])
+        self.assertEqual(sprite_colours.colours([data], 2), [RED, GREEN])
 
     def test_a_lively_colour_leads_black_and_grey(self):
         # Black 4, grey 3, red 2, blue 1: red leads, the rest keep their order.
         data = gif(10, 1, PAL8, [frame([0, 0, 0, 0, 4, 4, 4, 1, 1, 3], 10, 1)])
-        self.assertEqual(sprite_colours.colours(data), [RED, BLACK, GREY, BLUE, RED])
+        self.assertEqual(sprite_colours.colours([data]), [RED, BLACK, GREY, BLUE, RED])
 
     def test_greys_alone_keep_their_order(self):
         data = gif(3, 1, PAL8, [frame([4, 4, 0], 3, 1)])
-        self.assertEqual(sprite_colours.colours(data, 2), [GREY, BLACK])
+        self.assertEqual(sprite_colours.colours([data], 2), [GREY, BLACK])
 
     def test_a_lively_colour_past_count_still_leads(self):
         # Black 2, grey 1, red 1 (grey before red: equal weights sort by value).
         data = gif(4, 1, PAL8, [frame([0, 0, 4, 1], 4, 1)])
-        self.assertEqual(sprite_colours.shown(data), [RED, BLACK, GREY])
-        self.assertEqual(sprite_colours.colours(data, 2), [RED, BLACK])
+        self.assertEqual(sprite_colours.shown([data]), [RED, BLACK, GREY])
+        self.assertEqual(sprite_colours.colours([data], 2), [RED, BLACK])
 
     def test_nothing_visible(self):
         data = gif(2, 1, PAL4, [frame([0, 0], 2, 1, transparent=0)])
-        self.assertEqual(sprite_colours.colours(data), [])
+        self.assertEqual(sprite_colours.colours([data]), [])
+
+    def test_two_views_count_the_same(self):
+        # Front: red 3, green 1 (delay 0 plays as 10): shares 3/4 and 1/4.
+        # Back: blue 1, green 3 at delay 100: weights 100 and 300, ten times
+        # the front's, but the same shares. Together green 1, red 3/4, blue
+        # 1/4; summed as they are, blue (100) would lead red (30).
+        front = gif(4, 1, PAL4, [frame([1, 1, 1, 2], 4, 1)])
+        back = gif(4, 1, PAL4, [frame([3, 2, 2, 2], 4, 1, delay=100)])
+        self.assertEqual(sprite_colours.shown([front, back]), [GREEN, RED, BLUE])
+        self.assertEqual(sprite_colours.shown([back, front]), [GREEN, RED, BLUE], "in either order")
+        self.assertEqual(sprite_colours.combined([gifpics.animation(front), gifpics.animation(back)]),
+                         {RED: 30 * 400, GREEN: 10 * 400 + 300 * 40, BLUE: 100 * 40})
+
+    def test_a_view_that_shows_nothing_adds_nothing(self):
+        front = gif(4, 1, PAL4, [frame([1, 1, 1, 2], 4, 1)])
+        empty = gif(2, 1, PAL4, [frame([0, 0], 2, 1, transparent=0)])
+        self.assertEqual(sprite_colours.shown([front, empty]), sprite_colours.shown([front]))
+        self.assertEqual(sprite_colours.colours([empty, empty]), [])
 
 
 class CLITest(unittest.TestCase):
@@ -92,13 +110,20 @@ class CLITest(unittest.TestCase):
             path = os.path.join(d, "a.gif")
             with open(path, "wb") as f:
                 f.write(gif(3, 1, PAL4, [frame([3, 3, 1], 3, 1)]))
+            back = os.path.join(d, "b.gif")
+            with open(back, "wb") as f:
+                f.write(gif(2, 1, PAL4, [frame([2, 2], 2, 1)]))
             self.assertEqual(self.run_main([path]), (0, "0000FF FF0000 0000FF FF0000 0000FF\n", ""))
             self.assertEqual(self.run_main(["--count", "1", path]), (0, "0000FF\n", ""))
+            # The back's two green pixels weigh as much as the front's three: green leads blue.
+            self.assertEqual(self.run_main([path, back]), (0, "00FF00 0000FF FF0000 00FF00 0000FF\n", ""))
+            self.assertEqual(self.run_main(["--count", "2", path, back]), (0, "00FF00 0000FF\n", ""))
             for args in (["--count", "0", path], ["--count", "²", path], ["--count", "x", path], [],
-                         [path, path], [os.path.join(d, "none.gif")], [d]):
+                         [os.path.join(d, "none.gif")], [path, os.path.join(d, "none.gif")], [d], [path, d]):
                 code, out, err = self.run_main(args)
                 self.assertEqual((code, out), (2, ""), args)
                 self.assertNotIn("a.gif", err, args)
+                self.assertNotIn("b.gif", err, args)
             for content in (b"not a gif", b"GIF89a\x03\x00\x01",
                             gif(2, 1, PAL4, [frame([0, 0], 2, 1, transparent=0)])):
                 with open(path, "wb") as f:
