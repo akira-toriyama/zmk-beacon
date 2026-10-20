@@ -17,13 +17,19 @@ each frame counted for its delay as the device plays it
 then scaled to one total and added, so a view with a longer loop or a
 bigger figure does not outweigh the other (the user's call, 2026-10-20:
 the colours of both views; a view that shows nothing adds nothing). A
-transparent pixel counts for nothing; black counts (a sprite's outline is
-one of its colours, the user's call). A colour within MERGE_DISTANCE of a
+transparent pixel counts for nothing, and neither does a dark one, value
+(HSV) under DARK (a fifth): the key LEDs cannot show dark, each slot is
+scaled so that its brightest channel is the LEDs' level (zmk-lantern's
+rule), so a dark slot lit a band of keys white, and the outline of a
+pixel-art sprite put one among its colours on nearly every one (seen on
+hardware 2026-10-20; the user's call to leave dark out, which replaced
+keeping black as an outline's colour). A sprite whose colours are all dark
+keeps them, scaled bright by the LEDs. A colour within MERGE_DISTANCE of a
 heavier one joins it, heaviest first (80 in RGB: the shades of one hue
 merge and two hues stay apart; 40 kept shades apart; seen on ten of the
 user's 649 sprites, 2026-10-19). The first word is the heaviest lively
 colour, saturation and value both at least LIVELY (a quarter): slot 0 is
-the colour a solid keyboard shows, and a black or grey one paints white.
+the colour a solid keyboard shows, and a grey one paints white.
 The rest follow heaviest first, and the line cycles through them when the
 sprite shows fewer than COUNT, so that every slot is one of its colours.
 On the user's 649 fronts alone (2026-10-19): 198 show black or grey most,
@@ -32,7 +38,11 @@ heaviest first; 18 show fewer than five colours. With the backs counted
 too (every front has one, 2026-10-20): slot 0 stays the same colour on 306,
 turns into a shade of it (within MERGE_DISTANCE) on 215 and into another
 colour on 128; 148 get a colour among their five that the front alone did
-not show; 15 show fewer than five colours.
+not show; 15 show fewer than five colours. With dark left out (2026-10-20,
+fronts and backs): 607 had a dark colour among their five, 73 show fewer
+than five colours, slot 0 changes on 19 (the views' shares shift once the
+outline is out, and another lively colour comes first), and none is all
+dark.
 """
 import os
 import re
@@ -45,6 +55,7 @@ from sprite_pack import play_delay  # noqa: E402
 COUNT = 5
 MERGE_DISTANCE = 80
 LIVELY = 0.25
+DARK = 0.2
 
 
 def weights(anim):
@@ -66,11 +77,18 @@ def weights(anim):
     return w
 
 
-def combined(anims):
+def combined(anims, keep_dark=False):
     """The weights of the animations added, each scaled so that every
-    animation totals the same (the product of their totals: exact); one that
-    shows nothing adds nothing."""
-    per = [w for w in (weights(a) for a in anims) if w]
+    animation totals the same (the product of their totals: exact); the dark
+    colours of each left out first unless keep_dark; one that shows nothing
+    adds nothing."""
+    per = []
+    for a in anims:
+        w = weights(a)
+        if not keep_dark:
+            w = {rgb: weight for rgb, weight in w.items() if not dark(rgb)}
+        if w:
+            per.append(w)
     totals = [sum(w.values()) for w in per]
     out = {}
     for i, w in enumerate(per):
@@ -108,11 +126,17 @@ def lively(rgb, least=LIVELY):
     return mx >= 255 * least and mx > 0 and (mx - mn) >= mx * least
 
 
+def dark(rgb, below=DARK):
+    """Value (HSV) under `below`."""
+    return max(rgb) < 255 * below
+
+
 def shown(datas):
     """The merged colours of one sprite's GIFs (their file contents),
-    heaviest first, the heaviest lively one moved to the front; [] when
-    nothing is visible."""
-    top = [rgb for rgb, _ in merge(combined(gifpics.animation(d) for d in datas))]
+    heaviest first, the heaviest lively one moved to the front, the dark
+    ones left out unless no other is visible; [] when nothing is."""
+    anims = [gifpics.animation(d) for d in datas]
+    top = [rgb for rgb, _ in merge(combined(anims) or combined(anims, keep_dark=True))]
     for i, rgb in enumerate(top):
         if lively(rgb):
             return [rgb] + top[:i] + top[i + 1:]

@@ -182,13 +182,15 @@ as above; the tool prints sizes only.
 `tools/sprite_colours.py [--count N] <front.gif> [<back.gif> ...]` prints the
 colours a sprite shows most, one line of five (or N) `RRGGBB` words: in each
 GIF the pixels of each colour summed over the frames, each weighted by its
-delay, transparent pixels left out; the GIFs (the sprite's views) scaled to
-one total and added; shades within a distance of a heavier colour merged
-into it, the heaviest lively one (saturation and value at least a quarter)
-first and the rest heaviest after it, cycling through them when the sprite
-shows fewer. The key LEDs of the user's keyboard take the line as their
-palette (canon's `dongle.py palette`, slot 0 first; its t-0967); the
-docstring has the numbers and why.
+delay, transparent pixels left out and dark ones too (value under a fifth:
+the outline, which the LEDs would light white) unless the sprite shows
+nothing else; the GIFs (the sprite's views) scaled to one total and added;
+shades within a distance of a heavier colour merged into it, the heaviest
+lively one (saturation and value at least a quarter) first and the rest
+heaviest after it, cycling through them when the sprite shows fewer. The
+key LEDs of the user's keyboard take the line as their palette (canon's
+`dongle.py palette`, slot 0 first; its t-0967); the docstring has the
+numbers and why.
 
 ### The sprite sender
 
