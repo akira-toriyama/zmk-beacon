@@ -103,26 +103,49 @@ class ColoursTest(unittest.TestCase):
         self.assertEqual(sprite_colours.shown([lit, data]), [RED])
         self.assertEqual(sprite_colours.shown([data, lit]), [RED])
 
+    def test_all_dark_views_still_count_the_front_twice(self):
+        # Two dark colours too far apart to merge, neither lively: the front's
+        # 1 pixel of A, counted twice, outweighs the back's 2 pixels of B;
+        # with the views the same they would tie, and B would sort first.
+        a, b = (50, 50, 0), (0, 0, 50)
+        front = gif(1, 1, [BLACK, a], [frame([1], 1, 1)])
+        back = gif(2, 1, [BLACK, b], [frame([1, 1], 2, 1)])
+        self.assertEqual(sprite_colours.shown([front, back]), [a, b])
+        self.assertEqual(sprite_colours.shown([back, front]), [b, a])
+
     def test_nothing_visible(self):
         data = gif(2, 1, PAL4, [frame([0, 0], 2, 1, transparent=0)])
         self.assertEqual(sprite_colours.colours([data]), [])
 
-    def test_two_views_count_the_same(self):
+    def test_the_front_counts_twice_the_back(self):
         # Front: red 3, green 1 (delay 0 plays as 10): shares 3/4 and 1/4.
         # Back: blue 1, green 3 at delay 100: weights 100 and 300, ten times
-        # the front's, but the same shares. Together green 1, red 3/4, blue
-        # 1/4; summed as they are, blue (100) would lead red (30).
+        # the front's, but the same shares. With the front twice the back:
+        # red 3/2, green 1/2 + 3/4, blue 1/4; with the views the same green
+        # (1) would lead red (3/4), and summed as they are blue (100) red (30).
         front = gif(4, 1, PAL4, [frame([1, 1, 1, 2], 4, 1)])
         back = gif(4, 1, PAL4, [frame([3, 2, 2, 2], 4, 1, delay=100)])
-        self.assertEqual(sprite_colours.shown([front, back]), [GREEN, RED, BLUE])
-        self.assertEqual(sprite_colours.shown([back, front]), [GREEN, RED, BLUE], "in either order")
+        self.assertEqual(sprite_colours.FRONT_WEIGHT, 2)
+        self.assertEqual(sprite_colours.shown([front, back]), [RED, GREEN, BLUE])
         self.assertEqual(sprite_colours.combined([gifpics.animation(front), gifpics.animation(back)]),
-                         {RED: 30 * 400, GREEN: 10 * 400 + 300 * 40, BLUE: 100 * 40})
+                         {RED: 30 * 400 * 2, GREEN: 10 * 400 * 2 + 300 * 40, BLUE: 100 * 40})
+        # The first GIF is the front: swapped, the back's green leads (3/2 + 1/4).
+        self.assertEqual(sprite_colours.shown([back, front]), [GREEN, RED, BLUE], "the first is the front")
+
+    def test_one_view_alone_keeps_its_order(self):
+        front = gif(6, 1, PAL4, [frame([1, 1, 1, 2, 3, 3], 6, 1)])
+        self.assertEqual(sprite_colours.shown([front]), [RED, BLUE, GREEN])
+        self.assertEqual(sprite_colours.combined([gifpics.animation(front)]),
+                         {RED: 30 * 2, BLUE: 20 * 2, GREEN: 10 * 2})
 
     def test_a_view_that_shows_nothing_adds_nothing(self):
         front = gif(4, 1, PAL4, [frame([1, 1, 1, 2], 4, 1)])
         empty = gif(2, 1, PAL4, [frame([0, 0], 2, 1, transparent=0)])
         self.assertEqual(sprite_colours.shown([front, empty]), sprite_colours.shown([front]))
+        self.assertEqual(sprite_colours.shown([empty, front]), sprite_colours.shown([front]),
+                         "an empty front leaves the back alone")
+        self.assertEqual(sprite_colours.combined([gifpics.animation(empty), gifpics.animation(front)]),
+                         sprite_colours.weights(gifpics.animation(front)), "a back alone is no front")
         self.assertEqual(sprite_colours.colours([empty, empty]), [])
 
 
@@ -147,11 +170,13 @@ class CLITest(unittest.TestCase):
                 f.write(gif(2, 1, PAL4, [frame([2, 2], 2, 1)]))
             self.assertEqual(self.run_main([path]), (0, "0000FF FF0000 0000FF FF0000 0000FF\n", ""))
             self.assertEqual(self.run_main(["--count", "1", path]), (0, "0000FF\n", ""))
-            # The back's two green pixels weigh as much as the front's three: green leads blue.
-            self.assertEqual(self.run_main([path, back]), (0, "00FF00 0000FF FF0000 00FF00 0000FF\n", ""))
-            self.assertEqual(self.run_main(["--count", "2", path, back]), (0, "00FF00 0000FF\n", ""))
+            # The front counts twice the back: the front's blue (2/3 x 2) leads
+            # the back's green (1), which leads the front's red (1/3 x 2).
+            self.assertEqual(self.run_main([path, back]), (0, "0000FF 00FF00 FF0000 0000FF 00FF00\n", ""))
+            self.assertEqual(self.run_main(["--count", "2", path, back]), (0, "0000FF 00FF00\n", ""))
             for args in (["--count", "0", path], ["--count", "²", path], ["--count", "x", path], [],
-                         [os.path.join(d, "none.gif")], [path, os.path.join(d, "none.gif")], [d], [path, d]):
+                         [os.path.join(d, "none.gif")], [path, os.path.join(d, "none.gif")], [d], [path, d],
+                         [path, back, back]):
                 code, out, err = self.run_main(args)
                 self.assertEqual((code, out), (2, ""), args)
                 self.assertNotIn("a.gif", err, args)

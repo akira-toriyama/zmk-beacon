@@ -12,7 +12,7 @@ enum Colours {
 
     /// One line, `RRGGBB` per colour separated by spaces; `count` at most
     /// (the tool's default when nil). The back view, when the collection has
-    /// one, counts the same as the front (the tool says how).
+    /// one, goes after the front (the tool says how the two weigh).
     static func line(front: URL, back: URL?, count: Int?) throws -> String {
         let out = try Tools.run("sprite_colours.py",
                                 (count.map { ["--count", String($0)] } ?? []) + [front.path] + (back.map { [$0.path] } ?? []))

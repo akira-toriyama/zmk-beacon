@@ -15,7 +15,7 @@ import SpriteSenderCore
 ///   sprite-sender colours --config <sender.json> [--count N]
 ///       The colours the sprite on the device shows most, from the GIF the
 ///       state names (the one tried last) and its back view when the
-///       collection has one, the two counted the same: one line on stdout,
+///       collection has one: one line on stdout,
 ///       RRGGBB each, the one to light the keys with first
 ///       (tools/sprite_colours.py says how they are picked). canon's
 ///       dongle.py palette takes the line as slots 0.. (its t-0967).
