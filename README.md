@@ -179,12 +179,14 @@ python3 tools/sprite_pack.py info <pack.spk>
 The GIF, the pack and the name are personal and stay out of repositories,
 as above; the tool prints sizes only.
 
-`tools/sprite_colours.py [--count N] <front.gif> [<back.gif> ...]` prints the
+`tools/sprite_colours.py [--count N] <front.gif> [<back.gif>]` prints the
 colours a sprite shows most, one line of five (or N) `RRGGBB` words: in each
 GIF the pixels of each colour summed over the frames, each weighted by its
 delay, transparent pixels left out and dark ones too (value under a fifth:
 the outline, which the LEDs would light white) unless the sprite shows
-nothing else; the GIFs (the sprite's views) scaled to one total and added;
+nothing else; the GIFs (the sprite's views, the front first) scaled to one
+total, the front then counted twice the back (the screen shows the back only
+while a modifier is held), and added;
 shades within a distance of a heavier colour merged into it, the heaviest
 lively one (saturation and value at least a quarter) first and the rest
 heaviest after it, cycling through them when the sprite shows fewer. The
@@ -227,8 +229,8 @@ refuses costs one day. Exit 0 when the device shows the pack, 1 when it does
 not (no device in range, the drive not mounted, a refused pack: the next day
 tries the next GIF), 2 for bad usage or config. `colours` prints the colours
 of the GIF the state names, the sprite on the device after a `daily` that
-succeeded, and of its back view when the collection has one, the two counted
-the same (`sprite_colours.py`, above), sends nothing and exits 1 with no
+succeeded, and of its back view when the collection has one, weighed as
+`sprite_colours.py` (above) says, sends nothing and exits 1 with no
 state or no readable front GIF; the user's LaunchAgent is to run it after each
 successful swap and hand the line to the keyboard (canon t-0967). Its log names no GIF and no
 sprite. macOS asks once for Bluetooth; the app is signed with a persistent

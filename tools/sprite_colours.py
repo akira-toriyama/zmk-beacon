@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """The colours a sprite shows most, for the key LEDs' palette (canon t-0967).
 
-  sprite_colours.py [--count N] <front.gif> [<back.gif> ...]
+  sprite_colours.py [--count N] <front.gif> [<back.gif>]
 
 Prints one line of COUNT (or N) words, RRGGBB each, the colour to light the
 keys with first: canon's `dongle.py palette` takes the line's words as
 slots 0.. (its t-0967). Nothing it prints names a GIF. Standard library
-only, Python 3.9. Exit 0; 2 for bad usage, a file that is no GIF, or GIFs
-that show nothing.
+only, Python 3.9. Exit 0; 2 for bad usage (more than two GIFs among it), a
+file that is no GIF, or GIFs that show nothing.
 
-The GIFs are one sprite's views (its front, and its back, which the
-Prospector Dongle shows while a modifier is held) and count the same: in
+The GIFs are one sprite's views, the first its front and the second, when
+given, its back, which the Prospector Dongle shows only while a modifier is
+held (a sprite pack has at most the two, sprite_pack.py): in
 each, a colour's weight is the pixels that show it summed over the frames,
 each frame counted for its delay as the device plays it
 (sprite_pack.play_delay), what the eye sees most; the views' weights are
-then scaled to one total and added, so a view with a longer loop or a
-bigger figure does not outweigh the other (the user's call, 2026-10-20:
-the colours of both views; a view that shows nothing adds nothing). A
+then scaled to one total, the front's counted FRONT_WEIGHT times, and
+added, so a view with a longer loop or a bigger figure does not outweigh
+another, and the view the screen shows nearly all the time leads (the
+user's calls: 2026-10-20, the colours of both views; 2026-10-21, the back
+at half the front, after the views counted the same gave slot 0 to the
+back's main colour on a sprite whose screen showed another most, canon
+t-skdt; a view that shows nothing adds nothing). A
 transparent pixel counts for nothing, and neither does a dark one, value
 (HSV) under DARK (a fifth): the key LEDs cannot show dark, each slot is
 scaled so that its brightest channel is the LEDs' level (zmk-lantern's
@@ -42,7 +47,12 @@ not show; 15 show fewer than five colours. With dark left out (2026-10-20,
 fronts and backs): 607 had a dark colour among their five, 73 show fewer
 than five colours, slot 0 changes on 19 (the views' shares shift once the
 outline is out, and another lively colour comes first), and none is all
-dark.
+dark. With the front at twice the back (2026-10-21, the same 649): slot 0
+is the front alone's colour on 417, a shade of it on 137 and another colour
+on 95 (with the views the same, dark left out: 304, 212 and 133); against
+the views the
+same it stays on 521, turns into a shade on 86 and into another colour on
+42; 74 show fewer than five colours.
 """
 import os
 import re
@@ -53,6 +63,7 @@ import gifpics  # noqa: E402
 from sprite_pack import play_delay  # noqa: E402
 
 COUNT = 5
+FRONT_WEIGHT = 2
 MERGE_DISTANCE = 80
 LIVELY = 0.25
 DARK = 0.2
@@ -79,20 +90,21 @@ def weights(anim):
 
 def combined(anims, keep_dark=False):
     """The weights of the animations added, each scaled so that every
-    animation totals the same (the product of their totals: exact); the dark
-    colours of each left out first unless keep_dark; one that shows nothing
-    adds nothing."""
+    animation totals the same (the product of their totals: exact), the
+    first, the front, then counted FRONT_WEIGHT times; the dark colours of
+    each left out first unless keep_dark; one that shows nothing adds
+    nothing, and a back alone is no front."""
     per = []
-    for a in anims:
+    for i, a in enumerate(anims):
         w = weights(a)
         if not keep_dark:
             w = {rgb: weight for rgb, weight in w.items() if not dark(rgb)}
         if w:
-            per.append(w)
-    totals = [sum(w.values()) for w in per]
+            per.append((FRONT_WEIGHT if i == 0 else 1, w))
+    totals = [sum(w.values()) for _, w in per]
     out = {}
-    for i, w in enumerate(per):
-        scale = 1
+    for i, (view, w) in enumerate(per):
+        scale = view
         for j, total in enumerate(totals):
             if j != i:
                 scale *= total
@@ -163,6 +175,9 @@ def main(argv):
         args = args[2:]
     if not args:
         print(__doc__, file=sys.stderr)
+        return 2
+    if len(args) > 2:
+        print("sprite_colours: one front GIF and at most one back", file=sys.stderr)
         return 2
     try:
         datas = []
