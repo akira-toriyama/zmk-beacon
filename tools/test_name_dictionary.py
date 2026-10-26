@@ -84,12 +84,11 @@ class NameDictionaryTest(unittest.TestCase):
             f.write("id,name\n1,x\n")
         with self.assertRaises(name_dictionary.DictionaryError):
             name_dictionary.read_names(bad)
-        for raw in (b"pokemon_species_id,local_language_id,name,genus\n1,1,\xff\xfe,x\n",
-                    b"pokemon_species_id,local_language_id,name,genus\n1,1,a\x00b,x\n"):
-            with open(bad, "wb") as f:
-                f.write(raw)
-            with self.assertRaises(name_dictionary.DictionaryError):
-                name_dictionary.read_names(bad)
+        # Not UTF-8 (a NUL is no test: csv takes it since Python 3.11).
+        with open(bad, "wb") as f:
+            f.write(b"pokemon_species_id,local_language_id,name,genus\n1,1,\xff\xfe,x\n")
+        with self.assertRaises(name_dictionary.DictionaryError):
+            name_dictionary.read_names(bad)
         with open(bad, "w", encoding="utf-8-sig") as f:
             f.write("pokemon_species_id,local_language_id,name,genus\n1,1,テ,x\n")
         self.assertEqual(name_dictionary.read_names(bad), [{"no": 1, "ja": "テ"}], "a BOM is fine")
