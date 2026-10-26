@@ -15,16 +15,17 @@
  * line (base line 0). Capitals and digits ink rows y+1..y+14 of a label at y
  * (most 12 px wide, K M N W 4 are 14, X Y and "/" the full 16); a descender
  * (g, j, p, q, y) and "," ";" "_" reach row y+16. A katakana name is the
- * pkmn font (font_pkmn.h): a 16 px cell on a 22 px line whose top 6 px are
- * the dakuten rows, the base line 2 px above the bottom, so a label at y
- * inks rows y..y+21 at most and its cell is rows y+6..y+21. A name is one or
- * the other, never mixed (tools/sprite_pack.py check_name), so one byte of
- * 0x80 or above picks the font; the label's position is the same for both.
+ * pkmn font (font_pkmn.h): a 16 px cell, its strokes 3 px (a pixel bolder
+ * than the dots), on a 23 px line whose top 6 px are the dakuten rows, the
+ * base line 3 px above the bottom, so a label at y inks rows y..y+22 at most
+ * and its cell is rows y+6..y+22. A name is one or the other, never mixed
+ * (tools/sprite_pack.py check_name), so one byte of 0x80 or above picks the
+ * font; the label's position is the same for both.
  * "HP" and the bar share ROW_Y (an 8 px gap read as touching on hardware,
  * 2026-09-28); the value is white, centred on the bar, its digits' ink one
  * row above and below the bar. The name is the box's second row (NAME_Y; the
  * reason BEACON_HP_BAR_BOX_H depends on it): an ASCII name's cell at rows
- * 24..39 as before the katakana font, a katakana name's at 30..45 with its
+ * 24..39 as before the katakana font, a katakana name's at 30..46 with its
  * dakuten from row 24, three rows under the HP row's ink (rows 7..20). No
  * LVGL theme is installed (LV_USE_THEME_* off), so every style is set here.
  */
