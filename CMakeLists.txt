@@ -7,6 +7,8 @@
 if(CONFIG_SHIELD_PROSPECTOR)
   target_sources(app PRIVATE src/backlight.c src/status_observer.c)
   target_sources_ifdef(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM app PRIVATE src/prospector_screen.c src/hp_bar.c)
+  # The name row's katakana font (generated: tools/pkmn_font.py).
+  target_sources_ifdef(CONFIG_BEACON_HP_BAR_NAME_ROW app PRIVATE src/font_pkmn.c)
   target_sources_ifdef(CONFIG_BEACON_SCREEN_OFF app PRIVATE src/screen_off.c)
   target_sources_ifdef(CONFIG_BEACON_SPRITE app PRIVATE src/sprite.c src/sprite_pack.c)
   target_sources_ifdef(CONFIG_BEACON_SPRITE_RECEIVE app PRIVATE src/ble_receiver.c)
@@ -26,16 +28,17 @@ target_sources_ifdef(CONFIG_BEACON_STATUS_BROADCAST app PRIVATE src/status_broad
 # 4.9 KB above the sprite's block, hardware 2026-09-27 and 2026-10-06). The
 # canvas size goes to the sources as BEACON_SPRITE_GIF_W/_H, and
 # prospector_screen.c asserts that it fits the sprite box it lays out. The
-# name goes into the pack too, cut to what the HP bar shows; no message here
-# echoes the path or the name. A build without a GIF (CI, the release) has no
-# embedded pack: with CONFIG_BEACON_SPRITE_RECEIVE the player then waits for a
-# received one, whose size is checked at run time (src/sprite.c).
+# name goes into the pack too, as the converter checks it (15 bytes of UTF-8
+# in one of the HP bar's two alphabets; its message names no character of
+# it); no message here echoes the path or the name. A build without a GIF
+# (CI, the release) has no embedded pack: with CONFIG_BEACON_SPRITE_RECEIVE
+# the player then waits for a received one, whose size is checked at run time
+# (src/sprite.c).
 if(CONFIG_BEACON_SPRITE_EMBEDDED)
   set(sprite_gif "${CONFIG_BEACON_SPRITE_GIF}")
   set(sprite_pack_py "${CMAKE_CURRENT_SOURCE_DIR}/tools/sprite_pack.py")
   set(sprite_bin "${CMAKE_CURRENT_BINARY_DIR}/beacon_sprite.spk")
   set(sprite_reserve_bytes 8192)
-  set(sprite_name_glyphs 15)
 
   if(NOT IS_ABSOLUTE "${sprite_gif}")
     message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF must be an absolute path")
@@ -43,11 +46,10 @@ if(CONFIG_BEACON_SPRITE_EMBEDDED)
   if(NOT EXISTS "${sprite_gif}")
     message(FATAL_ERROR "CONFIG_BEACON_SPRITE_GIF: no such file")
   endif()
-  string(SUBSTRING "${CONFIG_BEACON_SPRITE_NAME}" 0 ${sprite_name_glyphs} sprite_name)
   # execute_process registers no dependency: a changed GIF or converter must re-run it.
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
                "${sprite_gif}" "${sprite_pack_py}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/gifpics.py")
-  execute_process(COMMAND ${PYTHON_EXECUTABLE} "${sprite_pack_py}" pack --name "${sprite_name}"
+  execute_process(COMMAND ${PYTHON_EXECUTABLE} "${sprite_pack_py}" pack --name "${CONFIG_BEACON_SPRITE_NAME}"
                           -o "${sprite_bin}" "${sprite_gif}"
                   RESULT_VARIABLE sprite_rc OUTPUT_VARIABLE sprite_out ERROR_VARIABLE sprite_err)
   if(NOT sprite_rc EQUAL 0)

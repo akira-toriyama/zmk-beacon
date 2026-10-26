@@ -26,9 +26,10 @@
 #                     release, and never printed by path.
 #   --sprite-name <text>
 #                     the sprite's name under the HP bar (CONFIG_BEACON_SPRITE_NAME,
-#                     needs --sprite): printable ASCII without a double quote, a
-#                     backslash or "??". It names the GIF's subject, so only its
-#                     length is printed.
+#                     needs --sprite): 15 bytes of UTF-8 at most, printable ASCII
+#                     or katakana (tools/sprite_pack.py says which characters),
+#                     without a double quote, a backslash or "??". It names the
+#                     GIF's subject, so only its length is printed.
 #   --kconfig CONFIG_NAME=VALUE
 #                     one more Kconfig line, merged after the sprite and logging
 #                     lines. Repeatable; the images carry -kconfig.
@@ -141,12 +142,16 @@ if [ -n "$SPRITE" ]; then
 fi
 if [ -n "$SPRITE_NAME" ] && [ -z "$SPRITE" ]; then die 2 "--sprite-name needs --sprite"; fi
 # What Kconfig takes unescaped, the C preprocessor leaves alone (a trigraph
-# "??x" would change in autoconf.h) and the HP bar's font can draw (Kconfig
-# help). grep reads lines, so a newline is checked apart.
+# "??x" would change in autoconf.h) and a pack holds (15 bytes); which
+# characters the HP bar's fonts draw is the converter's check, in the build
+# (Kconfig help). grep reads lines, so a newline is checked apart; in the C
+# locale [[:cntrl:]] is the control bytes and DEL, UTF-8's bytes pass.
 case "$SPRITE_NAME" in *$'\n'*) die 2 "--sprite-name: one line" ;; esac
-if printf '%s' "$SPRITE_NAME" | LC_ALL=C grep -Eq '[^ -~]|["\\]|\?\?'; then
-  die 2 "--sprite-name: printable ASCII only, without a double quote, a backslash or \"??\""
+if printf '%s' "$SPRITE_NAME" | LC_ALL=C grep -Eq '[[:cntrl:]]|["\\]|\?\?'; then
+  die 2 "--sprite-name: no control character, double quote, backslash or \"??\""
 fi
+SPRITE_NAME_BYTES="$(printf '%s' "$SPRITE_NAME" | LC_ALL=C wc -c | tr -d ' ')"
+if [ "$SPRITE_NAME_BYTES" -gt 15 ]; then die 2 "--sprite-name: 15 bytes of UTF-8 at most"; fi
 # The messages name the symbol at most, never a value.
 for kv in ${KCONFIG[@]+"${KCONFIG[@]}"}; do
   case "$kv" in
@@ -273,7 +278,7 @@ echo "west update : $([ "$NEED_UPDATE" -eq 1 ] && echo yes || echo 'no (cached; 
 if [ "$LOGGING" -eq 1 ]; then echo "logging     : ${LOGGING_CONF[*]}"; fi
 # Neither the GIF's path nor the name: both name the subject.
 if [ -n "$SPRITE" ]; then echo "sprite      : a $(wc -c <"$SPRITE" | tr -d ' ') byte GIF"; fi
-if [ -n "$SPRITE_NAME" ]; then echo "sprite name : ${#SPRITE_NAME} characters"; fi
+if [ -n "$SPRITE_NAME" ]; then echo "sprite name : $SPRITE_NAME_BYTES bytes"; fi
 if [ ${#KCONFIG[@]} -gt 0 ]; then echo "kconfig     : ${KCONFIG[*]}"; fi
 echo "targets     :"
 for row in "${TARGETS[@]}"; do echo "  ${row%%	*} / ${row##*	} -> firmware/${row##*	}$SUFFIX.uf2"; done

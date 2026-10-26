@@ -31,7 +31,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   same two;
   `test_sprite_pack.py` and `test_sprite_colours.py` write their own GIFs
   (`python3 -m unittest discover
-  tools`, CI `tools-test.yml`). The 1,298-GIF checks against Pillow and the
+  tools`, CI `tools-test.yml`); `pkmn_font.py` (its docstring) renders the
+  name row's katakana font, `src/font_pkmn.{c,h}`, from the pkmn TTF, which
+  is not in the repository (clone nue-of-k/pkmn): run it again rather than
+  edit them, and its `preview` prints glyphs as dots. The 1,298-GIF checks against Pillow and the
   round trips are local only: the GIFs are personal files. `sprite-sender/`
   (Swift, no dependencies; README "The sprite sender"): `SpriteSenderCore` is
   pure (config, rotation, name rule, report v1, page plan; `swift test` on
@@ -235,6 +238,14 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - Opt every LVGL widget and font in: ZMK implies `LV_CONF_MINIMAL`, and a widget
   used without its `CONFIG_LV_USE_*` fails at link time, not in Kconfig (the HP
   bar's are set in the shield conf, the sprite's selected by `BEACON_SPRITE`).
+  The katakana font is the module's own (`src/font_pkmn.c`, built with
+  `BEACON_HP_BAR_NAME_ROW`); its line is taller than unscii 16's, and
+  `BEACON_HP_BAR_BOX_H` follows its header (hp_bar.h).
+- A pack's name is 15 bytes of UTF-8 in one of two alphabets, printable ASCII
+  or `sprite_pack.KATAKANA_RANGES`, never both: `check_name` is the one rule
+  (the converter runs in the build and in the sender), the device picks the
+  font by a byte of 0x80 or above, and canon's `sprite-name.sh` and the
+  sender's `SpriteName` must stay within it.
 - Change the sprite pack only with a new magic (`SPK1`, tools/sprite_pack.py
   and src/sprite_pack.h together): the player rejects a file it does not know
   instead of drawing it wrong.
@@ -279,6 +290,9 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - CI and `release.yml` build without a sprite or a name, so no release carries
   either. canon keeps the GIF in its ignored `assets/` and derives the name from
   the file name (`assets/sprite-name.sh` there).
+- The katakana font's glyphs are whole blocks (`sprite_pack.KATAKANA_RANGES`),
+  never a subset cut to the names in use: a font made of a name's characters
+  would tell the subject. Tests and docs use made-up katakana.
 
 ## Commits, pull requests, fleet files
 

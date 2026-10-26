@@ -27,8 +27,10 @@ changes daily over the air:
 
 ## What a pack stores
 
-- One or two animations, front first; a name of up to 15 printable ASCII
-  characters (what the HP bar shows); the total length and a CRC-32, so a
+- One or two animations, front first; a name of up to 15 bytes of UTF-8,
+  all printable ASCII or all katakana (`sprite_pack.py`'s `KATAKANA_RANGES`:
+  the HP bar shows the one in unscii 16 and the other in the pkmn font, and
+  has no font for a mixture); the total length and a CRC-32, so a
   receiver can tell a whole, intact file from a cut or corrupted one before
   opening it.
 - Per animation: the canvas size, a palette of up to 255 RGB colours, the
