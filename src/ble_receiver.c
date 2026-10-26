@@ -346,8 +346,10 @@ static ssize_t begin(const uint8_t *in, uint16_t len) {
     const uint32_t start = k_uptime_get_32();
     note_flash(flash_erase(flash, ROOM_OFFSET, ROUND_UP(expected, PAGE_SIZE)));
     xfer.erase_ms = k_uptime_get_32() - start;
+    /* ROUND_UP computes in unsigned long: the cast keeps %u honest. */
     LOG_INF("begin: %u bytes expected, %u pages erased in %u ms (%d)", expected,
-            ROUND_UP(expected, PAGE_SIZE) / PAGE_SIZE, xfer.erase_ms, xfer.flash_err);
+            (unsigned int)(ROUND_UP(expected, PAGE_SIZE) / PAGE_SIZE), xfer.erase_ms,
+            xfer.flash_err);
     return len;
 }
 

@@ -49,6 +49,47 @@ final class ConfigTests: XCTestCase {
             XCTAssertEqual($0 as? SenderConfig.Error, .rangeWithoutOrder)
         }
     }
+
+    func testNamesResolvesLikeTheOthersAndNeedsTheOrder() throws {
+        let base = URL(fileURLWithPath: "/x/")
+        let c = try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o", "names": "names.json"}"#.utf8), base: base)
+        XCTAssertEqual(c.namesFile?.path, "/x/names.json")
+        XCTAssertNil(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o"}"#.utf8), base: base).namesFile)
+        XCTAssertThrowsError(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "names": "n"}"#.utf8), base: base)) {
+            XCTAssertEqual($0 as? SenderConfig.Error, .namesWithoutOrder)
+        }
+        XCTAssertThrowsError(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o", "names": ""}"#.utf8), base: base)) {
+            XCTAssertEqual($0 as? SenderConfig.Error, .emptyPath("names"))
+        }
+    }
+}
+
+final class NameDictionaryTests: XCTestCase {
+    func testArrayOfObjectsKeyedByNumberOtherKeysIgnored() throws {
+        let json = Data("""
+            [{"no": 1, "ja": "テスト", "en": "Test", "genus": "x"},
+             {"no": 3, "en": "Noja"},
+             {"no": 2, "ja": "ア"}]
+            """.utf8)
+        let d = try NameDictionary(json: json)
+        XCTAssertEqual(d.count, 2, "places with a Japanese name")
+        XCTAssertEqual(d.japaneseName(1), "テスト")
+        XCTAssertEqual(d.japaneseName(2), "ア")
+        XCTAssertNil(d.japaneseName(3), "an entry without ja")
+        XCTAssertNil(d.japaneseName(4))
+        XCTAssertEqual(try NameDictionary(json: Data("[]".utf8)).count, 0)
+    }
+
+    func testNotAnArrayOfNumberedObjectsAndDuplicatesAreErrors() {
+        for bad in [#"{"no": 1, "ja": "ア"}"#, #"[{"ja": "ア"}]"#, #"[{"no": "1", "ja": "ア"}]"#, #"[1, 2]"#, "", "nonsense"] {
+            XCTAssertThrowsError(try NameDictionary(json: Data(bad.utf8)), bad) {
+                if case .notAnArray? = $0 as? NameDictionary.Error {} else { XCTFail("\(bad): \($0)") }
+            }
+        }
+        XCTAssertThrowsError(try NameDictionary(json: Data(#"[{"no": 5, "ja": "ア"}, {"no": 5}]"#.utf8))) {
+            XCTAssertEqual($0 as? NameDictionary.Error, .duplicateNumber(5))
+        }
+    }
 }
 
 final class RotationTests: XCTestCase {
@@ -135,6 +176,53 @@ final class SpriteNameTests: XCTestCase {
             XCTAssertEqual($0 as? SpriteName.Error, .notPrintableASCII)
         }
     }
+
+    func testKatakanaIsTheFontsCharactersComposedWithin15Bytes() throws {
+        XCTAssertEqual(try SpriteName.katakana("テストテス"), "テストテス", "five katakana: 15 bytes")
+        XCTAssertEqual(try SpriteName.katakana("ガギグ♀"), "ガギグ♀")
+        XCTAssertEqual(try SpriteName.katakana("ア♂Ｚ：２"), "ア♂Ｚ：２", "the gender signs, a fullwidth capital, colon and digit")
+        XCTAssertEqual(try SpriteName.katakana("ー・ヴ"), "ー・ヴ", "U+30FB and U+30FC are in the block")
+        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}ヒ\u{309A}"), "ガピ", "NFD composes to NFC: 6 bytes, not 12")
+        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}ヒ\u{309A}").utf8.count, 6)
+        XCTAssertThrowsError(try SpriteName.katakana("テストテスト")) { XCTAssertEqual($0 as? SpriteName.Error, .tooLong) }
+        XCTAssertThrowsError(try SpriteName.katakana("")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
+        // Hiragana, a kanji, a halfwidth katakana, a fullwidth small letter,
+        // ASCII, a space, a lone combining dakuten and U+30A0 (before the block).
+        for text in ["ぴ", "鳥", "ｱ", "ａ", "Aテ", "テ ス", "\u{3099}", "\u{30A0}"] {
+            XCTAssertThrowsError(try SpriteName.katakana(text), text) {
+                XCTAssertEqual($0 as? SpriteName.Error, .outsideTheFont, text)
+            }
+        }
+        XCTAssertEqual(SpriteName.katakanaRanges.reduce(0) { $0 + $1.count }, 131, "sprite_pack.KATAKANA_RANGES: 2 + 92 + 11 + 26")
+    }
+
+    func testChoosePrefersTheDictionaryAndFallsBackToTheFileName() throws {
+        let d = NameDictionary(japanese: [1: "テストテス", 2: "テストテスト", 3: "ぴ", 4: "カ\u{3099}", 5: ""])
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 1, dictionary: d),
+                       .init(name: "テストテス", source: .katakana))
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 2, dictionary: d),
+                       .init(name: "Test one", source: .fileName(.tooLong)), "18 bytes: the file name, uncut")
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 3, dictionary: d),
+                       .init(name: "Test one", source: .fileName(.outsideTheFont)))
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 4, dictionary: d),
+                       .init(name: "ガ", source: .katakana), "composed")
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 5, dictionary: d),
+                       .init(name: "Test one", source: .fileName(.noEntry)), "an empty ja is no name")
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 6, dictionary: d),
+                       .init(name: "Test one", source: .fileName(.noEntry)))
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: nil, dictionary: d),
+                       .init(name: "Test one", source: .fileName(.notInOrder)))
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 1, dictionary: nil),
+                       .init(name: "Test one", source: .fileName(.noDictionary)))
+        XCTAssertThrowsError(try SpriteName.choose(fileName: "♀.gif", place: 2, dictionary: d), "the fallback keeps its errors") {
+            XCTAssertEqual($0 as? SpriteName.Error, .notPrintableASCII)
+        }
+        XCTAssertEqual(try SpriteName.choose(fileName: "♀.gif", place: 1, dictionary: d).name, "テストテス",
+                       "a file name of no use when the dictionary serves")
+        XCTAssertEqual("\(SpriteName.Source.katakana)", "katakana from the name dictionary")
+        XCTAssertEqual("\(SpriteName.Source.fileName(.tooLong))",
+                       "from the file name (the dictionary's name is longer than 15 bytes)")
+    }
 }
 
 final class ReportTests: XCTestCase {
@@ -160,7 +248,13 @@ final class ReportTests: XCTestCase {
         XCTAssertEqual(r.flashError, -2)
         XCTAssertEqual(r.name, "Nidoran F")
         XCTAssertFalse(r.line.contains("Nidoran"))
-        XCTAssertTrue(r.line.contains("name_chars=9"))
+        XCTAssertTrue(r.line.contains("name_chars=9 name_bytes=9"))
+        for (i, c) in "テストテス".utf8.enumerated() { b[28 + i] = c }
+        b[28 + 15] = 0
+        let katakana = Report(Data(b))!
+        XCTAssertEqual(katakana.name, "テストテス")
+        XCTAssertTrue(katakana.line.contains("name_chars=5 name_bytes=15"))
+        XCTAssertFalse(katakana.line.contains("テ"))
     }
 
     func testRejectsShortAndOtherVersions() {

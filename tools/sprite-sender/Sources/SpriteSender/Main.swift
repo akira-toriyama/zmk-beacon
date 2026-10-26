@@ -5,9 +5,11 @@ import SpriteSenderCore
 ///
 ///   sprite-sender daily --config <sender.json> [--dry-run]
 ///       The next GIF of the rotation (SpriteSenderCore.Rotation), packed
-///       with its back view when the config has one and sent to the device.
-///       --dry-run packs and prints the sizes but moves no state and sends
-///       nothing.
+///       with its back view when the config has one, named after the name
+///       dictionary when the config has one and the HP bar can show that name,
+///       else after its file (SpriteSenderCore.SpriteName), and sent to the
+///       device. --dry-run packs and prints the sizes but moves no state and
+///       sends nothing.
 ///   sprite-sender send <pack.spk>
 ///       One pack as it is: the hardware check.
 ///   sprite-sender report
@@ -135,6 +137,17 @@ enum Main {
         if let range = config.range, range.first > order.count {
             Exit.usage("the range starts after the order file's \(order.count) names")
         }
+        var dictionary: NameDictionary?
+        if let namesFile = config.namesFile {
+            guard let data = fm.contents(atPath: namesFile.path) else {
+                Exit.usage("cannot read the name dictionary the config names")
+            }
+            do {
+                dictionary = try NameDictionary(json: data)
+            } catch {
+                Exit.usage("bad name dictionary: \(error)")
+            }
+        }
         let candidates = Rotation.candidates(entries, order: order, range: config.range)
         let last = fm.contents(atPath: config.stateFile.path).flatMap(Rotation.name(inState:))
         guard let chosen = Rotation.next(after: last, in: candidates, order: order) else {
@@ -144,11 +157,17 @@ enum Main {
         var about: [String] = []
         if !order.isEmpty { about.append("\(order.count) listed") }
         if let range = config.range { about.append("range \(range)") }
+        if let dictionary { about.append("\(dictionary.count) names") }
         Log.line("rotation: \(index) of \(candidates.count)\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")\(last == nil ? ", no state" : "")")
 
+        // The place is the GIF's line of the order, counted from 1 (nil when
+        // the order does not list it), the number the dictionary is keyed by.
+        let place = order.firstIndex(of: chosen).map { $0 + 1 }
         let name: String
         do {
-            name = try SpriteName.from(fileName: chosen)
+            let choice = try SpriteName.choose(fileName: chosen, place: place, dictionary: dictionary)
+            name = choice.name
+            Log.line("name: \(choice.source), \(name.count) characters, \(name.utf8.count) bytes")
         } catch {
             if !dryRun { moveState(config, to: chosen) }
             Exit.failure("the GIF's file name gives no sprite name: \(error)")
@@ -170,7 +189,7 @@ enum Main {
             Exit.failure("the converter refused the GIF: \(error)")
         }
         guard !pack.isEmpty else { Exit.failure("the converter wrote an empty pack") }
-        Log.line("pack: \(pack.count) bytes, \(back == nil ? 1 : 2) animations, name of \(name.count) characters")
+        Log.line("pack: \(pack.count) bytes, \(back == nil ? 1 : 2) animations")
         if dryRun {
             Exit.ok()
         }

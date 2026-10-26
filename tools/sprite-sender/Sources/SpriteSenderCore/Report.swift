@@ -54,12 +54,14 @@ public struct Report: Equatable, Sendable {
     public var isIdle: Bool { state == State.idle.rawValue }
     public var shown: Bool { result == Result.shown.rawValue }
 
-    /// One line for a log. The name is the sprite's subject, so only its length.
+    /// One line for a log. The name is the sprite's subject, so only its
+    /// length, in characters and in bytes (15 bytes of 5 characters: katakana).
     public var line: String {
         let resultName = Result(rawValue: result).map { "\($0)" } ?? "\(result)"
         let sourceName = Source(rawValue: source).map { "\($0)" } ?? "\(source)"
         return "state=\(state) result=\(resultName) source=\(sourceName) expected=\(expected) received=\(received) "
             + "interval=\(Double(interval) * 1.25)ms timeout=\(UInt32(timeout) * 10)ms "
-            + "erase_ms=\(eraseMs) store_ms=\(storeMs) flash_err=\(flashError) name_chars=\(name.count)"
+            + "erase_ms=\(eraseMs) store_ms=\(storeMs) flash_err=\(flashError) "
+            + "name_chars=\(name.count) name_bytes=\(name.utf8.count)"
     }
 }

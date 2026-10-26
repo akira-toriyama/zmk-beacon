@@ -5,7 +5,7 @@ import Foundation
 /// directory, so the whole collection moves as one.
 ///
 ///   { "front": "front", "back": "back", "state": "sender-state", "order": "order.txt",
-///     "range": "1 ~ 151" }
+///     "range": "1 ~ 151", "names": "names.json" }
 ///
 /// `back` is optional: without it every pack holds the front animation only.
 /// `state` is the file the rotation keeps its position in (Rotation).
@@ -15,22 +15,28 @@ import Foundation
 /// `range` is optional and needs `order`: the places of the order the
 /// rotation keeps (Rotation.PlaceRange; with the user's order, the species'
 /// numbers). A sender older than the key ignores it and shows them all.
+/// `names` is optional and needs `order`: the name dictionary
+/// (NameDictionary), whose katakana name of the GIF's place becomes the
+/// sprite name when the HP bar can show it (SpriteName.choose). An older
+/// sender ignores it and names the GIF after its file.
 public struct SenderConfig: Equatable, Sendable {
     public var frontDirectory: URL
     public var backDirectory: URL?
     public var stateFile: URL
     public var orderFile: URL?
     public var range: Rotation.PlaceRange?
+    public var namesFile: URL?
 
     public init(
         frontDirectory: URL, backDirectory: URL?, stateFile: URL, orderFile: URL? = nil,
-        range: Rotation.PlaceRange? = nil
+        range: Rotation.PlaceRange? = nil, namesFile: URL? = nil
     ) {
         self.frontDirectory = frontDirectory
         self.backDirectory = backDirectory
         self.stateFile = stateFile
         self.orderFile = orderFile
         self.range = range
+        self.namesFile = namesFile
     }
 
     private struct File: Decodable {
@@ -39,6 +45,7 @@ public struct SenderConfig: Equatable, Sendable {
         var state: String
         var order: String?
         var range: String?
+        var names: String?
     }
 
     public enum Error: Swift.Error, Equatable {
@@ -47,6 +54,7 @@ public struct SenderConfig: Equatable, Sendable {
         /// Without the text: it may name GIFs, and this error reaches the log.
         case badRange
         case rangeWithoutOrder
+        case namesWithoutOrder
     }
 
     /// Parses the file's bytes; `base` is the directory the relative paths
@@ -70,6 +78,10 @@ public struct SenderConfig: Equatable, Sendable {
             guard let places = Rotation.PlaceRange(text) else { throw Error.badRange }
             guard orderFile != nil else { throw Error.rangeWithoutOrder }
             range = places
+        }
+        namesFile = try file.names.map { try resolve($0, "names") }
+        if namesFile != nil {
+            guard orderFile != nil else { throw Error.namesWithoutOrder }
         }
     }
 }

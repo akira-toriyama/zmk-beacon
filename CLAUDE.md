@@ -29,15 +29,19 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   show most, for the key LEDs' palette of canon's keyboard: its docstring
   holds the rule and the numbers measured on the user's collection) on the
   same two;
-  `test_sprite_pack.py` and `test_sprite_colours.py` write their own GIFs
-  (`python3 -m unittest discover
+  `name_dictionary.py` (its docstring) writes the sprite sender's name
+  dictionary, the katakana names by National Pokédex number, from PokeAPI's
+  species names CSV and compares it with the sender's order file; its output
+  names species, so it goes to the terminal only;
+  `test_sprite_pack.py`, `test_sprite_colours.py` and `test_name_dictionary.py` write their own GIFs
+  and CSV (`python3 -m unittest discover
   tools`, CI `tools-test.yml`); `pkmn_font.py` (its docstring) renders the
   name row's katakana font, `src/font_pkmn.{c,h}`, from the pkmn TTF, which
   is not in the repository (clone nue-of-k/pkmn): run it again rather than
   edit them, and its `preview` prints glyphs as pixels. The 1,298-GIF checks against Pillow and the
   round trips are local only: the GIFs are personal files. `sprite-sender/`
   (Swift, no dependencies; README "The sprite sender"): `SpriteSenderCore` is
-  pure (config, rotation, name rule, report v1, page plan; `swift test` on
+  pure (config, rotation, the name dictionary and the name rule, report v1, page plan; `swift test` on
   CI's macOS runner, `tools-test.yml`, as a Mac with only CommandLineTools
   has no XCTest) and `SpriteSender` does files, the Python tools as child
   processes (`Tools.swift`: the pack converter, the colours) and
@@ -245,7 +249,14 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   or `sprite_pack.KATAKANA_RANGES`, never both: `check_name` is the one rule
   (the converter runs in the build and in the sender), the device picks the
   font by a byte of 0x80 or above, and canon's `sprite-name.sh` and the
-  sender's `SpriteName` must stay within it.
+  sender's `SpriteName` must stay within it. `SpriteName.katakanaRanges`
+  copies `KATAKANA_RANGES` (Swift cannot read the Python): change the two
+  together, and `tools/pkmn_font.py` renders whatever the ranges say. The
+  sender prefers the name dictionary's katakana name (`names` in its config,
+  keyed by the GIF's place in the order) and falls back to the file name
+  (canon t-rq9h, the user's rule: katakana when it can be shown, else as
+  before); the sender's name rule and canon's `sprite-name.sh` are two
+  copies of the file-name rule.
 - Change the sprite pack only with a new magic (`SPK1`, tools/sprite_pack.py
   and src/sprite_pack.h together): the player rejects a file it does not know
   instead of drawing it wrong.
