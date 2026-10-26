@@ -237,7 +237,9 @@ The sprite name comes from the name dictionary when the config has one
 [--order <file>]` writes from PokeAPI's CSV, every species in National Pokédex
 order, and compares with the order file (a place whose file name is not its
 English name is printed: a GIF at the wrong place would get the wrong
-katakana name). The GIF's place is its line of the order, and its `ja`,
+katakana name). The GIF's place is its position among the order's names,
+counted from 1 as `range` counts them (an empty line or a repeated name
+holds no place), and its `ja`,
 composed (NFC), is the sprite name when it is 15 bytes of UTF-8 at most and
 every character is in the katakana font (`sprite_pack.py`'s
 `KATAKANA_RANGES`); otherwise, and without the key, the name is the GIF's

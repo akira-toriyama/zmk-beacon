@@ -54,7 +54,7 @@ enum Tools {
         if let inPipe, let input {
             // Written whole before the outputs are read: the input is a few
             // bytes, far below the pipe's buffer, so this never blocks.
-            inPipe.fileHandleForWriting.write(input)
+            try inPipe.fileHandleForWriting.write(contentsOf: input)
             try inPipe.fileHandleForWriting.close()
         }
         // Both pipes drained at once: a child that fills one while the parent

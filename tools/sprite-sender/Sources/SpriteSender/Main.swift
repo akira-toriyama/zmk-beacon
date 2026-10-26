@@ -144,8 +144,10 @@ enum Main {
             }
             do {
                 dictionary = try NameDictionary(json: data)
+            } catch NameDictionary.Error.duplicateNumber {
+                Exit.usage("bad name dictionary: a number appears twice")
             } catch {
-                Exit.usage("bad name dictionary: \(error)")
+                Exit.usage("bad name dictionary: not a JSON array of objects with an integer \"no\"")
             }
         }
         let candidates = Rotation.candidates(entries, order: order, range: config.range)
@@ -160,9 +162,7 @@ enum Main {
         if let dictionary { about.append("\(dictionary.count) names") }
         Log.line("rotation: \(index) of \(candidates.count)\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")\(last == nil ? ", no state" : "")")
 
-        // The place is the GIF's line of the order, counted from 1 (nil when
-        // the order does not list it), the number the dictionary is keyed by.
-        let place = order.firstIndex(of: chosen).map { $0 + 1 }
+        let place = Rotation.place(of: chosen, in: order)
         let name: String
         do {
             let choice = try SpriteName.choose(fileName: chosen, place: place, dictionary: dictionary)

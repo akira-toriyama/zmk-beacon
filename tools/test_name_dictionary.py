@@ -52,6 +52,11 @@ class NameDictionaryTest(unittest.TestCase):
             f.write("Test.gif\r\n\nSecond.gif\nThird.GIF\nfourth.gif\nFifth one.gif\nSixth.gif\nTest.gif\n".encode("utf-8"))
         names = name_dictionary.read_order(order)
         self.assertEqual(len(names), 6, "empty lines and a repeat skipped")
+        with open(order, "wb") as f:
+            f.write("Caf\u00e9.gif\nCafe\u0301.gif\n".encode("utf-8"))
+        self.assertEqual(name_dictionary.read_order(order), ["Caf\u00e9.gif"], "a decomposed spelling is the same name")
+        with open(order, "wb") as f:
+            f.write("Test.gif\r\n\nSecond.gif\nThird.GIF\nfourth.gif\nFifth one.gif\nSixth.gif\nTest.gif\n".encode("utf-8"))
         places, mismatches, shown = name_dictionary.compare(name_dictionary.read_names(self.csv), names)
         self.assertEqual(places, 6)
         self.assertEqual(mismatches, [(4, "fourth", "Fourth"), (6, "Sixth", None)])
@@ -79,6 +84,15 @@ class NameDictionaryTest(unittest.TestCase):
             f.write("id,name\n1,x\n")
         with self.assertRaises(name_dictionary.DictionaryError):
             name_dictionary.read_names(bad)
+        for raw in (b"pokemon_species_id,local_language_id,name,genus\n1,1,\xff\xfe,x\n",
+                    b"pokemon_species_id,local_language_id,name,genus\n1,1,a\x00b,x\n"):
+            with open(bad, "wb") as f:
+                f.write(raw)
+            with self.assertRaises(name_dictionary.DictionaryError):
+                name_dictionary.read_names(bad)
+        with open(bad, "w", encoding="utf-8-sig") as f:
+            f.write("pokemon_species_id,local_language_id,name,genus\n1,1,テ,x\n")
+        self.assertEqual(name_dictionary.read_names(bad), [{"no": 1, "ja": "テ"}], "a BOM is fine")
         with open(bad, "w", encoding="utf-8") as f:
             f.write("pokemon_species_id,local_language_id,name,genus\n1,5,Fr,\n")
         with self.assertRaises(name_dictionary.DictionaryError):

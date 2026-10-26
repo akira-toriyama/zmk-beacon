@@ -7,19 +7,20 @@ import Foundation
 ///
 ///   [{"no": 1, "ja": "<katakana>", "en": "<name>"}, ...]
 ///
-/// `no` is the place (with the user's order, the species' National Pokédex
-/// number), `ja` the katakana name, `en` the English one, which the sender
-/// does not use (tools/name_dictionary.py writes the file from PokeAPI's CSV
-/// and compares `en` with the order's file names). Other keys are ignored, so
-/// a field can be added without a sender change; `ja` may be missing. The
-/// file names the collection's subjects, so it stays off every repository,
-/// like the order file, and no error names a value of it.
+/// `no` is the place (Rotation.place; with the user's order, the species'
+/// National Pokédex number), `ja` the katakana name, `en` the English one,
+/// which the sender does not use (tools/name_dictionary.py writes the file
+/// from PokeAPI's CSV and compares `en` with the order's file names). Other
+/// keys are ignored, so a field can be added without a sender change; `ja`
+/// may be missing. The file names the collection's subjects, so it stays off
+/// every repository, like the order file, and no error carries a value of
+/// it, not even a number.
 public struct NameDictionary: Equatable, Sendable {
     public enum Error: Swift.Error, Equatable {
-        /// Not a JSON array of objects with an integer `no` (the decoder's
-        /// description, which names keys and types, never values).
-        case notAnArray(String)
-        case duplicateNumber(Int)
+        /// Not a JSON array of objects with an integer `no`.
+        case notAnArrayOfEntries
+        /// A `no` twice.
+        case duplicateNumber
     }
 
     private var japanese: [Int: String]
@@ -34,16 +35,13 @@ public struct NameDictionary: Equatable, Sendable {
     }
 
     public init(json: Data) throws {
-        let entries: [Entry]
-        do {
-            entries = try JSONDecoder().decode([Entry].self, from: json)
-        } catch {
-            throw Error.notAnArray(String(describing: error))
+        guard let entries = try? JSONDecoder().decode([Entry].self, from: json) else {
+            throw Error.notAnArrayOfEntries
         }
         japanese = [:]
         var seen = Set<Int>()
         for entry in entries {
-            guard seen.insert(entry.no).inserted else { throw Error.duplicateNumber(entry.no) }
+            guard seen.insert(entry.no).inserted else { throw Error.duplicateNumber }
             if let ja = entry.ja {
                 japanese[entry.no] = ja
             }

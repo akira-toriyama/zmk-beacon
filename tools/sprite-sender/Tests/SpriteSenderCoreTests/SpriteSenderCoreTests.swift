@@ -83,11 +83,11 @@ final class NameDictionaryTests: XCTestCase {
     func testNotAnArrayOfNumberedObjectsAndDuplicatesAreErrors() {
         for bad in [#"{"no": 1, "ja": "ア"}"#, #"[{"ja": "ア"}]"#, #"[{"no": "1", "ja": "ア"}]"#, #"[1, 2]"#, "", "nonsense"] {
             XCTAssertThrowsError(try NameDictionary(json: Data(bad.utf8)), bad) {
-                if case .notAnArray? = $0 as? NameDictionary.Error {} else { XCTFail("\(bad): \($0)") }
+                XCTAssertEqual($0 as? NameDictionary.Error, .notAnArrayOfEntries, bad)
             }
         }
         XCTAssertThrowsError(try NameDictionary(json: Data(#"[{"no": 5, "ja": "ア"}, {"no": 5}]"#.utf8))) {
-            XCTAssertEqual($0 as? NameDictionary.Error, .duplicateNumber(5))
+            XCTAssertEqual($0 as? NameDictionary.Error, .duplicateNumber)
         }
     }
 }
@@ -147,6 +147,17 @@ final class RotationTests: XCTestCase {
         XCTAssertNil(Rotation.next(after: nil, in: []))
     }
 
+    func testPlaceCountsTheOrdersNamesFromOne() {
+        let order = Rotation.order(in: Data("a.gif\n\nb.gif\nb.gif\nc.gif\n".utf8))
+        XCTAssertEqual(Rotation.place(of: "a.gif", in: order), 1)
+        XCTAssertEqual(Rotation.place(of: "b.gif", in: order), 2)
+        XCTAssertEqual(Rotation.place(of: "c.gif", in: order), 3, "an empty line and a repeat hold no place")
+        XCTAssertNil(Rotation.place(of: "d.gif", in: order))
+        XCTAssertNil(Rotation.place(of: "a.gif", in: []))
+        XCTAssertEqual(Rotation.place(of: "c.gif", in: order), Rotation.candidates(["a.gif", "b.gif", "c.gif"], order: order, range: Rotation.PlaceRange("3 ~ 3")).isEmpty ? nil : 3,
+                       "the place range counts the same way")
+    }
+
     func testStateRoundTripKeepsEveryByteOfTheName() {
         for name in ["a b.gif", "  Nidoran F .GIF", "trailing .gif"] {
             XCTAssertEqual(Rotation.name(inState: Rotation.state(for: name)), name)
@@ -184,6 +195,8 @@ final class SpriteNameTests: XCTestCase {
         XCTAssertEqual(try SpriteName.katakana("ー・ヴ"), "ー・ヴ", "U+30FB and U+30FC are in the block")
         XCTAssertEqual(try SpriteName.katakana("カ\u{3099}ヒ\u{309A}"), "ガピ", "NFD composes to NFC: 6 bytes, not 12")
         XCTAssertEqual(try SpriteName.katakana("カ\u{3099}ヒ\u{309A}").utf8.count, 6)
+        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}テストア"), "ガテストア", "18 bytes decomposed, 15 composed: the bytes count after composing")
+        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}テストア").utf8.count, 15)
         XCTAssertThrowsError(try SpriteName.katakana("テストテスト")) { XCTAssertEqual($0 as? SpriteName.Error, .tooLong) }
         XCTAssertThrowsError(try SpriteName.katakana("")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
         // Hiragana, a kanji, a halfwidth katakana, a fullwidth small letter,
@@ -206,6 +219,8 @@ final class SpriteNameTests: XCTestCase {
                        .init(name: "Test one", source: .fileName(.outsideTheFont)))
         XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 4, dictionary: d),
                        .init(name: "ガ", source: .katakana), "composed")
+        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 4, dictionary: d).name.utf8.count, 3,
+                       "composed in bytes too: String's == takes NFD for NFC")
         XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 5, dictionary: d),
                        .init(name: "Test one", source: .fileName(.noEntry)), "an empty ja is no name")
         XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 6, dictionary: d),
@@ -222,6 +237,10 @@ final class SpriteNameTests: XCTestCase {
         XCTAssertEqual("\(SpriteName.Source.katakana)", "katakana from the name dictionary")
         XCTAssertEqual("\(SpriteName.Source.fileName(.tooLong))",
                        "from the file name (the dictionary's name is longer than 15 bytes)")
+        XCTAssertEqual("\(SpriteName.Fallback.noDictionary)", "the config names no dictionary")
+        XCTAssertEqual("\(SpriteName.Fallback.notInOrder)", "the GIF is not in the order")
+        XCTAssertEqual("\(SpriteName.Fallback.noEntry)", "the dictionary has no name for its place")
+        XCTAssertEqual("\(SpriteName.Fallback.outsideTheFont)", "the dictionary's name has a character the katakana font lacks")
     }
 }
 

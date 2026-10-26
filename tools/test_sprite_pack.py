@@ -281,8 +281,9 @@ class SpritePackTest(unittest.TestCase):
             sprite_pack.header(bad)
 
     def test_name_on_stdin(self):
-        # `--name -`: the bytes as they are (a decomposed argument is what it
-        # avoids), one line end dropped, a wrong name refused like an argument's.
+        # `--name-stdin`: the bytes as they are (a decomposed argument is what
+        # it avoids), one line end dropped, a wrong name refused like an
+        # argument's; `--name -` stays the name "-".
         gif = self.walking(2, 2, 3, 1)
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite_pack.py")
         with tempfile.TemporaryDirectory() as d:
@@ -291,20 +292,25 @@ class SpritePackTest(unittest.TestCase):
                 f.write(gif)
             out = os.path.join(d, "w.spk")
             for stdin, name in ((b"\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88\n", "テスト"), (b"Ab\r\n", "Ab"), (b"", "")):
-                r = subprocess.run([sys.executable, script, "pack", "--name", "-", "-o", out, gif_path],
+                r = subprocess.run([sys.executable, script, "pack", "--name-stdin", "-o", out, gif_path],
                                    input=stdin, capture_output=True)
                 self.assertEqual(r.returncode, 0, r.stderr)
                 with open(out, "rb") as f:
                     self.assertEqual(sprite_pack.header(f.read())[2], name)
             for stdin in (b"\xe3\x82\xab\xe3\x82\x99", b"\xff", b"A" * 16):
-                r = subprocess.run([sys.executable, script, "pack", "--name", "-", "-o", out, gif_path],
+                r = subprocess.run([sys.executable, script, "pack", "--name-stdin", "-o", out, gif_path],
                                    input=stdin, capture_output=True)
                 self.assertEqual(r.returncode, 2, stdin)
                 self.assertTrue(r.stderr.startswith(b"sprite_pack: "), r.stderr)
-            r = subprocess.run([sys.executable, script, "pack", "--name", "-", "-o", out, gif_path],
+            r = subprocess.run([sys.executable, script, "pack", "--name-stdin", "-o", out, gif_path],
                                input=b"Plain", capture_output=True)
             self.assertEqual(r.returncode, 0)
             self.assertNotIn(b"Plain", r.stdout + r.stderr, "nothing printed names the sprite")
+            r = subprocess.run([sys.executable, script, "pack", "--name", "-", "-o", out, gif_path],
+                               input=b"not read", capture_output=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(out, "rb") as f:
+                self.assertEqual(sprite_pack.header(f.read())[2], "-")
 
     def test_pack_rows(self):
         pic = bytes([1, 2, 3, 4, 5, 6])

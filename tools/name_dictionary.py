@@ -13,17 +13,19 @@ bar: the sender decides that (sprite_pack.check_name's rule, 15 bytes of the
 katakana font) and falls back to the file name.
 
 --order <file> compares the dictionary with the sender's order file (one GIF
-file name a line, its line the place; empty lines and repeats skipped as
-Rotation.order does): a place whose file name without its extension is not
-the English name is printed with both spellings, so a GIF at the wrong place
+file name a line; a name's place is its position among the names, counted
+from 1, empty lines and repeats dropped as the sender's Rotation.order drops
+them, repeats by canonical equivalence as Swift's String compares): a place
+whose file name without its extension is not the English name (both
+composed, NFC) is printed with both spellings, so a GIF at the wrong place
 would show the wrong katakana name. It also counts the places whose katakana
 name the HP bar can show. The output names species, which the user's
 collection is made of: it is for the terminal, never for a commit or a doc
 (the dictionary lives next to the order file, off every repository).
 
 Standard library only (macOS /usr/bin/python3, 3.9). Exit 0; 2 for a CSV
-without the columns or without a name in either language, or an unreadable
-file.
+without the columns, not UTF-8 (a BOM is fine) or without a name in either
+language, or an unreadable file.
 """
 import argparse
 import csv
@@ -49,7 +51,7 @@ def read_names(csv_path):
     ja = {}
     en = {}
     try:
-        with open(csv_path, newline="", encoding="utf-8") as f:
+        with open(csv_path, newline="", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 try:
@@ -67,6 +69,10 @@ def read_names(csv_path):
                     en[number] = unicodedata.normalize("NFC", name)
     except OSError as e:
         raise DictionaryError("cannot read the CSV: %s" % e.strerror)
+    except UnicodeDecodeError:
+        raise DictionaryError("the CSV is not UTF-8")
+    except csv.Error as e:
+        raise DictionaryError("the CSV does not parse: %s" % e)
     if not ja and not en:
         raise DictionaryError("the CSV names no species in Japanese or English")
     entries = []
@@ -88,8 +94,10 @@ def dumps(entries):
 
 
 def read_order(path):
-    """The order file's names: one a line, exactly, empty lines skipped, a
-    name's first line its place (Rotation.order of the sender)."""
+    """The order file's names, composed (NFC): one a line, exactly, empty
+    lines skipped, a name's first line its place (the sender's
+    Rotation.order, whose Set<String> takes a decomposed spelling for the
+    composed one)."""
     with open(path, "rb") as f:
         data = f.read()
     names = []
@@ -99,7 +107,7 @@ def read_order(path):
             line = line[:-1]
         if not line:
             continue
-        name = line.decode("utf-8", "replace")
+        name = unicodedata.normalize("NFC", line.decode("utf-8", "replace"))
         if name not in seen:
             seen.add(name)
             names.append(name)
@@ -118,8 +126,8 @@ def shows(ja):
 def compare(entries, order):
     """(places, mismatches, shown): the order's places, the [(place, stem,
     en)] whose file name without its extension differs from the English name
-    (en None when the dictionary has no entry), and the places whose katakana
-    name the HP bar shows."""
+    (en None when the dictionary has no entry; `order` as read_order gives
+    it, composed), and the places whose katakana name the HP bar shows."""
     by_number = {e["no"]: e for e in entries}
     mismatches = []
     shown = 0

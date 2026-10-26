@@ -101,7 +101,7 @@ public enum Rotation {
     }
 
     /// The order file's names: one a line, exactly (as the state), empty
-    /// lines skipped, a name's first line its place.
+    /// lines skipped, a name's first line its place (place(of:in:)).
     public static func order(in data: Data) -> [String] {
         var seen = Set<String>()
         return data.split(separator: 0x0a, omittingEmptySubsequences: true).compactMap { line in
@@ -111,6 +111,15 @@ public enum Rotation {
             let name = String(decoding: line, as: UTF8.self)
             return seen.insert(name).inserted ? name : nil
         }
+    }
+
+    /// A name's place in the order: its position among the order's names
+    /// counted from 1, as PlaceRange counts them (empty lines and repeats are
+    /// gone from `order`, so a repeated line moves every later name up by
+    /// one), nil for a name the order does not list. With the user's order,
+    /// the species' number, which the name dictionary is keyed by.
+    public static func place(of name: String, in order: [String]) -> Int? {
+        order.firstIndex(of: name).map { $0 + 1 }
     }
 
     /// The state file's content for a GIF, and the GIF a state file names:
