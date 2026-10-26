@@ -35,8 +35,8 @@ One battle-screen HP bar in a dark box along the bottom: `HP` and a bar with
 its value on it (`65/100`). Its length is the keyboard's battery: the mean of
 both halves' readings, or the one half that has a reading. The bar is green,
 yellow under 50 % and red under 20 %. A build with a sprite name
-(`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`) shows the name on a second row
-of the box: an ASCII name in unscii 16, like `HP`, a katakana one in the
+(`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`) shows the name on the box's
+first row, above `HP` and the bar: an ASCII name in unscii 16, like `HP`, a katakana one in the
 letters of the first Game Boy games (PKMN Strict from
 [pkmn](https://github.com/nue-of-k/pkmn), two pixels a dot and a pixel
 bolder, the dakuten above the cell; Credits below). A name is at most 15 bytes of UTF-8, all printable
@@ -67,7 +67,7 @@ in a build with a named embedded sprite.
 The screen plays a sprite pack (below) above the HP bar: centred, standing on
 the bar, and scaled to the largest size of its own proportions that fits the
 space above it, 2 px in from the panel's top and sides (a 90x90 px GIF shows
-at 198x198, or 173x173 above a bar with a name row). The pack comes from one
+at 198x198, or 174x174 above a bar with a name row). The pack comes from one
 of two places: the sprite room in flash, where a Mac put it over BLE (next
 section), or the image, when `CONFIG_BEACON_SPRITE_GIF="<absolute path>"`
 made the build convert a GIF and embed the pack. At boot the room's pack
@@ -112,7 +112,7 @@ Limits:
 
 - Any GIF a browser plays (GIF87a or GIF89a, disposal 0-3, transparency,
   interlace, local colour tables), with at least one frame and at most 255
-  colours in all, no larger than the sprite box: 276x198, or 276x173 with a
+  colours in all, no larger than the sprite box: 276x198, or 276x174 with a
   sprite name. A larger GIF stops the build with `static assertion failed:
   "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box: ..."` or `"... is
   taller than the sprite box: ..."`. A GIF whose player (its canvas and
@@ -253,7 +253,7 @@ after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).
 | `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press, a modifier confirmed as held (the tapping term over, or another key pressed under it) and its release refresh the payload for the next advertising event. |
 | `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name, the key press counter and the modifier byte are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that an embedded GIF fits. |
-| `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on a second row; and the mapping of both halves' batteries to its one level. |
+| `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on the row above; and the mapping of both halves' batteries to its one level. |
 | `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, the back view while a modifier is held, and its own nearest-neighbour draw into the display buffer; it plays the room's pack, the embedded one or a received one, and names the HP bar. The pack's reader and inflater are plain C that also compiles on the host. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |

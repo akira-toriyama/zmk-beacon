@@ -30,12 +30,15 @@
  * corners are rounded, and a box 2 px from the edge lost its own corners
  * (hardware 2026-09-28). */
 #define BEACON_HP_BAR_MARGIN_PX 12
-/* One row ("HP" and the bar), or a second one for the name (hp_bar.c places
- * the rows): unscii 16 for an ASCII name, the katakana font for the rest,
- * whose line is the taller (the dakuten rows above the cell) and sets the
- * height: the border, the name row's top 24 px inside it, the line, 2 px
- * under it, the border. */
-#define BEACON_HP_BAR_BOX_H (BEACON_HP_BAR_NAME_ROW ? 2 + 24 + BEACON_FONT_PKMN_LINE_H + 2 + 2 : 28)
+/* One row ("HP" and the bar), or the name's row above it (the user's order
+ * since 2026-10-26; until then the name sat under the bar): the border, the
+ * name line BEACON_HP_BAR_NAME_Y px inside it (the katakana font's, its top
+ * BEACON_FONT_PKMN_ABOVE_CELL px the dakuten rows; an ASCII name's unscii
+ * cell sits level with the katakana cell), 2 px, the HP row's 16 px cell at
+ * BEACON_HP_BAR_ROW_Y, 2 px, the border. hp_bar.c places the rows. */
+#define BEACON_HP_BAR_NAME_Y 5
+#define BEACON_HP_BAR_ROW_Y (BEACON_HP_BAR_NAME_ROW ? BEACON_HP_BAR_NAME_Y + BEACON_FONT_PKMN_LINE_H + 2 : 6)
+#define BEACON_HP_BAR_BOX_H (2 + BEACON_HP_BAR_ROW_Y + 16 + 2 + 2)
 /* Bytes of the name row's text, the pack's name field (sprite_pack.h): 15
  * unscii 16 cells or 5 katakana, all inside the box. */
 #define BEACON_HP_BAR_NAME_BYTES 15

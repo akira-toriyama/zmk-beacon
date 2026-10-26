@@ -5,8 +5,9 @@
  *
  * The HP bar (hp_bar.h): one battle-screen HP bar in a dark box along the
  * bottom: "HP", the bar with its value ("65/100") on it and, with a sprite
- * name (CONFIG_BEACON_SPRITE_NAME), the name on a second row; the layout the
- * user picked from twelve trials (canon t-er81). The bar's length and the
+ * name (CONFIG_BEACON_SPRITE_NAME), the name on the row above; the layout
+ * the user picked from twelve trials (canon t-er81), the name moved above
+ * the bar on request (2026-10-26). The bar's length and the
  * value are the keyboard's battery as hp_level() maps it. Green, yellow under
  * YELLOW_BELOW, red under RED_BELOW; without a reading an empty track with
  * "--/100" on it, and a grey "HP", value and name without a fresh payload.
@@ -23,11 +24,13 @@
  * font; the label's position is the same for both.
  * "HP" and the bar share ROW_Y (an 8 px gap read as touching on hardware,
  * 2026-09-28); the value is white, centred on the bar, its digits' ink one
- * row above and below the bar. The name is the box's second row (NAME_Y; the
- * reason BEACON_HP_BAR_BOX_H depends on it): an ASCII name's cell at rows
- * 24..39 as before the katakana font, a katakana name's at 30..46 with its
- * dakuten from row 24, three rows under the HP row's ink (rows 7..20). No
- * LVGL theme is installed (LV_USE_THEME_* off), so every style is set here.
+ * row above and below the bar. The name is the box's first row (the reason
+ * BEACON_HP_BAR_BOX_H depends on it): a katakana label at NAME_Y, its
+ * dakuten from row 5 and its cell at rows 11..27; an ASCII label at
+ * ASCII_NAME_Y, its cell level with the katakana one at rows 11..26 (ink
+ * 12..25); the HP row's ink at rows 31..44, three rows under the katakana
+ * ink. No LVGL theme is installed (LV_USE_THEME_* off), so every style is
+ * set here.
  */
 
 #include <string.h>
@@ -38,8 +41,9 @@
 #include "hp_bar.h"
 
 #define BORDER_PX 2
-#define ROW_Y 6
-#define NAME_Y 24
+#define ROW_Y BEACON_HP_BAR_ROW_Y
+#define NAME_Y BEACON_HP_BAR_NAME_Y
+#define ASCII_NAME_Y (NAME_Y + BEACON_FONT_PKMN_ABOVE_CELL)
 #define GLYPH_W 16
 #define GLYPH_H 16
 #define LABEL_X 8
@@ -186,7 +190,7 @@ void beacon_hp_bar_create(lv_obj_t *parent, int32_t screen_w) {
         lv_label_set_long_mode(hp.name, LV_LABEL_LONG_MODE_CLIP);
         lv_obj_set_width(hp.name, NAME_BYTES * GLYPH_W);
         lv_label_set_text_static(hp.name, hp.name_text);
-        lv_obj_set_pos(hp.name, LABEL_X, NAME_Y);
+        lv_obj_set_pos(hp.name, LABEL_X, ASCII_NAME_Y);
     }
 }
 
@@ -198,7 +202,10 @@ void beacon_hp_bar_set_name(const char *name, size_t len) {
     len = MIN(len, (size_t)NAME_BYTES);
     memcpy(hp.name_text, name, len);
     hp.name_text[len] = '\0';
-    lv_obj_set_style_text_font(hp.name, name_font(hp.name_text, len), 0);
+    const lv_font_t *font = name_font(hp.name_text, len);
+
+    lv_obj_set_style_text_font(hp.name, font, 0);
+    lv_obj_set_y(hp.name, font == &beacon_font_pkmn ? NAME_Y : ASCII_NAME_Y);
     /* Set again: the label measures the text when it is set. */
     lv_label_set_text_static(hp.name, hp.name_text);
 #else

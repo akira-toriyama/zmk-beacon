@@ -37,7 +37,7 @@ config LV_COLOR_16_SWAP
 # the whole run (its canvas and dictionary, two bytes a pixel at most), next
 # to the screen's widgets and draw tasks; CMakeLists.txt holds the estimate
 # and checks a GIF against this value at build time. 64 KiB holds any GIF of
-# the sprite box at 4 bits a pixel (276x173: 47,748 bytes) and about 200x140
+# the sprite box at 4 bits a pixel (276x174: 48,024 bytes) and about 200x140
 # at 8; the 88 KiB of the gifdec player took a logging build to 89.71% of RAM.
 config LV_Z_MEM_POOL_SIZE
     default 65536 if BEACON_SPRITE

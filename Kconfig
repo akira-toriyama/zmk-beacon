@@ -153,8 +153,8 @@ config BEACON_SPRITE_NAME
     default ""
     help
       Written into the embedded sprite pack (BEACON_SPRITE_GIF), from which
-      the HP bar shows it on a second row of its box, at the left: the box
-      grows by that row and the sprite's space above it shrinks
+      the HP bar shows it on the first row of its box, above the bar: the
+      box grows by that row and the sprite's space above it shrinks
       (src/hp_bar.h). 15 bytes of UTF-8 at most, all printable ASCII (shown
       in unscii 16) or all katakana (the pkmn font, src/font_pkmn.c: U+30A1
       to U+30FC, the gender signs, the fullwidth digits, colon and
