@@ -7,7 +7,9 @@
 
 `pack` writes the file and prints one line per animation
 (`animation N: WxH bpp B colours C pictures P frames F bytes N`) and the total;
-nothing it prints names the GIF or the sprite. `check` unpacks the file the
+nothing it prints names the GIF or the sprite. The name is 15 bytes of UTF-8
+at most, all printable ASCII or all katakana (check_name: what the HP bar's
+two fonts show). `check` unpacks the file the
 way the Prospector Dongle decodes it and compares every frame's pixels and
 delay with the GIFs; `info` prints the header's sizes. Exit 0, 1 on a
 mismatch, 2 on bad input. Standard library only, Python 3.9.
@@ -16,7 +18,7 @@ The format (docs/sprite-pack.md says why), little-endian, all offsets from the
 start of the file:
 
   file     0 "SPK1"  4 u16 animations  6 u16 0  8 u32 total length
-          12 u32 CRC-32 of [16, total)  16 char name[16] (ASCII, NUL-padded)
+          12 u32 CRC-32 of [16, total)  16 char name[16] (UTF-8, NUL-padded)
           32 u32 offset[animations], padded to a multiple of 4
   animation (at its offset, a multiple of 4)
            0 u16 width  2 u16 height  4 u8 bits per pixel (4 or 8)
@@ -40,7 +42,17 @@ import gifpics  # noqa: E402
 
 MAGIC = b"SPK1"
 HEADER = 32
-NAME_LEN = 15
+NAME_BYTES = 15
+# The two alphabets a name is written in, each the whole set of one of the HP
+# bar's fonts (src/hp_bar.c): printable ASCII, LVGL's unscii 16, or katakana,
+# the pkmn font that tools/pkmn_font.py generates from these ranges: the
+# Katakana block as far as pkmn draws it, the gender signs, the fullwidth
+# digits with the colon, and the fullwidth capitals (pkmn's other fullwidth
+# forms are empty or the games' special tiles, 2026-10-26). Fixed by block,
+# never cut to a name: the font is public and a name names the subject. A
+# name mixing the two has no font that shows all of it.
+KATAKANA_RANGES = ((0x2640, 0x2640), (0x2642, 0x2642), (0x30A1, 0x30FC), (0xFF10, 0xFF1A),
+                   (0xFF21, 0xFF3A))
 
 
 def play_delay(delay):
@@ -91,9 +103,23 @@ def inflate(data, size, zdict=None):
     return out
 
 
+def is_katakana(c):
+    return any(lo <= ord(c) <= hi for lo, hi in KATAKANA_RANGES)
+
+
 def check_name(name):
-    if len(name) > NAME_LEN or not all(" " <= c <= "~" for c in name):
-        raise PackError("the name must be printable ASCII, %d characters at most" % NAME_LEN)
+    """name when the HP bar shows it: at most NAME_BYTES of UTF-8, all of it
+    printable ASCII or all of it katakana (KATAKANA_RANGES); PackError otherwise.
+    The message names no character of it."""
+    try:
+        encoded = name.encode("utf-8")
+    except UnicodeEncodeError:
+        raise PackError("the name is not UTF-8")
+    if len(encoded) > NAME_BYTES:
+        raise PackError("the name must be %d UTF-8 bytes at most" % NAME_BYTES)
+    if not (all(" " <= c <= "~" for c in name) or all(is_katakana(c) for c in name)):
+        raise PackError("the name must be printable ASCII, or katakana (U+30A1-30FC), the "
+                        "gender signs, fullwidth digits, colon and capitals, not mixed")
     return name
 
 
@@ -161,7 +187,7 @@ def pack(gifs, name=""):
         infos.append(info)
         pos += len(part)
     total = pos
-    rest = name.encode("ascii").ljust(16, b"\0")
+    rest = name.encode("utf-8").ljust(16, b"\0")
     rest += b"".join(struct.pack("<I", o) for o in offsets)
     rest += b"\0" * (first - HEADER - 4 * n)
     rest += b"".join(parts)
@@ -178,7 +204,10 @@ def header(data):
     n, _, total, crc = struct.unpack_from("<HHII", data, 4)
     if n == 0 or total != len(data) or zlib.crc32(data[16:total]) != crc:
         raise PackError("the length or CRC-32 does not match")
-    name = data[16:32].split(b"\0", 1)[0].decode("ascii")
+    try:
+        name = data[16:32].split(b"\0", 1)[0].decode("utf-8")
+    except UnicodeDecodeError:
+        raise PackError("the name is not UTF-8")
     return n, total, name
 
 
@@ -276,7 +305,7 @@ def main(argv):
         except PackError as e:
             print("sprite_pack: %s" % e, file=sys.stderr)
             return 2
-        print("%d animations, %d bytes, name of %d characters" % (n, total, len(name)))
+        print("%d animations, %d bytes, name of %d bytes" % (n, total, len(name.encode("utf-8"))))
         for i, a in enumerate(anims):
             print("animation %d: %dx%d colours %d pictures %d frames %d" % (
                 i, a.width, a.height, len(a.palette), len(a.pictures), len(a.order)))

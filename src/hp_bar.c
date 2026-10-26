@@ -5,21 +5,32 @@
  *
  * The HP bar (hp_bar.h): one battle-screen HP bar in a dark box along the
  * bottom: "HP", the bar with its value ("65/100") on it and, with a sprite
- * name (CONFIG_BEACON_SPRITE_NAME), the name on a second row; the layout the
- * user picked from twelve trials (canon t-er81). The bar's length and the
+ * name (CONFIG_BEACON_SPRITE_NAME), the name on the row above; the layout
+ * the user picked from twelve trials (canon t-er81), the name moved above
+ * the bar on request (2026-10-26). The bar's length and the
  * value are the keyboard's battery as hp_level() maps it. Green, yellow under
  * YELLOW_BELOW, red under RED_BELOW; without a reading an empty track with
  * "--/100" on it, and a grey "HP", value and name without a fresh payload.
  *
- * Every text is unscii 16: a 16 px cell on a 17 px line (base line 0).
- * Capitals and digits ink rows y+1..y+14 of a label at y (most 12 px wide,
- * K M N W 4 are 14, X Y and "/" the full 16); a descender (g, j, p, q, y)
- * and "," ";" "_" reach row y+16.
+ * "HP", the value and an ASCII name are unscii 16: a 16 px cell on a 17 px
+ * line (base line 0). Capitals and digits ink rows y+1..y+14 of a label at y
+ * (most 12 px wide, K M N W 4 are 14, X Y and "/" the full 16); a descender
+ * (g, j, p, q, y) and "," ";" "_" reach row y+16. A katakana name is the
+ * pkmn font (font_pkmn.h): a 16 px cell, its strokes 3 px (a pixel bolder
+ * than the dots), on a 23 px line whose top 6 px are the dakuten rows, the
+ * base line 3 px above the bottom, so a label at y inks rows y..y+22 at most
+ * and its cell is rows y+6..y+22. A name is one or the other, never mixed
+ * (tools/sprite_pack.py check_name), so one byte of 0x80 or above picks the
+ * font, and the label's y with it, so that the two cells sit level.
  * "HP" and the bar share ROW_Y (an 8 px gap read as touching on hardware,
  * 2026-09-28); the value is white, centred on the bar, its digits' ink one
- * row above and below the bar. The name is the box's second row (NAME_Y; the
- * reason BEACON_HP_BAR_BOX_H depends on it). No LVGL theme is installed
- * (LV_USE_THEME_* off), so every style is set here.
+ * row above and below the bar. The name is the box's first row (the reason
+ * BEACON_HP_BAR_BOX_H depends on it), centred on the box's width: a
+ * katakana label at NAME_Y, its dakuten from row 5 and its cell at rows
+ * 11..27; an ASCII label at ASCII_NAME_Y, its cell level with the katakana
+ * one at rows 11..26 (ink 12..25); the HP row's ink at rows 35..48, seven
+ * rows under the katakana ink. No LVGL theme is installed (LV_USE_THEME_*
+ * off), so every style is set here.
  */
 
 #include <string.h>
@@ -30,8 +41,9 @@
 #include "hp_bar.h"
 
 #define BORDER_PX 2
-#define ROW_Y 6
-#define NAME_Y 24
+#define ROW_Y BEACON_HP_BAR_ROW_Y
+#define NAME_Y BEACON_HP_BAR_NAME_Y
+#define ASCII_NAME_Y (NAME_Y + BEACON_FONT_PKMN_ABOVE_CELL)
 #define GLYPH_W 16
 #define GLYPH_H 16
 #define LABEL_X 8
@@ -41,9 +53,9 @@
 /* "100/100" is the widest value. */
 #define VALUE_CHARS 7
 #define VALUE_W (VALUE_CHARS * GLYPH_W)
-/* Whole cells from LABEL_X that stay inside the 252 px content width; a
- * longer name is cut after them, off the border's corner. */
-#define NAME_GLYPHS BEACON_HP_BAR_NAME_GLYPHS
+/* The name's bytes; as unscii cells they stay inside the 252 px content
+ * width (a pack's name is never longer; a longer text would be cut). */
+#define NAME_BYTES BEACON_HP_BAR_NAME_BYTES
 #define YELLOW_BELOW 50
 #define RED_BELOW 20
 
@@ -54,7 +66,7 @@ static struct {
     /* NULL without the name row. */
     lv_obj_t *name;
     char value_text[VALUE_CHARS + 1];
-    char name_text[NAME_GLYPHS + 1];
+    char name_text[NAME_BYTES + 1];
     /* 0 = no reading. */
     uint8_t shown;
     bool dim;
@@ -95,6 +107,18 @@ static lv_color_t value_color(bool dim) {
 static lv_color_t name_color(bool dim) {
     return dim ? lv_color_hex(0x606060) : lv_color_hex(0xE0E0E0);
 }
+
+#if BEACON_HP_BAR_NAME_ROW
+/* The font is linked only with the row (CMakeLists.txt), hence the #if. */
+static const lv_font_t *name_font(const char *name, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        if ((unsigned char)name[i] >= 0x80) {
+            return &beacon_font_pkmn;
+        }
+    }
+    return &lv_font_unscii_16;
+}
+#endif
 
 static void set_value(uint8_t level) {
     if (level == 0) {
@@ -157,27 +181,38 @@ void beacon_hp_bar_create(lv_obj_t *parent, int32_t screen_w) {
 
     hp.name = NULL;
     if (BEACON_HP_BAR_NAME_ROW) {
-        /* One row of NAME_GLYPHS cells; the user accepted that a longer
-         * name is cut (2026-09-28). Empty until a pack names itself. */
+        /* One row across the content width, the text centred (the user's
+         * pick, 2026-10-26); the user accepted that a longer name is cut
+         * (2026-09-28). Empty until a pack names itself. */
         hp.name = lv_label_create(box);
         lv_obj_set_style_text_font(hp.name, &lv_font_unscii_16, 0);
         lv_obj_set_style_text_color(hp.name, name_color(hp.dim), 0);
+        lv_obj_set_style_text_align(hp.name, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_long_mode(hp.name, LV_LABEL_LONG_MODE_CLIP);
-        lv_obj_set_width(hp.name, NAME_GLYPHS * GLYPH_W);
+        lv_obj_set_width(hp.name, width - 2 * BORDER_PX);
         lv_label_set_text_static(hp.name, hp.name_text);
-        lv_obj_set_pos(hp.name, LABEL_X, NAME_Y);
+        lv_obj_set_pos(hp.name, 0, ASCII_NAME_Y);
     }
 }
 
 void beacon_hp_bar_set_name(const char *name, size_t len) {
+#if BEACON_HP_BAR_NAME_ROW
     if (hp.name == NULL) {
         return;
     }
-    len = MIN(len, (size_t)NAME_GLYPHS);
+    len = MIN(len, (size_t)NAME_BYTES);
     memcpy(hp.name_text, name, len);
     hp.name_text[len] = '\0';
+    const lv_font_t *font = name_font(hp.name_text, len);
+
+    lv_obj_set_style_text_font(hp.name, font, 0);
+    lv_obj_set_y(hp.name, font == &beacon_font_pkmn ? NAME_Y : ASCII_NAME_Y);
     /* Set again: the label measures the text when it is set. */
     lv_label_set_text_static(hp.name, hp.name_text);
+#else
+    ARG_UNUSED(name);
+    ARG_UNUSED(len);
+#endif
 }
 
 bool beacon_hp_bar_show(const struct beacon_status *now, bool fresh) {

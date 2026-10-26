@@ -75,7 +75,7 @@ BUILD_ASSERT(BEACON_SPRITE_GIF_W <= SPRITE_BOX_W,
 BUILD_ASSERT(BEACON_SPRITE_GIF_H <= SPRITE_BOX_H,
              "CONFIG_BEACON_SPRITE_GIF is taller than the sprite box: the panel height less "
              "SPRITE_INSET_PX above and the HP bar box and margin below, a row taller with "
-             "CONFIG_BEACON_SPRITE_NAME (prospector_screen.c, hp_bar.h)");
+             "the name row, CONFIG_BEACON_HP_BAR_NAME_ROW (prospector_screen.c, hp_bar.h)");
 #endif
 
 static void refresh(lv_timer_t *timer) {

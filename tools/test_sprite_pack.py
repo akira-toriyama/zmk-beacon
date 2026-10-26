@@ -4,6 +4,7 @@ import os
 import struct
 import sys
 import unittest
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gifpics  # noqa: E402
@@ -258,11 +259,24 @@ class SpritePackTest(unittest.TestCase):
         self.assertTrue(sprite_pack.check(data, [a, a]))
 
     def test_name_rules(self):
-        for name in ("A" * 16, "café", "tab\t"):
+        walking = self.walking(2, 2, 3, 1)
+        # 16 bytes; a letter of neither alphabet; a control character; 18
+        # bytes of katakana; the alphabets mixed; hiragana; a dakuten as a
+        # combining mark (NFD); halfwidth katakana; a fullwidth small letter
+        # (pkmn draws none).
+        for name in ("A" * 16, "café", "tab\t", "テストテスト", "Aテ", "ぴ", "カ\u3099", "ｱ", "ａ"):
             with self.assertRaises(sprite_pack.PackError):
-                sprite_pack.pack([self.walking(2, 2, 3, 1)], name)
-        data, _ = sprite_pack.pack([self.walking(2, 2, 3, 1)], "A" * 15)
-        self.assertEqual(sprite_pack.header(data)[2], "A" * 15)
+                sprite_pack.pack([walking], name)
+        for name in ("A" * 15, "テストテス", "ガギグ♀", "テスト２", "ア♂Ｚ：", "ー"):
+            data, _ = sprite_pack.pack([walking], name)
+            self.assertEqual(sprite_pack.header(data)[2], name)
+            self.assertEqual(data[16:32], name.encode("utf-8").ljust(16, b"\0"))
+        # A name field that is not UTF-8 is a bad pack, not a crash.
+        data, _ = sprite_pack.pack([walking], "A")
+        rest = b"\xff" + data[17:]
+        bad = data[:12] + struct.pack("<I", zlib.crc32(rest)) + rest
+        with self.assertRaises(sprite_pack.PackError):
+            sprite_pack.header(bad)
 
     def test_pack_rows(self):
         pic = bytes([1, 2, 3, 4, 5, 6])
