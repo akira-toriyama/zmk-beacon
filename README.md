@@ -112,8 +112,9 @@ Limits:
 
 - Any GIF a browser plays (GIF87a or GIF89a, disposal 0-3, transparency,
   interlace, local colour tables), with at least one frame and at most 255
-  colours in all, no larger than the sprite box: 276x198, or 276x170 with a
-  sprite name. A larger GIF stops the build with `static assertion failed:
+  colours in all, no larger than the sprite box: 276x198, or 276x170 with
+  the name row (a sprite name, or the receiver, which every build has unless
+  its conf turns it off). A larger GIF stops the build with `static assertion failed:
   "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box: ..."` or `"... is
   taller than the sprite box: ..."`. A GIF whose player (its canvas and
   dictionary: two bytes a pixel with more than 15 colours, one otherwise, plus

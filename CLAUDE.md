@@ -34,7 +34,7 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   tools`, CI `tools-test.yml`); `pkmn_font.py` (its docstring) renders the
   name row's katakana font, `src/font_pkmn.{c,h}`, from the pkmn TTF, which
   is not in the repository (clone nue-of-k/pkmn): run it again rather than
-  edit them, and its `preview` prints glyphs as dots. The 1,298-GIF checks against Pillow and the
+  edit them, and its `preview` prints glyphs as pixels. The 1,298-GIF checks against Pillow and the
   round trips are local only: the GIFs are personal files. `sprite-sender/`
   (Swift, no dependencies; README "The sprite sender"): `SpriteSenderCore` is
   pure (config, rotation, name rule, report v1, page plan; `swift test` on

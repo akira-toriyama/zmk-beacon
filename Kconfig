@@ -149,7 +149,7 @@ config BEACON_SPRITE
       numbers the pool size is chosen from.
 
 config BEACON_SPRITE_NAME
-    string "Name of the sprite, shown under the HP bar (empty = none)"
+    string "Name of the sprite, shown above the HP bar (empty = none)"
     default ""
     help
       Written into the embedded sprite pack (BEACON_SPRITE_GIF), from which

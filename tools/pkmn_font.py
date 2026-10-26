@@ -2,7 +2,7 @@
 """The HP bar's katakana font, generated from the pkmn TTF.
 
   pkmn_font.py <pkmn_s.ttf> -o <dir>        writes font_pkmn.c and font_pkmn.h into dir
-  pkmn_font.py preview <pkmn_s.ttf> <text>  prints text's glyphs as dots, one row a line
+  pkmn_font.py preview <pkmn_s.ttf> <text>  prints text's glyphs as pixels, one row a line
 
 pkmn (https://github.com/nue-of-k/pkmn, MIT, Copyright (c) 2009-2015 Nue)
 redraws the letters of the first Game Boy games: every outline is a union of

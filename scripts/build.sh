@@ -25,7 +25,7 @@
 #                     the workspace only, never into a repository, CI or a
 #                     release, and never printed by path.
 #   --sprite-name <text>
-#                     the sprite's name under the HP bar (CONFIG_BEACON_SPRITE_NAME,
+#                     the sprite's name above the HP bar (CONFIG_BEACON_SPRITE_NAME,
 #                     needs --sprite): 15 bytes of UTF-8 at most, printable ASCII
 #                     or katakana (tools/sprite_pack.py says which characters),
 #                     without a double quote, a backslash or "??". It names the

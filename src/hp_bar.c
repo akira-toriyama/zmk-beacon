@@ -21,7 +21,7 @@
  * base line 3 px above the bottom, so a label at y inks rows y..y+22 at most
  * and its cell is rows y+6..y+22. A name is one or the other, never mixed
  * (tools/sprite_pack.py check_name), so one byte of 0x80 or above picks the
- * font; the label's position is the same for both.
+ * font, and the label's y with it, so that the two cells sit level.
  * "HP" and the bar share ROW_Y (an 8 px gap read as touching on hardware,
  * 2026-09-28); the value is white, centred on the bar, its digits' ink one
  * row above and below the bar. The name is the box's first row (the reason
