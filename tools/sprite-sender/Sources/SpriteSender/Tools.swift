@@ -33,8 +33,14 @@ enum Tools {
         }
     }
 
-    /// Runs the tool with the arguments; its stdout, or Error.exited.
-    static func run(_ name: String, _ arguments: [String]) throws -> Data {
+    /// Runs the tool with the arguments, `input` on its stdin when given; its
+    /// stdout, or Error.exited. Text that must arrive as it is goes through
+    /// `input`, never an argument: Process hands the child its arguments in
+    /// the file system's representation, decomposed (a katakana with a
+    /// dakuten became two code points, 2026-10-26), and a path survives that
+    /// (the file systems look names up without regard to it) where a sprite
+    /// name does not.
+    static func run(_ name: String, _ arguments: [String], input: Data? = nil) throws -> Data {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         p.arguments = [script(name).path] + arguments
@@ -42,7 +48,15 @@ enum Tools {
         let errPipe = Pipe()
         p.standardOutput = outPipe
         p.standardError = errPipe
+        let inPipe = input.map { _ in Pipe() }
+        if let inPipe { p.standardInput = inPipe }
         try p.run()
+        if let inPipe, let input {
+            // Written whole before the outputs are read: the input is a few
+            // bytes, far below the pipe's buffer, so this never blocks.
+            try inPipe.fileHandleForWriting.write(contentsOf: input)
+            try inPipe.fileHandleForWriting.close()
+        }
         // Both pipes drained at once: a child that fills one while the parent
         // reads the other to its end would block for good.
         var err = Data()

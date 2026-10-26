@@ -175,8 +175,8 @@ config BEACON_SPRITE_NAME
       repository: a local build passes it (scripts/build.sh --sprite <gif>
       --sprite-name <text>, through a Kconfig fragment so that a failed
       configure step, whose command line west prints, shows only the
-      fragment's path; canon derives it from the GIF's file name with its
-      assets/sprite-name.sh).
+      fragment's path; canon derives it from its name dictionary or the GIF's
+      file name with its assets/sprite-name.py).
 
 config BEACON_HP_BAR_NAME_ROW
     bool

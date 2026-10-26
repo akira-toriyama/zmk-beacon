@@ -222,15 +222,32 @@ SpriteSender.app/Contents/MacOS/sprite-sender colours --config <sender.json> [--
 ```
 
 `sender.json` sits next to the collection, with paths relative to itself:
-`{"front": "<dir>", "back": "<dir>", "state": "<file>", "order": "<file>", "range": "<first> ~ <last>"}`
-(`back`, `order` and `range` optional). `range` needs `order` and keeps only
+`{"front": "<dir>", "back": "<dir>", "state": "<file>", "order": "<file>", "range": "<first> ~ <last>", "names": "<file>"}`
+(`back`, `order`, `range` and `names` optional). `range` needs `order` and keeps only
 the GIFs at those places of it, counted from 1 over its names: `"1 ~ 151"`
 goes from the first to the 151st and back to the first, and `"100 ~"` runs
 from the 100th to the order's end; the GIFs the order does not list stay out.
 A state outside the range continues at the range's next place, wrapping to
 its first, and an older sender ignores the key.
-The sprite name is the GIF's file name without its extension, trimmed, with
-its first letter upper-cased, cut to 15 characters; the state file holds the
+The sprite name comes from the name dictionary when the config has one
+(`names`, which needs `order`): a JSON array of `{"no": <place>, "ja":
+"<katakana name>", "en": "<English name>"}`, one object a place of the order
+(other keys are ignored, so a field can be added), that
+`tools/name_dictionary.py <pokemon_species_names.csv> -o <names.json>
+[--order <file>]` writes from PokeAPI's CSV, every species in National Pokédex
+order, and compares with the order file (a place whose file name is not its
+English name is printed: a GIF at the wrong place would get the wrong
+katakana name). The GIF's place is its position among the order's names,
+counted from 1 as `range` counts them (an empty line or a repeated name
+holds no place), and its `ja`,
+composed (NFC), is the sprite name when it is 15 bytes of UTF-8 at most and
+every character is in the katakana font (`sprite_pack.py`'s
+`KATAKANA_RANGES`); otherwise, and without the key, the name is the GIF's
+file name without its extension, trimmed, with its first letter upper-cased,
+cut to 15 characters. The log says which (`name: katakana from the name
+dictionary` or `from the file name (<why>)`) without naming it; a
+dictionary the config names but that cannot be read or is not that array is
+a config error (exit 2), like the order file. The state file holds the
 name of the GIF tried last, written before the transfer, so a GIF the device
 refuses costs one day. Exit 0 when the device shows the pack, 1 when it does
 not (no device in range, the drive not mounted, a refused pack: the next day
@@ -240,7 +257,8 @@ succeeded, and of its back view when the collection has one, weighed as
 `sprite_colours.py` (above) says, sends nothing and exits 1 with no
 state or no readable front GIF; the user's LaunchAgent is to run it after each
 successful swap and hand the line to the keyboard (canon t-0967). Its log names no GIF and no
-sprite. macOS asks once for Bluetooth; the app is signed with a persistent
+sprite (the device's report gives the name's length, `name_chars` and
+`name_bytes`: 5 and 15 is a katakana name). macOS asks once for Bluetooth; the app is signed with a persistent
 identity so that the answer survives a rebuild. A 35 KB pack showed 3.5 s
 after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).
 

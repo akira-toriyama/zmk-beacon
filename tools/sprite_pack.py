@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The sprite pack: one or two GIFs (front, back) as the pictures they show.
 
-  sprite_pack.py pack [--name <text>] -o <out.spk> <front.gif> [<back.gif>]
+  sprite_pack.py pack [--name <text> | --name-stdin] -o <out.spk> <front.gif> [<back.gif>]
   sprite_pack.py check <pack.spk> <front.gif> [<back.gif>]
   sprite_pack.py info <pack.spk>
 
@@ -9,7 +9,9 @@
 (`animation N: WxH bpp B colours C pictures P frames F bytes N`) and the total;
 nothing it prints names the GIF or the sprite. The name is 15 bytes of UTF-8
 at most, all printable ASCII or all katakana (check_name: what the HP bar's
-two fonts show). `check` unpacks the file the
+two fonts show); `--name-stdin` reads it from stdin, UTF-8, one line, as the
+sprite sender passes it (an argument of Foundation's Process arrives
+decomposed, and the font has no combining marks). `check` unpacks the file the
 way the Prospector Dongle decodes it and compares every frame's pixels and
 delay with the GIFs; `info` prints the header's sizes. Exit 0, 1 on a
 mismatch, 2 on bad input. Standard library only, Python 3.9.
@@ -265,16 +267,35 @@ def _read(path):
         return f.read()
 
 
+def _name_on_stdin():
+    """The name as `--name-stdin` takes it: stdin's bytes, UTF-8, with one
+    line end dropped (the name itself is checked by pack)."""
+    raw = sys.stdin.buffer.read()
+    if raw.endswith(b"\n"):
+        raw = raw[:-1]
+    if raw.endswith(b"\r"):
+        raw = raw[:-1]
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise PackError("the name on stdin is not UTF-8")
+
+
 def main(argv):
     if len(argv) >= 4 and argv[0] == "pack":
         args = argv[1:]
         name = ""
+        name_on_stdin = False
         if args[0] == "--name":
             name, args = args[1], args[2:]
+        elif args[0] == "--name-stdin":
+            name_on_stdin, args = True, args[1:]
         if len(args) < 3 or args[0] != "-o":
             print(__doc__, file=sys.stderr)
             return 2
         try:
+            if name_on_stdin:
+                name = _name_on_stdin()
             data, infos = pack([_read(p) for p in args[2:]], name)
         except (gifpics.GifError, PackError) as e:
             print("sprite_pack: %s" % e, file=sys.stderr)
