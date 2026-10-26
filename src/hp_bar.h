@@ -34,10 +34,15 @@
  * since 2026-10-26; until then the name sat under the bar): the border, the
  * name line BEACON_HP_BAR_NAME_Y px inside it (the katakana font's, its top
  * BEACON_FONT_PKMN_ABOVE_CELL px the dakuten rows; an ASCII name's unscii
- * cell sits level with the katakana cell), 2 px, the HP row's 16 px cell at
- * BEACON_HP_BAR_ROW_Y, 2 px, the border. hp_bar.c places the rows. */
+ * cell sits level with the katakana cell), BEACON_HP_BAR_NAME_GAP_PX, the HP
+ * row's 16 px cell at BEACON_HP_BAR_ROW_Y, 2 px, the border. hp_bar.c places
+ * the rows. */
 #define BEACON_HP_BAR_NAME_Y 5
-#define BEACON_HP_BAR_ROW_Y (BEACON_HP_BAR_NAME_ROW ? BEACON_HP_BAR_NAME_Y + BEACON_FONT_PKMN_LINE_H + 2 : 6)
+/* Under the name line (the user asked for air under the name, 2026-10-26). */
+#define BEACON_HP_BAR_NAME_GAP_PX 6
+#define BEACON_HP_BAR_ROW_Y                                                                        \
+    (BEACON_HP_BAR_NAME_ROW ? BEACON_HP_BAR_NAME_Y + BEACON_FONT_PKMN_LINE_H + BEACON_HP_BAR_NAME_GAP_PX \
+                            : 6)
 #define BEACON_HP_BAR_BOX_H (2 + BEACON_HP_BAR_ROW_Y + 16 + 2 + 2)
 /* Bytes of the name row's text, the pack's name field (sprite_pack.h): 15
  * unscii 16 cells or 5 katakana, all inside the box. */

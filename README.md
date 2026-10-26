@@ -36,7 +36,7 @@ its value on it (`65/100`). Its length is the keyboard's battery: the mean of
 both halves' readings, or the one half that has a reading. The bar is green,
 yellow under 50 % and red under 20 %. A build with a sprite name
 (`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`) shows the name on the box's
-first row, above `HP` and the bar: an ASCII name in unscii 16, like `HP`, a katakana one in the
+first row, centred, above `HP` and the bar: an ASCII name in unscii 16, like `HP`, a katakana one in the
 letters of the first Game Boy games (PKMN Strict from
 [pkmn](https://github.com/nue-of-k/pkmn), two pixels a dot and a pixel
 bolder, the dakuten above the cell; Credits below). A name is at most 15 bytes of UTF-8, all printable
@@ -67,7 +67,7 @@ in a build with a named embedded sprite.
 The screen plays a sprite pack (below) above the HP bar: centred, standing on
 the bar, and scaled to the largest size of its own proportions that fits the
 space above it, 2 px in from the panel's top and sides (a 90x90 px GIF shows
-at 198x198, or 174x174 above a bar with a name row). The pack comes from one
+at 198x198, or 170x170 above a bar with a name row). The pack comes from one
 of two places: the sprite room in flash, where a Mac put it over BLE (next
 section), or the image, when `CONFIG_BEACON_SPRITE_GIF="<absolute path>"`
 made the build convert a GIF and embed the pack. At boot the room's pack
@@ -112,7 +112,7 @@ Limits:
 
 - Any GIF a browser plays (GIF87a or GIF89a, disposal 0-3, transparency,
   interlace, local colour tables), with at least one frame and at most 255
-  colours in all, no larger than the sprite box: 276x198, or 276x174 with a
+  colours in all, no larger than the sprite box: 276x198, or 276x170 with a
   sprite name. A larger GIF stops the build with `static assertion failed:
   "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box: ..."` or `"... is
   taller than the sprite box: ..."`. A GIF whose player (its canvas and

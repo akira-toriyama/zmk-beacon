@@ -25,12 +25,12 @@
  * "HP" and the bar share ROW_Y (an 8 px gap read as touching on hardware,
  * 2026-09-28); the value is white, centred on the bar, its digits' ink one
  * row above and below the bar. The name is the box's first row (the reason
- * BEACON_HP_BAR_BOX_H depends on it): a katakana label at NAME_Y, its
- * dakuten from row 5 and its cell at rows 11..27; an ASCII label at
- * ASCII_NAME_Y, its cell level with the katakana one at rows 11..26 (ink
- * 12..25); the HP row's ink at rows 31..44, three rows under the katakana
- * ink. No LVGL theme is installed (LV_USE_THEME_* off), so every style is
- * set here.
+ * BEACON_HP_BAR_BOX_H depends on it), centred on the box's width: a
+ * katakana label at NAME_Y, its dakuten from row 5 and its cell at rows
+ * 11..27; an ASCII label at ASCII_NAME_Y, its cell level with the katakana
+ * one at rows 11..26 (ink 12..25); the HP row's ink at rows 35..48, seven
+ * rows under the katakana ink. No LVGL theme is installed (LV_USE_THEME_*
+ * off), so every style is set here.
  */
 
 #include <string.h>
@@ -53,9 +53,8 @@
 /* "100/100" is the widest value. */
 #define VALUE_CHARS 7
 #define VALUE_W (VALUE_CHARS * GLYPH_W)
-/* The name's bytes; as unscii cells from LABEL_X they stay inside the 252 px
- * content width (a pack's name is never longer, but a longer text would be
- * cut after them, off the border's corner). */
+/* The name's bytes; as unscii cells they stay inside the 252 px content
+ * width (a pack's name is never longer; a longer text would be cut). */
 #define NAME_BYTES BEACON_HP_BAR_NAME_BYTES
 #define YELLOW_BELOW 50
 #define RED_BELOW 20
@@ -182,15 +181,17 @@ void beacon_hp_bar_create(lv_obj_t *parent, int32_t screen_w) {
 
     hp.name = NULL;
     if (BEACON_HP_BAR_NAME_ROW) {
-        /* One row of NAME_BYTES cells; the user accepted that a longer
-         * name is cut (2026-09-28). Empty until a pack names itself. */
+        /* One row across the content width, the text centred (the user's
+         * pick, 2026-10-26); the user accepted that a longer name is cut
+         * (2026-09-28). Empty until a pack names itself. */
         hp.name = lv_label_create(box);
         lv_obj_set_style_text_font(hp.name, &lv_font_unscii_16, 0);
         lv_obj_set_style_text_color(hp.name, name_color(hp.dim), 0);
+        lv_obj_set_style_text_align(hp.name, LV_TEXT_ALIGN_CENTER, 0);
         lv_label_set_long_mode(hp.name, LV_LABEL_LONG_MODE_CLIP);
-        lv_obj_set_width(hp.name, NAME_BYTES * GLYPH_W);
+        lv_obj_set_width(hp.name, width - 2 * BORDER_PX);
         lv_label_set_text_static(hp.name, hp.name_text);
-        lv_obj_set_pos(hp.name, LABEL_X, ASCII_NAME_Y);
+        lv_obj_set_pos(hp.name, 0, ASCII_NAME_Y);
     }
 }
 
