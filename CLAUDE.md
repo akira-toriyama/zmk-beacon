@@ -248,15 +248,15 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - A pack's name is 15 bytes of UTF-8 in one of two alphabets, printable ASCII
   or `sprite_pack.KATAKANA_RANGES`, never both: `check_name` is the one rule
   (the converter runs in the build and in the sender), the device picks the
-  font by a byte of 0x80 or above, and canon's `sprite-name.sh` and the
+  font by a byte of 0x80 or above, and canon's `sprite-name.py` and the
   sender's `SpriteName` must stay within it. `SpriteName.katakanaRanges`
   copies `KATAKANA_RANGES` (Swift cannot read the Python): change the two
   together, and `tools/pkmn_font.py` renders whatever the ranges say. The
   sender prefers the name dictionary's katakana name (`names` in its config,
   keyed by the GIF's place in the order) and falls back to the file name
   (canon t-rq9h, the user's rule: katakana when it can be shown, else as
-  before); the sender's name rule and canon's `sprite-name.sh` are two
-  copies of the file-name rule.
+  before); canon's `sprite-name.py` looks the name up the same way for a
+  local build, and the two are copies of both rules.
 - Change the sprite pack only with a new magic (`SPK1`, tools/sprite_pack.py
   and src/sprite_pack.h together): the player rejects a file it does not know
   instead of drawing it wrong.
@@ -300,7 +300,7 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   never prints it (its help says why).
 - CI and `release.yml` build without a sprite or a name, so no release carries
   either. canon keeps the GIF in its ignored `assets/` and derives the name from
-  the file name (`assets/sprite-name.sh` there).
+  its name dictionary or the file name (`assets/sprite-name.py` there).
 - The katakana font's glyphs are whole blocks (`sprite_pack.KATAKANA_RANGES`),
   never a subset cut to the names in use: a font made of a name's characters
   would tell the subject. Tests and docs use made-up katakana.

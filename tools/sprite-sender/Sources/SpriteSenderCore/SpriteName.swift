@@ -4,7 +4,7 @@ import Foundation
 /// or all katakana (tools/sprite_pack.py check_name: the two fonts of the HP
 /// bar). The sender prefers the katakana name of the name dictionary (the
 /// user's rule, canon t-rq9h: katakana when it can be shown, else as before)
-/// and falls back to the GIF's file name as canon's assets/sprite-name.sh
+/// and falls back to the GIF's file name as canon's assets/sprite-name.py
 /// derives it for a build (the user's rule, canon t-er81): the extension
 /// dropped (`${name%.*}`: `.gif` alone leaves nothing), whitespace trimmed at
 /// both ends, the first letter upper-cased, cut to 15 characters (bytes, in
