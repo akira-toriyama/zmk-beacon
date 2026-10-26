@@ -45,11 +45,14 @@ HEADER = 32
 NAME_BYTES = 15
 # The two alphabets a name is written in, each the whole set of one of the HP
 # bar's fonts (src/hp_bar.c): printable ASCII, LVGL's unscii 16, or katakana,
-# the pkmn font that tools/pkmn_font.py generates from these ranges (the
-# Katakana block as far as pkmn has it, the gender signs, the fullwidth forms).
-# Fixed by block, never cut to a name: the font is public and a name names the
-# subject. A name mixing the two has no font that shows all of it.
-KATAKANA_RANGES = ((0x2640, 0x2640), (0x2642, 0x2642), (0x30A1, 0x30FC), (0xFF01, 0xFF5E))
+# the pkmn font that tools/pkmn_font.py generates from these ranges: the
+# Katakana block as far as pkmn draws it, the gender signs, the fullwidth
+# digits with the colon, and the fullwidth capitals (pkmn's other fullwidth
+# forms are empty or the games' special tiles, 2026-10-26). Fixed by block,
+# never cut to a name: the font is public and a name names the subject. A
+# name mixing the two has no font that shows all of it.
+KATAKANA_RANGES = ((0x2640, 0x2640), (0x2642, 0x2642), (0x30A1, 0x30FC), (0xFF10, 0xFF1A),
+                   (0xFF21, 0xFF3A))
 
 
 def play_delay(delay):
@@ -115,8 +118,8 @@ def check_name(name):
     if len(encoded) > NAME_BYTES:
         raise PackError("the name must be %d UTF-8 bytes at most" % NAME_BYTES)
     if not (all(" " <= c <= "~" for c in name) or all(is_katakana(c) for c in name)):
-        raise PackError("the name must be printable ASCII, or katakana (U+30A1-30FC), "
-                        "the gender signs and fullwidth forms (U+FF01-FF5E), not mixed")
+        raise PackError("the name must be printable ASCII, or katakana (U+30A1-30FC), the "
+                        "gender signs, fullwidth digits, colon and capitals, not mixed")
     return name
 
 

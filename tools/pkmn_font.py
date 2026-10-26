@@ -18,7 +18,9 @@ pass its ttf/pkmn_s.ttf; the header records the file's SHA-256.
 
 Standard library only (macOS /usr/bin/python3, 3.9). Exit 0, 2 on bad input
 or a TTF this does not understand (curves, composites, coordinates off the
-grid, a glyph missing from the ranges): the font is read for this one typeface.
+grid, a glyph of the ranges missing or without an outline: 29 of pkmn's
+fullwidth forms are empty, so the ranges leave them out): the font is read
+for this one typeface.
 """
 import hashlib
 import os
@@ -208,13 +210,13 @@ def winding(contours, x2, y2):
 
 
 def rasterize(ttf, gid, dot):
-    """The glyph as a Glyph of dots, trimmed to its ink; a 1x1 blank for an empty glyph."""
+    """The glyph as a Glyph of dots, trimmed to its ink; FontError without any."""
     adv = ttf.advance(gid)
     if adv % dot:
         raise FontError("glyph %d: advance %d is not whole dots" % (gid, adv))
     contours = ttf.contours(gid)
     if not contours:
-        return Glyph([[0]], 0, 0, adv // dot)
+        raise FontError("glyph %d has no outline" % gid)
     for contour in contours:
         for x, y in contour:
             if x % dot or y % dot:
@@ -235,7 +237,7 @@ def rasterize(ttf, gid, dot):
         rows.pop()
         y_min += 1
     if not rows:
-        return Glyph([[0]], 0, 0, adv // dot)
+        raise FontError("glyph %d has no ink" % gid)
     while not any(r[0] for r in rows):
         rows = [r[1:] for r in rows]
         x_min += 1
@@ -261,7 +263,10 @@ def read_glyphs(ttf):
         gid = ttf.cmap.get(c)
         if not gid:
             raise FontError("U+%04X is not in the font" % c)
-        glyphs.append((c, rasterize(ttf, gid, dot)))
+        try:
+            glyphs.append((c, rasterize(ttf, gid, dot)))
+        except FontError as e:
+            raise FontError("U+%04X: %s" % (c, e))
     return glyphs
 
 
