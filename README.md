@@ -258,9 +258,13 @@ succeeded, and of its back view when the collection has one, weighed as
 state, no readable front GIF, a config it cannot read (the drive not
 mounted) or the colour tool failing, 2 for bad usage or config. The
 user's LaunchAgent runs it after each successful swap and hands the line to
-the keyboard (canon t-0967, daily since 2026-10-21). The sender's log names
-no GIF, no sprite and no GIF's place in the rotation (the device's report gives the name's length, `name_chars` and
-`name_bytes`: 5 and 15 is a katakana name). macOS asks once for Bluetooth; the app is signed with a persistent
+the keyboard (canon t-0967, daily since 2026-10-21). No line the sender logs
+names a GIF, the sprite or a GIF's place in the rotation, but the name's
+length (the `name:` line, and the device's report: `name_chars` and
+`name_bytes`, 5 and 15 is a katakana name) narrows down the subject: matched
+against the public order, the lengths of a few runs in a row, or a single
+line for a name of a rare length, can place the GIF, so keep these lines out
+of anything public. macOS asks once for Bluetooth; the app is signed with a persistent
 identity so that the answer survives a rebuild. A 35 KB pack showed 3.5 s
 after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).
 
