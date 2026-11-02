@@ -54,14 +54,28 @@ public struct Report: Equatable, Sendable {
     public var isIdle: Bool { state == State.idle.rawValue }
     public var shown: Bool { result == Result.shown.rawValue }
 
+    /// The name's alphabet, for the log: `none`, `ascii` or `katakana` (the
+    /// HP bar's two fonts), `other` for anything else a pack from another
+    /// tool may hold. Never the name nor its length; the alphabet alone still
+    /// tells something of the name (Log.swift).
+    public var nameKind: String {
+        let scalars = name.unicodeScalars
+        if scalars.isEmpty { return "none" }
+        if scalars.allSatisfy({ (0x20...0x7E).contains($0.value) }) { return "ascii" }
+        if scalars.allSatisfy({ scalar in SpriteName.katakanaRanges.contains { $0.contains(scalar.value) } }) {
+            return "katakana"
+        }
+        return "other"
+    }
+
     /// One line for a log. The name is the sprite's subject, so only its
-    /// length, in characters and in bytes (15 bytes of 5 characters: katakana).
+    /// alphabet (nameKind).
     public var line: String {
         let resultName = Result(rawValue: result).map { "\($0)" } ?? "\(result)"
         let sourceName = Source(rawValue: source).map { "\($0)" } ?? "\(source)"
         return "state=\(state) result=\(resultName) source=\(sourceName) expected=\(expected) received=\(received) "
             + "interval=\(Double(interval) * 1.25)ms timeout=\(UInt32(timeout) * 10)ms "
             + "erase_ms=\(eraseMs) store_ms=\(storeMs) flash_err=\(flashError) "
-            + "name_chars=\(name.count) name_bytes=\(name.utf8.count)"
+            + "name=\(nameKind)"
     }
 }

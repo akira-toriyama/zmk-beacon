@@ -280,6 +280,28 @@ class SpritePackTest(unittest.TestCase):
         with self.assertRaises(sprite_pack.PackError):
             sprite_pack.header(bad)
 
+    def test_name_kind_says_the_alphabet_only(self):
+        self.assertEqual(sprite_pack.name_kind(""), "no name")
+        self.assertEqual(sprite_pack.name_kind("A" * 15), "an ASCII name")
+        self.assertEqual(sprite_pack.name_kind("ア♂Ｚ："), "a katakana name")
+        for name in ("A" * 16, "テストテスト", "Aテ", "ぴ"):
+            self.assertEqual(sprite_pack.name_kind(name), "a name the HP bar cannot show", name)
+
+    def test_info_says_the_alphabet_never_the_length(self):
+        # The whole output: a length on any line fails.
+        gif = self.walking(2, 2, 3, 1)
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite_pack.py")
+        with tempfile.TemporaryDirectory() as d:
+            for name, kind in (("Test one", "an ASCII name"), ("テストテス", "a katakana name"), ("", "no name")):
+                data, _ = sprite_pack.pack([gif], name)
+                path = os.path.join(d, "w.spk")
+                with open(path, "wb") as f:
+                    f.write(data)
+                r = subprocess.run([sys.executable, script, "info", path], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(r.stdout, "1 animations, %d bytes, %s\n"
+                                 "animation 0: 2x2 colours 2 pictures 1 frames 1\n" % (len(data), kind))
+
     def test_name_on_stdin(self):
         # `--name-stdin`: the bytes as they are (a decomposed argument is what
         # it avoids), one line end dropped, a wrong name refused like an

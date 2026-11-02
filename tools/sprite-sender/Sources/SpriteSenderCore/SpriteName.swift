@@ -59,26 +59,25 @@ public enum SpriteName {
         return name
     }
 
-    /// Why the name came from the file name instead of the dictionary.
-    public enum Fallback: Equatable, Sendable, CustomStringConvertible {
+    /// Why the name came from the file name instead of the dictionary: the
+    /// config names no dictionary, the GIF is not in the order, the
+    /// dictionary has no name for its place, or its name is longer than
+    /// maxBytes or has a character the katakana font lacks. Never logged
+    /// (Source).
+    public enum Fallback: Equatable, Sendable {
         case noDictionary
         case notInOrder
         case noEntry
         case tooLong
         case outsideTheFont
-
-        public var description: String {
-            switch self {
-            case .noDictionary: return "the config names no dictionary"
-            case .notInOrder: return "the GIF is not in the order"
-            case .noEntry: return "the dictionary has no name for its place"
-            case .tooLong: return "the dictionary's name is longer than \(maxBytes) bytes"
-            case .outsideTheFont: return "the dictionary's name has a character the katakana font lacks"
-            }
-        }
     }
 
-    /// Where a name came from, for the log: nothing of it names the subject.
+    /// Where a name came from, for the log: its alphabet, not its length nor
+    /// which fallback (matched against the public list of names, a rare
+    /// length narrows the subject down to a few). The alphabet still says
+    /// whether the dictionary's name fit (with a complete dictionary, ASCII
+    /// is a name of six katakana or more), so the line stays out of anything
+    /// public (Log.swift).
     public enum Source: Equatable, Sendable, CustomStringConvertible {
         case katakana
         case fileName(Fallback)
@@ -86,7 +85,7 @@ public enum SpriteName {
         public var description: String {
             switch self {
             case .katakana: return "katakana from the name dictionary"
-            case .fileName(let why): return "from the file name (\(why))"
+            case .fileName: return "ASCII from the file name"
             }
         }
     }

@@ -184,7 +184,7 @@ python3 tools/sprite_pack.py info <pack.spk>
 ```
 
 The GIF, the pack and the name are personal and stay out of repositories,
-as above; the tool prints sizes only.
+as above; the tool prints sizes and the name's alphabet only.
 
 `tools/sprite_colours.py [--count N] <front.gif> [<back.gif>]` prints the
 colours a sprite shows most, one line of five (or N) `RRGGBB` words: in each
@@ -245,9 +245,9 @@ every character is in the katakana font (`sprite_pack.py`'s
 `KATAKANA_RANGES`); otherwise, and without the key, the name is the GIF's
 file name without its extension, trimmed, with its first letter upper-cased,
 cut to 15 characters. The log says which (`name: katakana from the name
-dictionary` or `from the file name (<why>)`) without naming it; a
-dictionary the config names but that cannot be read or is not that array is
-a config error (exit 2), like the order file. The state file holds the
+dictionary` or `name: ASCII from the file name`), never the name or its
+length; a dictionary the config names but that cannot be read or is
+not that array is a config error (exit 2), like the order file. The state file holds the
 name of the GIF tried last, written before the transfer, so a GIF the device
 refuses costs one day. Exit 0 when the device shows the pack, 1 when it does
 not (no device in range, the drive not mounted, a refused pack: the next day
@@ -259,14 +259,21 @@ state, no readable front GIF, a config it cannot read (the drive not
 mounted) or the colour tool failing, 2 for bad usage or config. The
 user's LaunchAgent runs it after each successful swap and hands the line to
 the keyboard (canon t-0967, daily since 2026-10-21). No line the sender logs
-names a GIF, the sprite or a GIF's place in the rotation, but the name's
-length (the `name:` line, and the device's report: `name_chars` and
-`name_bytes`, 5 and 15 is a katakana name) narrows down the subject: matched
-against the public order, the lengths of a few runs in a row, or a single
-line for a name of a rare length, can place the GIF, so keep these lines out
-of anything public. macOS asks once for Bluetooth; the app is signed with a persistent
-identity so that the answer survives a rebuild. A 35 KB pack showed 3.5 s
-after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).
+names a GIF, the sprite, the name's length or a GIF's place in the rotation:
+matched against the public order or the public list of names, a place or a
+rare length names the subject. Lines still tell something of the GIF: the
+name's alphabet (the `name:` line, the device's report's `name=`) says
+whether the name dictionary's name fit the HP bar, which holds five
+katakana, so with a complete dictionary `ASCII` is a name of six or more, a
+length, and a run of such days can place the GIF; a run that cannot name
+the GIF (`failed: the GIF's file name gives no sprite name`) says that
+neither the name dictionary's name nor the file name serves; the pack's
+size (the `pack:`, `start` and `end answered:` lines, the erase time of
+`begin answered`, the report's `expected` and `received`) can name the GIF
+to someone who makes packs from the same collection. So keep the sender's
+lines out of anything public. macOS asks once for Bluetooth; the app is signed with a persistent
+identity so that the answer survives a rebuild. A pack showed about a tenth
+of a second a KB after BEGIN (hardware 2026-10-13).
 
 ## What the module provides
 

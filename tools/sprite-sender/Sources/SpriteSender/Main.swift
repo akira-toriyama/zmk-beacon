@@ -171,7 +171,7 @@ enum Main {
         do {
             let choice = try SpriteName.choose(fileName: chosen, place: place, dictionary: dictionary)
             name = choice.name
-            Log.line("name: \(choice.source), \(name.count) characters, \(name.utf8.count) bytes")
+            Log.line("name: \(choice.source)")
         } catch {
             if !dryRun { moveState(config, to: chosen) }
             Exit.failure("the GIF's file name gives no sprite name: \(error)")

@@ -13,7 +13,8 @@ two fonts show); `--name-stdin` reads it from stdin, UTF-8, one line, as the
 sprite sender passes it (an argument of Foundation's Process arrives
 decomposed, and the font has no combining marks). `check` unpacks the file the
 way the Prospector Dongle decodes it and compares every frame's pixels and
-delay with the GIFs; `info` prints the header's sizes. Exit 0, 1 on a
+delay with the GIFs; `info` prints the header's sizes and the name's
+alphabet, never its length (name_kind). Exit 0, 1 on a
 mismatch, 2 on bad input. Standard library only, Python 3.9.
 
 The format (docs/sprite-pack.md says why), little-endian, all offsets from the
@@ -123,6 +124,20 @@ def check_name(name):
         raise PackError("the name must be printable ASCII, or katakana (U+30A1-30FC), the "
                         "gender signs, fullwidth digits, colon and capitals, not mixed")
     return name
+
+
+def name_kind(name):
+    """The name's alphabet for a message, never the name nor its length (a
+    rare length, matched against the public list of names, narrows the
+    subject down to a few): "no name", "an ASCII name", "a katakana name", or
+    "a name the HP bar cannot show"."""
+    if not name:
+        return "no name"
+    try:
+        check_name(name)
+    except PackError:
+        return "a name the HP bar cannot show"
+    return "an ASCII name" if all(" " <= c <= "~" for c in name) else "a katakana name"
 
 
 def pack_animation(anim, base):
@@ -326,7 +341,7 @@ def main(argv):
         except PackError as e:
             print("sprite_pack: %s" % e, file=sys.stderr)
             return 2
-        print("%d animations, %d bytes, name of %d bytes" % (n, total, len(name.encode("utf-8"))))
+        print("%d animations, %d bytes, %s" % (n, total, name_kind(name)))
         for i, a in enumerate(anims):
             print("animation %d: %dx%d colours %d pictures %d frames %d" % (
                 i, a.width, a.height, len(a.palette), len(a.pictures), len(a.order)))
