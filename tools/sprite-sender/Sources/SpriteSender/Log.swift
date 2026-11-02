@@ -1,9 +1,10 @@
 import Foundation
 
 /// stderr, one stamped line each. launchd keeps the file (dotfiles'
-/// LaunchAgent). No line names a GIF, a path into the collection or the
-/// sprite name: the log lives outside every repository, but a line is what
-/// gets pasted.
+/// LaunchAgent). No line names a GIF, a path into the collection, the
+/// sprite name or the GIF's place in the rotation (in a numbered order the
+/// place names the subject): the log lives outside every repository, but a
+/// line is what gets pasted.
 enum Log {
     private static let stamp: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()

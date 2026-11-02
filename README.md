@@ -254,10 +254,12 @@ not (no device in range, the drive not mounted, a refused pack: the next day
 tries the next GIF), 2 for bad usage or config. `colours` prints the colours
 of the GIF the state names, the sprite on the device after a `daily` that
 succeeded, and of its back view when the collection has one, weighed as
-`sprite_colours.py` (above) says, sends nothing and exits 1 with no
-state or no readable front GIF; the user's LaunchAgent is to run it after each
-successful swap and hand the line to the keyboard (canon t-0967). Its log names no GIF and no
-sprite (the device's report gives the name's length, `name_chars` and
+`sprite_colours.py` (above) says, and sends nothing; it exits 1 with no
+state, no readable front GIF, a config it cannot read (the drive not
+mounted) or the colour tool failing, 2 for bad usage or config. The
+user's LaunchAgent runs it after each successful swap and hands the line to
+the keyboard (canon t-0967, daily since 2026-10-21). Its log names no GIF,
+no sprite and no GIF's place in the rotation (the device's report gives the name's length, `name_chars` and
 `name_bytes`: 5 and 15 is a katakana name). macOS asks once for Bluetooth; the app is signed with a persistent
 identity so that the answer survives a rebuild. A 35 KB pack showed 3.5 s
 after BEGIN, a 40 KB one 3.9 s (hardware 2026-10-13).

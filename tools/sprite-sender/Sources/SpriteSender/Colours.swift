@@ -10,8 +10,9 @@ enum Colours {
         var description: String { "the colour tool printed nothing" }
     }
 
-    /// One line, `RRGGBB` per colour separated by spaces; `count` at most
-    /// (the tool's default when nil). The back view, when the collection has
+    /// One line, `RRGGBB` per colour separated by spaces: exactly `count`
+    /// colours (the tool's default when nil), the tool cycling through the
+    /// ones shown when fewer show. The back view, when the collection has
     /// one, goes after the front (the tool says how the two weigh).
     static func line(front: URL, back: URL?, count: Int?) throws -> String {
         let out = try Tools.run("sprite_colours.py",

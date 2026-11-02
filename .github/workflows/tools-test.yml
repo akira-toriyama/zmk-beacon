@@ -1,10 +1,11 @@
 name: Tools
 
-# The unit tests of tools/: sprite_pack.py and gifpics.py on the Python that
-# ships with the GitHub Ubuntu runner (standard library only, nothing to
-# install; the GIFs they read are written by the tests themselves), and the
-# sprite sender's build and tests on the macOS runner (its Xcode has XCTest,
-# which a Mac with only CommandLineTools lacks).
+# The unit tests of tools/: sprite_pack.py, gifpics.py, sprite_colours.py and
+# name_dictionary.py on the Python that ships with the GitHub Ubuntu runner
+# (standard library only, nothing to install; the GIFs and the CSV they read
+# are written by the tests themselves), and the sprite sender's build and
+# tests on the macOS runner (its Xcode has XCTest, which a Mac with only
+# CommandLineTools lacks).
 on:
   # push only on main: a PR branch is checked once, through pull_request.
   push:

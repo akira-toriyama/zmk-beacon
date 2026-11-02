@@ -155,12 +155,13 @@ enum Main {
         guard let chosen = Rotation.next(after: last, in: candidates, order: order) else {
             Exit.failure(config.range == nil ? "the front directory has no GIF" : "the front directory has no GIF in the range")
         }
-        let index = candidates.firstIndex(of: chosen)! + 1
+        // The counts only: the chosen GIF's place in the rotation is its
+        // place in a numbered order, which names the subject (Log.swift).
         var about: [String] = []
         if !order.isEmpty { about.append("\(order.count) listed") }
         if let range = config.range { about.append("range \(range)") }
         if let dictionary { about.append("\(dictionary.count) names") }
-        Log.line("rotation: \(index) of \(candidates.count)\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")\(last == nil ? ", no state" : "")")
+        Log.line("rotation: \(candidates.count) GIFs\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")\(last == nil ? ", no state" : "")")
 
         let place = Rotation.place(of: chosen, in: order)
         let name: String
