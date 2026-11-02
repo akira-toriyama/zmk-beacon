@@ -134,7 +134,7 @@ final class RotationTests: XCTestCase {
         XCTAssertEqual(
             Rotation.candidates(entries, order: ["a.gif", "a.gif", "b.gif"], range: Rotation.PlaceRange("2 ~ 2")),
             ["b.gif"], "a name listed twice holds one place")
-        XCTAssertEqual("\(range) / \(open)", "2 ~ 4 / 4 ~", "as the log prints it")
+        XCTAssertEqual("\(range) / \(open)", "2 ~ 4 / 4 ~", "as the config writes it")
     }
 
     func testNextWrapsAndStartsOverOnUnknownState() {

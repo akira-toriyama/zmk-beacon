@@ -49,7 +49,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   not Sendable). `package.sh` makes `SpriteSender.app` with the Python
   tools in its Resources, signed with the `chord-dev` identity (canon
   t-3cf6: the Bluetooth permission is keyed to identity and bundle id).
-  Nothing it logs names a GIF or the sprite.
+  Nothing it logs names a GIF or the sprite, nor the GIF's place in the
+  rotation, which in a numbered order names the subject; the name's length
+  it does log narrows the subject down, so its lines stay out of anything
+  public (`Log.swift`).
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
 
 ## Build
