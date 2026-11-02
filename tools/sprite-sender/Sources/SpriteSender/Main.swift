@@ -157,11 +157,14 @@ enum Main {
         }
         // The counts only: the chosen GIF's place in the rotation is its
         // place in a numbered order, which names the subject (Log.swift).
+        // Nor the range's bounds or a missing state: without a state the
+        // pick is the range's first GIF, and a range of one place is the
+        // place.
         var about: [String] = []
         if !order.isEmpty { about.append("\(order.count) listed") }
-        if let range = config.range { about.append("range \(range)") }
+        if config.range != nil { about.append("a range") }
         if let dictionary { about.append("\(dictionary.count) names") }
-        Log.line("rotation: \(candidates.count) GIFs\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")\(last == nil ? ", no state" : "")")
+        Log.line("rotation: \(candidates.count) GIFs\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")")
 
         let place = Rotation.place(of: chosen, in: order)
         let name: String
