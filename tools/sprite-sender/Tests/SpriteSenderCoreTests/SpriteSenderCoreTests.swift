@@ -264,8 +264,9 @@ final class ReportTests: XCTestCase {
         XCTAssertEqual(r.flashError, -2)
         XCTAssertEqual(r.name, "Test one")
         XCTAssertFalse(r.line.contains("Test"))
-        XCTAssertTrue(r.line.hasSuffix(" name=ascii"), "the alphabet, never the length")
-        XCTAssertFalse(r.line.contains("name_"), "no name_chars or name_bytes")
+        XCTAssertEqual(r.line, "state=0 result=shown source=room expected=206380 received=206380 interval=15.0ms "
+                       + "timeout=4000ms erase_ms=11102 store_ms=10000 flash_err=-2 name=ascii",
+                       "the whole line: the alphabet, never the length")
         func named(_ text: String) -> Report {
             for i in 28..<44 { b[i] = 0 }
             for (i, c) in text.utf8.enumerated() { b[28 + i] = c }

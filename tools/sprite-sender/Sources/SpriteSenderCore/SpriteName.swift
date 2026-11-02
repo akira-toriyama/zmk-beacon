@@ -72,10 +72,12 @@ public enum SpriteName {
         case outsideTheFont
     }
 
-    /// Where a name came from, for the log: its alphabet and nothing more.
-    /// Not its length nor why the dictionary's name did not serve: matched
-    /// against the public list of names, a rare length, or a name too long or
-    /// outside the font, narrows the subject down to a few (Log.swift).
+    /// Where a name came from, for the log: its alphabet, not its length nor
+    /// which fallback (matched against the public list of names, a rare
+    /// length narrows the subject down to a few). The alphabet still says
+    /// whether the dictionary's name fit, a fact about the name with a
+    /// complete dictionary, so the line stays out of anything public
+    /// (Log.swift).
     public enum Source: Equatable, Sendable, CustomStringConvertible {
         case katakana
         case fileName(Fallback)

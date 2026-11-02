@@ -56,7 +56,8 @@ public struct Report: Equatable, Sendable {
 
     /// The name's alphabet, for the log: `none`, `ascii` or `katakana` (the
     /// HP bar's two fonts), `other` for anything else a pack from another
-    /// tool may hold. Never the name nor its length (Log.swift).
+    /// tool may hold. Never the name nor its length; the alphabet alone still
+    /// tells something of the name (Log.swift).
     public var nameKind: String {
         let scalars = name.unicodeScalars
         if scalars.isEmpty { return "none" }

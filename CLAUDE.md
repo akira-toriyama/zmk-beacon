@@ -52,7 +52,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   Nothing it logs names a GIF or the sprite, nor the GIF's place in the
   rotation, which in a numbered order names the subject, nor the name's
   length, which a rare one does against the public list of names: of the
-  name it logs the alphabet. The pack's size it logs can still name the
+  name it logs the alphabet, which still says whether the name
+  dictionary's name fit. That and the pack's size it logs can point to the
   GIF, so its lines stay out of anything public (`Log.swift`).
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
 
@@ -298,9 +299,10 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - The name (`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`) goes with the GIF's
   path into the fragment `$ZMK_WS/sprite/sprite.conf`, never into `-DCONFIG_...`:
   west prints the whole cmake command line when the configure step fails
-  (reproduced 2026-09-29). The script prints only the GIF's size and the name's
-  length, `--kconfig` refuses `CONFIG_BEACON_SPRITE_*`, and no message echoes a
-  path or a value. `BEACON_SPRITE_NAME` has no Kconfig dependency, so kconfig.py
+  (reproduced 2026-09-29). Of the sprite, the script prints only the GIF's size
+  and whether the name is ASCII or katakana, never its length, and CMake its
+  `Sprite:` line of sizes and frames; `--kconfig` refuses
+  `CONFIG_BEACON_SPRITE_*`, and no message echoes a path or a value. `BEACON_SPRITE_NAME` has no Kconfig dependency, so kconfig.py
   never prints it (its help says why).
 - CI and `release.yml` build without a sprite or a name, so no release carries
   either. canon keeps the GIF in its ignored `assets/` and derives the name from
