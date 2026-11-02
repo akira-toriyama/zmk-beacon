@@ -29,7 +29,8 @@
 #                     needs --sprite): 15 bytes of UTF-8 at most, printable ASCII
 #                     or katakana (tools/sprite_pack.py says which characters),
 #                     without a double quote, a backslash or "??". It names the
-#                     GIF's subject, so only its length is printed.
+#                     GIF's subject, so only whether it is ASCII or katakana
+#                     is printed, never its length.
 #   --kconfig CONFIG_NAME=VALUE
 #                     one more Kconfig line, merged after the sprite and logging
 #                     lines. Repeatable; the images carry -kconfig.
@@ -276,9 +277,13 @@ echo "workspace   : $WS"
 echo "image       : $IMAGE"
 echo "west update : $([ "$NEED_UPDATE" -eq 1 ] && echo yes || echo 'no (cached; --update forces it)')"
 if [ "$LOGGING" -eq 1 ]; then echo "logging     : ${LOGGING_CONF[*]}"; fi
-# Neither the GIF's path nor the name: both name the subject.
+# Neither the GIF's path, nor the name or its length: each names the subject
+# (a rare length matched against the public list of names). Of the name, the
+# alphabet: one not ASCII is katakana, or the converter stops the build.
 if [ -n "$SPRITE" ]; then echo "sprite      : a $(wc -c <"$SPRITE" | tr -d ' ') byte GIF"; fi
-if [ -n "$SPRITE_NAME" ]; then echo "sprite name : $SPRITE_NAME_BYTES bytes"; fi
+if [ -n "$SPRITE_NAME" ]; then
+  if printf '%s' "$SPRITE_NAME" | LC_ALL=C grep -q '[^ -~]'; then echo "sprite name : katakana"; else echo "sprite name : ASCII"; fi
+fi
 if [ ${#KCONFIG[@]} -gt 0 ]; then echo "kconfig     : ${KCONFIG[*]}"; fi
 echo "targets     :"
 for row in "${TARGETS[@]}"; do echo "  ${row%%	*} / ${row##*	} -> firmware/${row##*	}$SUFFIX.uf2"; done

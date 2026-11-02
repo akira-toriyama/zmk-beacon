@@ -235,12 +235,9 @@ final class SpriteNameTests: XCTestCase {
         XCTAssertEqual(try SpriteName.choose(fileName: "♀.gif", place: 1, dictionary: d).name, "テストテス",
                        "a file name of no use when the dictionary serves")
         XCTAssertEqual("\(SpriteName.Source.katakana)", "katakana from the name dictionary")
-        XCTAssertEqual("\(SpriteName.Source.fileName(.tooLong))",
-                       "from the file name (the dictionary's name is longer than 15 bytes)")
-        XCTAssertEqual("\(SpriteName.Fallback.noDictionary)", "the config names no dictionary")
-        XCTAssertEqual("\(SpriteName.Fallback.notInOrder)", "the GIF is not in the order")
-        XCTAssertEqual("\(SpriteName.Fallback.noEntry)", "the dictionary has no name for its place")
-        XCTAssertEqual("\(SpriteName.Fallback.outsideTheFont)", "the dictionary's name has a character the katakana font lacks")
+        for why in [SpriteName.Fallback.noDictionary, .notInOrder, .noEntry, .tooLong, .outsideTheFont] {
+            XCTAssertEqual("\(SpriteName.Source.fileName(why))", "ASCII from the file name", "never why")
+        }
     }
 }
 
@@ -254,7 +251,7 @@ final class ReportTests: XCTestCase {
         b[16] = 0x5e; b[17] = 0x2b                      // erase 11102
         b[20] = 0x10; b[21] = 0x27                      // store 10000
         b[24] = 0xfe; b[25] = 0xff; b[26] = 0xff; b[27] = 0xff  // -2
-        for (i, c) in "Nidoran F".utf8.enumerated() { b[28 + i] = c }
+        for (i, c) in "Test one".utf8.enumerated() { b[28 + i] = c }
         let r = Report(Data(b))!
         XCTAssertTrue(r.isIdle && r.shown)
         XCTAssertEqual(r.source, Report.Source.room.rawValue)
@@ -265,15 +262,22 @@ final class ReportTests: XCTestCase {
         XCTAssertEqual(r.eraseMs, 11102)
         XCTAssertEqual(r.storeMs, 10000)
         XCTAssertEqual(r.flashError, -2)
-        XCTAssertEqual(r.name, "Nidoran F")
-        XCTAssertFalse(r.line.contains("Nidoran"))
-        XCTAssertTrue(r.line.contains("name_chars=9 name_bytes=9"))
-        for (i, c) in "テストテス".utf8.enumerated() { b[28 + i] = c }
-        b[28 + 15] = 0
-        let katakana = Report(Data(b))!
+        XCTAssertEqual(r.name, "Test one")
+        XCTAssertFalse(r.line.contains("Test"))
+        XCTAssertTrue(r.line.hasSuffix(" name=ascii"), "the alphabet, never the length")
+        XCTAssertFalse(r.line.contains("name_"), "no name_chars or name_bytes")
+        func named(_ text: String) -> Report {
+            for i in 28..<44 { b[i] = 0 }
+            for (i, c) in text.utf8.enumerated() { b[28 + i] = c }
+            return Report(Data(b))!
+        }
+        let katakana = named("テストテス")
         XCTAssertEqual(katakana.name, "テストテス")
-        XCTAssertTrue(katakana.line.contains("name_chars=5 name_bytes=15"))
+        XCTAssertTrue(katakana.line.hasSuffix(" name=katakana"))
         XCTAssertFalse(katakana.line.contains("テ"))
+        XCTAssertEqual(named("ア♂Ｚ：２").nameKind, "katakana", "the font's signs, capitals and digits")
+        XCTAssertEqual(named("").nameKind, "none")
+        XCTAssertEqual(named("Aテ").nameKind, "other", "neither font alone")
     }
 
     func testRejectsShortAndOtherVersions() {

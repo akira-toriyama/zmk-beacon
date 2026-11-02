@@ -280,6 +280,13 @@ class SpritePackTest(unittest.TestCase):
         with self.assertRaises(sprite_pack.PackError):
             sprite_pack.header(bad)
 
+    def test_name_kind_says_the_alphabet_only(self):
+        self.assertEqual(sprite_pack.name_kind(""), "no name")
+        self.assertEqual(sprite_pack.name_kind("A" * 15), "an ASCII name")
+        self.assertEqual(sprite_pack.name_kind("ア♂Ｚ："), "a katakana name")
+        for name in ("A" * 16, "テストテスト", "Aテ", "ぴ"):
+            self.assertEqual(sprite_pack.name_kind(name), "a name the HP bar cannot show", name)
+
     def test_name_on_stdin(self):
         # `--name-stdin`: the bytes as they are (a decomposed argument is what
         # it avoids), one line end dropped, a wrong name refused like an

@@ -59,26 +59,23 @@ public enum SpriteName {
         return name
     }
 
-    /// Why the name came from the file name instead of the dictionary.
-    public enum Fallback: Equatable, Sendable, CustomStringConvertible {
+    /// Why the name came from the file name instead of the dictionary: the
+    /// config names no dictionary, the GIF is not in the order, the
+    /// dictionary has no name for its place, or its name is longer than
+    /// maxBytes or has a character the katakana font lacks. Never logged
+    /// (Source).
+    public enum Fallback: Equatable, Sendable {
         case noDictionary
         case notInOrder
         case noEntry
         case tooLong
         case outsideTheFont
-
-        public var description: String {
-            switch self {
-            case .noDictionary: return "the config names no dictionary"
-            case .notInOrder: return "the GIF is not in the order"
-            case .noEntry: return "the dictionary has no name for its place"
-            case .tooLong: return "the dictionary's name is longer than \(maxBytes) bytes"
-            case .outsideTheFont: return "the dictionary's name has a character the katakana font lacks"
-            }
-        }
     }
 
-    /// Where a name came from, for the log: nothing of it names the subject.
+    /// Where a name came from, for the log: its alphabet and nothing more.
+    /// Not its length nor why the dictionary's name did not serve: matched
+    /// against the public list of names, a rare length, or a name too long or
+    /// outside the font, narrows the subject down to a few (Log.swift).
     public enum Source: Equatable, Sendable, CustomStringConvertible {
         case katakana
         case fileName(Fallback)
@@ -86,7 +83,7 @@ public enum SpriteName {
         public var description: String {
             switch self {
             case .katakana: return "katakana from the name dictionary"
-            case .fileName(let why): return "from the file name (\(why))"
+            case .fileName: return "ASCII from the file name"
             }
         }
     }
