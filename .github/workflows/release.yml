@@ -102,7 +102,7 @@ jobs:
   build:
     needs: version
     if: needs.version.outputs.release == 'true'
-    uses: ./.github/workflows/zmk-build.yml
+    uses: $/.github/workflows/zmk-build.yml
 
   draft:
     needs: [version, build]

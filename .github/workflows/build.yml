@@ -23,4 +23,4 @@ permissions:
 
 jobs:
   build:
-    uses: ./.github/workflows/zmk-build.yml
+    uses: $/.github/workflows/zmk-build.yml
