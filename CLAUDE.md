@@ -53,8 +53,9 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   rotation, which in a numbered order names the subject, nor the name's
   length, which a rare one does against the public list of names: of the
   name it logs the alphabet, which still says whether the name
-  dictionary's name fit. That and the pack's size it logs can point to the
-  GIF, so its lines stay out of anything public (`Log.swift`).
+  dictionary's name fit (with a complete dictionary, `ASCII` is a name of
+  six katakana or more). That and the pack's size it logs can point to
+  the GIF, so its lines stay out of anything public (`Log.swift`).
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
 
 ## Build

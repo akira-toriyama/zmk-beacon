@@ -288,6 +288,7 @@ class SpritePackTest(unittest.TestCase):
             self.assertEqual(sprite_pack.name_kind(name), "a name the HP bar cannot show", name)
 
     def test_info_says_the_alphabet_never_the_length(self):
+        # The whole output: a length on any line fails.
         gif = self.walking(2, 2, 3, 1)
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite_pack.py")
         with tempfile.TemporaryDirectory() as d:
@@ -298,7 +299,8 @@ class SpritePackTest(unittest.TestCase):
                     f.write(data)
                 r = subprocess.run([sys.executable, script, "info", path], capture_output=True, text=True)
                 self.assertEqual(r.returncode, 0, r.stderr)
-                self.assertEqual(r.stdout.splitlines()[0], "1 animations, %d bytes, %s" % (len(data), kind))
+                self.assertEqual(r.stdout, "1 animations, %d bytes, %s\n"
+                                 "animation 0: 2x2 colours 2 pictures 1 frames 1\n" % (len(data), kind))
 
     def test_name_on_stdin(self):
         # `--name-stdin`: the bytes as they are (a decomposed argument is what

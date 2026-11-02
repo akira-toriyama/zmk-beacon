@@ -261,13 +261,17 @@ user's LaunchAgent runs it after each successful swap and hands the line to
 the keyboard (canon t-0967, daily since 2026-10-21). No line the sender logs
 names a GIF, the sprite, the name's length or a GIF's place in the rotation:
 matched against the public order or the public list of names, a place or a
-rare length names the subject. Every line still tells something of the
-GIF: the name's alphabet (the `name:` line, the device's report's `name=`)
-says whether the name dictionary's name fit the HP bar, a fact about the
-name; the pack's size (the `pack:`, `start` and `end answered:` lines, the
-erase time of `begin answered`, the report's `expected` and `received`) can
-name the GIF to someone who makes packs from the same collection. So keep
-the sender's lines out of anything public. macOS asks once for Bluetooth; the app is signed with a persistent
+rare length names the subject. Lines still tell something of the GIF: the
+name's alphabet (the `name:` line, the device's report's `name=`) says
+whether the name dictionary's name fit the HP bar, which holds five
+katakana, so with a complete dictionary `ASCII` is a name of six or more, a
+length, and a run of such days can place the GIF; a run that cannot name
+the GIF (`failed: the GIF's file name gives no sprite name`) says that
+neither the name dictionary's name nor the file name serves; the pack's
+size (the `pack:`, `start` and `end answered:` lines, the erase time of
+`begin answered`, the report's `expected` and `received`) can name the GIF
+to someone who makes packs from the same collection. So keep the sender's
+lines out of anything public. macOS asks once for Bluetooth; the app is signed with a persistent
 identity so that the answer survives a rebuild. A pack showed about a tenth
 of a second a KB after BEGIN (hardware 2026-10-13).
 
