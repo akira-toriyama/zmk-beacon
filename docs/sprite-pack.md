@@ -34,9 +34,14 @@ changes daily over the air:
   receiver can tell a whole, intact file from a cut or corrupted one before
   opening it.
 - Per animation: the canvas size, a palette of up to 255 RGB colours, the
-  distinct pictures, and the frames as (picture, delay) pairs. Every picture
-  is the whole composited canvas as a browser would show it: pixel value 0 is
-  transparent and 1..n index the palette. Pixels are packed 4 to a byte pair
+  distinct pictures, and the frames as (picture, delay) pairs. The canvas is
+  the GIF's cut to the box its pictures ink, all of them together, so that
+  no transparent margin reaches the player, which scales a canvas to its box
+  at one scale for both views (`sprite_pack.py`'s `crop`; a 96x96 back view
+  with 47 blank rows drew its tightly cut front view at 76 px under 94 px of
+  empty box, canon t-t4y4, 2026-11-03). Every picture is that whole canvas,
+  composited as a browser would show it: pixel value 0 is transparent and
+  1..n index the palette. Pixels are packed 4 to a byte pair
   when the palette has 15 colours or fewer (most sprites), 8 bits otherwise.
 - A picture is a raw deflate stream of its band of rows (the rows above and
   below are transparent); picture 0 is the whole canvas and the preset

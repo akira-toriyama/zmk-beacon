@@ -22,7 +22,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y`); a merge here reaches the dongles with
   canon's pin bump.
 - `tools/`: `sprite_pack.py` (the sprite pack, [docs/sprite-pack.md](docs/sprite-pack.md):
-  a GIF as its distinct pictures, for the player and the over-the-air swap) on
+  a GIF as its distinct pictures, cut to the box they ink, for the player and
+  the over-the-air swap) on
   `gifpics.py` (GIF composition as browsers do it), standard library only so
   that macOS's `/usr/bin/python3` (3.9) and the ZMK build image both run them;
   `sprite_colours.py` (the colours a sprite's GIFs, its front and its back,

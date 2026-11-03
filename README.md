@@ -67,7 +67,9 @@ in a build with a named embedded sprite.
 The screen plays a sprite pack (below) above the HP bar: centred, standing on
 the bar, and scaled to the largest size of its own proportions that fits the
 space above it, 2 px in from the panel's top and sides (a 90x90 px GIF shows
-at 198x198, or 170x170 above a bar with a name row). The pack comes from one
+at 198x198, or 170x170 above a bar with a name row). A transparent margin in
+the GIF is cut off when the pack is made, so the drawing is the pixels the
+GIF inks, at whichever size the GIF padded them to. The pack comes from one
 of two places: the sprite room in flash, where a Mac put it over BLE (next
 section), or the image, when `CONFIG_BEACON_SPRITE_GIF="<absolute path>"`
 made the build convert a GIF and embed the pack. At boot the room's pack
@@ -112,9 +114,10 @@ Limits:
 
 - Any GIF a browser plays (GIF87a or GIF89a, disposal 0-3, transparency,
   interlace, local colour tables), with at least one frame and at most 255
-  colours in all, no larger than the sprite box: 276x198, or 276x170 with
-  the name row (a sprite name, or the receiver, which every build has unless
-  its conf turns it off). A larger GIF stops the build with `static assertion failed:
+  colours in all, no larger than the sprite box once its transparent margin
+  is cut off: 276x198, or 276x170 with the name row (a sprite name, or the
+  receiver, which every build has unless its conf turns it off). A larger
+  GIF stops the build with `static assertion failed:
   "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box: ..."` or `"... is
   taller than the sprite box: ..."`. A GIF whose player (its canvas and
   dictionary: two bytes a pixel with more than 15 colours, one otherwise, plus
