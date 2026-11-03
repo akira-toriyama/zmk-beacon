@@ -234,6 +234,32 @@ class SpritePackTest(unittest.TestCase):
         self.assertEqual(sprite_pack.header(data), (1, len(data), ""))
         self.assertEqual(sprite_pack.check(data, [front]), [])
 
+    def test_each_animation_is_cropped_to_its_ink(self):
+        # A 9x8 back view inking 4x3 at (2, 3) over its frames, a 3x3 front
+        # view inking every edge: each is cut on its own, to the box all its
+        # pictures ink together, and check() reads the GIFs the same way.
+        back = gif(9, 8, PAL4, [
+            {"rect": (2, 3, 2, 2), "pixels": square(2, 2, 1), "transparent": 0, "disposal": 2},
+            {"rect": (4, 4, 2, 2), "pixels": square(2, 2, 2), "transparent": 0, "disposal": 2},
+        ])
+        front = self.walking(3, 3, 3, 2)
+        data, infos = sprite_pack.pack([front, back])
+        self.assertEqual([(i["width"], i["height"]) for i in infos], [(3, 3), (4, 3)])
+        anims = sprite_pack.unpack(data)
+        self.assertEqual(anims[1].pictures, [
+            bytes([1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]),
+            bytes([0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 2, 2]),
+        ])
+        self.assertEqual(sprite_pack.check(data, [front, back]), [])
+        self.assertTrue(sprite_pack.check(data, [back, front]))
+
+    def test_a_blank_animation_is_refused_not_cropped_away(self):
+        blank = gif(5, 4, PAL4, [{"rect": (0, 0, 5, 4), "pixels": square(5, 4, 0), "transparent": 0}])
+        anim = sprite_pack.crop(gifpics.animation(blank))
+        self.assertEqual((anim.width, anim.height), (5, 4))
+        with self.assertRaises(sprite_pack.PackError):
+            sprite_pack.pack([blank])
+
     def test_picture_zero_is_the_whole_canvas(self):
         data, _ = sprite_pack.pack([self.walking(7, 5, 6, 4)])
         base, = struct.unpack_from("<I", data, sprite_pack.HEADER)

@@ -7,7 +7,13 @@
 
 `pack` writes the file and prints one line per animation
 (`animation N: WxH bpp B colours C pictures P frames F bytes N`) and the total;
-nothing it prints names the GIF or the sprite. The name is 15 bytes of UTF-8
+nothing it prints names the GIF or the sprite. Each animation's canvas is the
+GIF's cut to the box its pictures ink, together (crop): the player draws a
+canvas scaled to its box and standing on the HP bar, at one scale for both
+animations, so a transparent margin in one GIF would shrink and lift the
+other's drawing (a 96x96 back view with 21 rows of margin above and 26 below
+drew its 43x43 front view at 76 px under 94 px of empty box, canon t-t4y4,
+2026-11-03). A GIF that inks nothing is refused, as before (no colours). The name is 15 bytes of UTF-8
 at most, all printable ASCII or all katakana (check_name: what the HP bar's
 two fonts show); `--name-stdin` reads it from stdin, UTF-8, one line, as the
 sprite sender passes it (an argument of Foundation's Process arrives
@@ -140,6 +146,28 @@ def name_kind(name):
     return "an ASCII name" if all(" " <= c <= "~" for c in name) else "a katakana name"
 
 
+def crop(anim):
+    """anim cut to the box its pictures ink, together; anim itself when no
+    picture inks a pixel (pack_animation refuses it: no colours)."""
+    W, H = anim.width, anim.height
+    x0, y0, x1, y1 = W, H, -1, -1
+    for p in anim.pictures:
+        for r in range(H):
+            row = p[r * W:(r + 1) * W]
+            if not any(row):
+                continue
+            y0, y1 = min(y0, r), max(y1, r)
+            first = next(c for c, v in enumerate(row) if v)
+            last = W - 1 - next(c for c, v in enumerate(reversed(row)) if v)
+            x0, x1 = min(x0, first), max(x1, last)
+    if y1 < 0 or (x0, y0, x1, y1) == (0, 0, W - 1, H - 1):
+        return anim
+    w = x1 - x0 + 1
+    pictures = [b"".join(p[r * W + x0:r * W + x0 + w] for r in range(y0, y1 + 1))
+                for p in anim.pictures]
+    return gifpics.Animation(w, y1 - y0 + 1, anim.palette, pictures, anim.order)
+
+
 def pack_animation(anim, base):
     """(the animation's bytes, its info dict) for an Animation at file offset base."""
     W, H = anim.width, anim.height
@@ -188,7 +216,7 @@ def pack(gifs, name=""):
     if not 1 <= len(gifs) <= 2:
         raise PackError("one or two GIFs")
     check_name(name)
-    anims = [gifpics.animation(g) for g in gifs]
+    anims = [crop(gifpics.animation(g)) for g in gifs]
     n = len(anims)
     first = HEADER + 4 * n
     first += -first % 4
@@ -260,9 +288,9 @@ def check(data, gifs):
     if len(anims) != len(gifs):
         return ["%d animations for %d GIFs" % (len(anims), len(gifs))]
     for a, (mine, g) in enumerate(zip(anims, gifs)):
-        ref = gifpics.animation(g)
+        ref = crop(gifpics.animation(g))
         if (mine.width, mine.height) != (ref.width, ref.height):
-            bad.append("animation %d: %dx%d, the GIF %dx%d" % (a, mine.width, mine.height, ref.width, ref.height))
+            bad.append("animation %d: %dx%d, the GIF cropped %dx%d" % (a, mine.width, mine.height, ref.width, ref.height))
             continue
         if mine.palette != ref.palette:
             bad.append("animation %d: the palette differs" % a)
