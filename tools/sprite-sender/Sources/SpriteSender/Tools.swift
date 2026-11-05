@@ -1,10 +1,10 @@
 import Foundation
 
 /// The Python tools of tools/ (standard library only, so macOS's own
-/// python3), run as child processes: sprite_pack.py (Packer) and
-/// sprite_colours.py (Colours). A script comes from the app bundle's
-/// Resources (package.sh copies them there) or, for a bare build, from
-/// `tools/` above this source file.
+/// python3), run as child processes: sprite_pack.py (Packer),
+/// sprite_colours.py (Colours) and name_dictionary.py (Main.spriteName). A
+/// script comes from the app bundle's Resources (package.sh copies them there)
+/// or, for a bare build, from `tools/` above this source file.
 enum Tools {
     static func script(_ name: String) -> URL {
         if let resources = Bundle.main.resourceURL {

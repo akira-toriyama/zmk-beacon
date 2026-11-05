@@ -27,217 +27,129 @@ final class ConfigTests: XCTestCase {
         }
     }
 
-    func testRangeIsFirstTildeLastOrOpenAndNeedsTheOrder() throws {
+    func testRangeIsFirstTildeLastOrOpen() throws {
         let base = URL(fileURLWithPath: "/x/")
-        func config(range: String, order: Bool = true) throws -> SenderConfig {
-            let orderKey = order ? #", "order": "o""# : ""
-            let json = #"{"front": "f", "state": "s""# + orderKey + #", "range": "# + range + "}"
-            return try SenderConfig(json: Data(json.utf8), base: base)
+        func config(range: String) throws -> SenderConfig {
+            try SenderConfig(json: Data((#"{"front": "f", "state": "s", "range": "# + range + "}").utf8), base: base)
         }
-        XCTAssertEqual(try config(range: #""1 ~ 151""#).range, Rotation.PlaceRange(first: 1, last: 151))
-        XCTAssertEqual(try config(range: #""152~200""#).range, Rotation.PlaceRange(first: 152, last: 200))
-        XCTAssertEqual(try config(range: #"" 100 ~ ""#).range, Rotation.PlaceRange(first: 100, last: nil))
-        XCTAssertEqual(try config(range: #""7 ~ 7""#).range, Rotation.PlaceRange(first: 7, last: 7))
-        XCTAssertNil(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o"}"#.utf8), base: base).range)
+        XCTAssertEqual(try config(range: #""1 ~ 151""#).range, Rotation.NumberRange(first: 1, last: 151))
+        XCTAssertEqual(try config(range: #""152~200""#).range, Rotation.NumberRange(first: 152, last: 200))
+        XCTAssertEqual(try config(range: #"" 100 ~ ""#).range, Rotation.NumberRange(first: 100, last: nil))
+        XCTAssertEqual(try config(range: #""7 ~ 7""#).range, Rotation.NumberRange(first: 7, last: 7))
+        XCTAssertNil(try SenderConfig(json: Data(#"{"front": "f", "state": "s"}"#.utf8), base: base).range)
         for bad in ["1, 3, 5", "151", "~ 151", "0 ~ 5", "151 ~ 1", "1 ~ 151 ~ 200", "-1 ~ 5", "+1 ~ 5", "1 〜 151", "１ ~ １５１", ""] {
             XCTAssertThrowsError(try config(range: "\"\(bad)\""), bad) {
                 XCTAssertEqual($0 as? SenderConfig.Error, .badRange)
             }
         }
         XCTAssertThrowsError(try config(range: "[1, 151]"), "a string, not a list")
-        XCTAssertThrowsError(try config(range: #""1 ~ 151""#, order: false)) {
-            XCTAssertEqual($0 as? SenderConfig.Error, .rangeWithoutOrder)
-        }
     }
 
-    func testNamesResolvesLikeTheOthersAndNeedsTheOrder() throws {
+    func testNamesResolvesLikeTheOthers() throws {
         let base = URL(fileURLWithPath: "/x/")
-        let c = try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o", "names": "names.json"}"#.utf8), base: base)
-        XCTAssertEqual(c.namesFile?.path, "/x/names.json")
-        XCTAssertNil(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o"}"#.utf8), base: base).namesFile)
-        XCTAssertThrowsError(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "names": "n"}"#.utf8), base: base)) {
-            XCTAssertEqual($0 as? SenderConfig.Error, .namesWithoutOrder)
-        }
-        XCTAssertThrowsError(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "order": "o", "names": ""}"#.utf8), base: base)) {
+        let c = try SenderConfig(json: Data(#"{"front": "f", "state": "s", "names": "names.csv"}"#.utf8), base: base)
+        XCTAssertEqual(c.namesFile?.path, "/x/names.csv")
+        XCTAssertNil(try SenderConfig(json: Data(#"{"front": "f", "state": "s"}"#.utf8), base: base).namesFile)
+        XCTAssertThrowsError(try SenderConfig(json: Data(#"{"front": "f", "state": "s", "names": ""}"#.utf8), base: base)) {
             XCTAssertEqual($0 as? SenderConfig.Error, .emptyPath("names"))
         }
     }
-}
 
-final class NameDictionaryTests: XCTestCase {
-    func testArrayOfObjectsKeyedByNumberOtherKeysIgnored() throws {
-        let json = Data("""
-            [{"no": 1, "ja": "テスト", "en": "Test", "genus": "x"},
-             {"no": 3, "en": "Noja"},
-             {"no": 2, "ja": "ア"}]
-            """.utf8)
-        let d = try NameDictionary(json: json)
-        XCTAssertEqual(d.count, 2, "places with a Japanese name")
-        XCTAssertEqual(d.japaneseName(1), "テスト")
-        XCTAssertEqual(d.japaneseName(2), "ア")
-        XCTAssertNil(d.japaneseName(3), "an entry without ja")
-        XCTAssertNil(d.japaneseName(4))
-        XCTAssertEqual(try NameDictionary(json: Data("[]".utf8)).count, 0)
-    }
-
-    func testNotAnArrayOfNumberedObjectsAndDuplicatesAreErrors() {
-        for bad in [#"{"no": 1, "ja": "ア"}"#, #"[{"ja": "ア"}]"#, #"[{"no": "1", "ja": "ア"}]"#, #"[1, 2]"#, "", "nonsense"] {
-            XCTAssertThrowsError(try NameDictionary(json: Data(bad.utf8)), bad) {
-                XCTAssertEqual($0 as? NameDictionary.Error, .notAnArrayOfEntries, bad)
+    func testOrderIsAConfigError() {
+        let base = URL(fileURLWithPath: "/x/")
+        for json in [#"{"front": "f", "state": "s", "order": "o"}"#, #"{"front": "f", "state": "s", "order": "o", "range": "1 ~ 151", "names": "n"}"#, #"{"front": "f", "state": "s", "order": ""}"#] {
+            XCTAssertThrowsError(try SenderConfig(json: Data(json.utf8), base: base), json) {
+                XCTAssertEqual($0 as? SenderConfig.Error, .orderIsGone, json)
             }
-        }
-        XCTAssertThrowsError(try NameDictionary(json: Data(#"[{"no": 5, "ja": "ア"}, {"no": 5}]"#.utf8))) {
-            XCTAssertEqual($0 as? NameDictionary.Error, .duplicateNumber)
         }
     }
 }
 
 final class RotationTests: XCTestCase {
-    let entries = ["b.gif", "._a.gif", "README.md", "a.gif", "C.GIF", "notes.txt"]
-
-    func testCandidatesAreGIFsInByteOrderWithoutSidecars() {
-        XCTAssertEqual(Rotation.candidates(entries), ["C.GIF", "a.gif", "b.gif"])
-    }
-
-    func testOrderListsFirstThenTheRestInByteOrder() {
-        let order = Rotation.order(in: Data("b.gif\r\n\nzz.gif\nb.gif\nC.GIF\n".utf8))
-        XCTAssertEqual(order, ["b.gif", "zz.gif", "C.GIF"], "one a line, once each")
-        let c = Rotation.candidates(entries, order: order)
-        XCTAssertEqual(c, ["b.gif", "C.GIF", "a.gif"], "listed in order, missing skipped, the rest after")
-        XCTAssertEqual(Rotation.next(after: "a.gif", in: c, order: order), "b.gif")
-        XCTAssertEqual(Rotation.next(after: "zz.gif", in: c, order: order), "C.GIF", "a gone listed name continues down the list")
-        XCTAssertEqual(Rotation.next(after: "a.gif~", in: c, order: order), "b.gif", "a gone unlisted name past the unlisted ones wraps")
-        let tail = order + ["gone.gif"]
-        XCTAssertEqual(
-            Rotation.next(after: "gone.gif", in: Rotation.candidates(entries, order: tail), order: tail), "a.gif",
-            "a gone name past every listed one goes on to the unlisted")
-    }
-
-    func testRangeKeepsOnlyItsPlacesAndWrapsToItsFirst() throws {
-        let entries = ["a.gif", "b.gif", "d.gif", "e.gif", "x.gif", "._b.gif"]
-        let order = ["a.gif", "b.gif", "gone.gif", "d.gif", "e.gif"]
-        let range = try XCTUnwrap(Rotation.PlaceRange("2 ~ 4"))
-        let c = Rotation.candidates(entries, order: order, range: range)
-        XCTAssertEqual(c, ["b.gif", "d.gif"], "places 2 to 4: a gone name skipped, the unlisted left out")
-        XCTAssertEqual(Rotation.next(after: "d.gif", in: c, order: order), "b.gif", "after the last place, the first")
-        XCTAssertEqual(Rotation.next(after: "b.gif", in: c, order: order), "d.gif")
-        XCTAssertEqual(Rotation.next(after: "a.gif", in: c, order: order), "b.gif", "a state before the range enters it")
-        XCTAssertEqual(Rotation.next(after: "e.gif", in: c, order: order), "b.gif", "a state after the range starts it over")
-        XCTAssertEqual(Rotation.next(after: "gone.gif", in: c, order: order), "d.gif", "a gone name inside goes on down the list")
-        XCTAssertEqual(Rotation.next(after: "x.gif", in: c, order: order), "b.gif", "an unlisted state starts it over")
-        XCTAssertEqual(Rotation.next(after: nil, in: c, order: order), "b.gif")
-
-        let open = try XCTUnwrap(Rotation.PlaceRange("4 ~"))
-        XCTAssertEqual(Rotation.candidates(entries, order: order, range: open), ["d.gif", "e.gif"], "to the order's end")
-        XCTAssertEqual(Rotation.candidates(entries, order: order, range: Rotation.PlaceRange("2 ~ 99")), ["b.gif", "d.gif", "e.gif"])
-        XCTAssertEqual(Rotation.candidates(entries, order: order, range: Rotation.PlaceRange("6 ~")), [])
-        XCTAssertEqual(
-            Rotation.candidates(entries, order: ["a.gif", "a.gif", "b.gif"], range: Rotation.PlaceRange("2 ~ 2")),
-            ["b.gif"], "a name listed twice holds one place")
-        XCTAssertEqual("\(range) / \(open)", "2 ~ 4 / 4 ~", "as the config writes it")
-    }
-
-    func testNextWrapsAndStartsOverOnUnknownState() {
-        let c = Rotation.candidates(entries)
-        XCTAssertEqual(Rotation.next(after: nil, in: c), "C.GIF")
-        XCTAssertEqual(Rotation.next(after: "C.GIF", in: c), "a.gif")
-        XCTAssertEqual(Rotation.next(after: "b.gif", in: c), "C.GIF")
-        XCTAssertEqual(Rotation.next(after: "a.gif~", in: c), "b.gif", "a gone name continues after its place")
-        XCTAssertEqual(Rotation.next(after: "z.gif", in: c), "C.GIF", "a gone name past the end wraps")
-        XCTAssertNil(Rotation.next(after: nil, in: []))
-    }
-
-    func testPlaceCountsTheOrdersNamesFromOne() {
-        let order = Rotation.order(in: Data("a.gif\n\nb.gif\nb.gif\nc.gif\n".utf8))
-        XCTAssertEqual(Rotation.place(of: "a.gif", in: order), 1)
-        XCTAssertEqual(Rotation.place(of: "b.gif", in: order), 2)
-        XCTAssertEqual(Rotation.place(of: "c.gif", in: order), 3, "an empty line and a repeat hold no place")
-        XCTAssertNil(Rotation.place(of: "d.gif", in: order))
-        XCTAssertNil(Rotation.place(of: "a.gif", in: []))
-        XCTAssertEqual(Rotation.place(of: "c.gif", in: order), Rotation.candidates(["a.gif", "b.gif", "c.gif"], order: order, range: Rotation.PlaceRange("3 ~ 3")).isEmpty ? nil : 3,
-                       "the place range counts the same way")
-    }
-
-    func testStateRoundTripKeepsEveryByteOfTheName() {
-        for name in ["a b.gif", "  Nidoran F .GIF", "trailing .gif"] {
-            XCTAssertEqual(Rotation.name(inState: Rotation.state(for: name)), name)
+    func testANumberIsAPositiveIntegerAsSwiftWritesIt() {
+        for (name, number) in [("1.gif", 1), ("151.gif", 151), ("649.gif", 649), ("10001.gif", 10001)] {
+            XCTAssertEqual(Rotation.number(ofFileName: name), number, name)
+            XCTAssertEqual(Rotation.fileName(of: number), name)
         }
-        XCTAssertEqual(Rotation.name(inState: Data("x.gif\nignored\n".utf8)), "x.gif")
-        XCTAssertEqual(Rotation.name(inState: Data("x.gif\r\n".utf8)), "x.gif")
-        XCTAssertNil(Rotation.name(inState: Data()))
-        XCTAssertNil(Rotation.name(inState: Data("\n".utf8)))
+        for name in ["0.gif", "-1.gif", "+1.gif", "01.gif", "1-mega.gif", "1.GIF", "1.gif.gif", ".gif", "._1.gif", "a.gif",
+                     "1", "1.png", "１.gif", "1 .gif", " 1.gif", "1_000.gif", "99999999999999999999.gif", "shiny", "female"] {
+            XCTAssertNil(Rotation.number(ofFileName: name), name)
+        }
+    }
+
+    func testCandidatesAreTheNumbersAscendingNotInByteOrder() {
+        let entries = ["10.gif", "9.gif", "._9.gif", "1.gif", "9-form.gif", "name.gif", "back", "notes.txt", "100.gif"]
+        XCTAssertEqual(Rotation.candidates(entries), [1, 9, 10, 100])
+        XCTAssertEqual(Rotation.candidates([]), [])
+    }
+
+    func testRangeKeepsOnlyItsNumbers() throws {
+        let entries = ["1.gif", "2.gif", "4.gif", "5.gif", "x.gif"]
+        XCTAssertEqual(Rotation.candidates(entries, range: Rotation.NumberRange("2 ~ 4")), [2, 4], "a number without a file skipped")
+        XCTAssertEqual(Rotation.candidates(entries, range: Rotation.NumberRange("4 ~")), [4, 5], "open: to the last number")
+        XCTAssertEqual(Rotation.candidates(entries, range: Rotation.NumberRange("2 ~ 99")), [2, 4, 5])
+        XCTAssertEqual(Rotation.candidates(entries, range: Rotation.NumberRange("6 ~")), [])
+        let range = try XCTUnwrap(Rotation.NumberRange("2 ~ 4"))
+        let open = try XCTUnwrap(Rotation.NumberRange("4 ~"))
+        XCTAssertEqual("\(range) / \(open)", "2 ~ 4 / 4 ~", "as the config writes it")
+        XCTAssertTrue(range.contains(2) && range.contains(4) && !range.contains(1) && !range.contains(5))
+        XCTAssertTrue(open.contains(4) && open.contains(1_000_000) && !open.contains(3))
+    }
+
+    func testNextGoesUpAndWraps() {
+        let c = [2, 4, 7]
+        XCTAssertEqual(Rotation.next(after: nil, in: c), 2, "without a state, the first")
+        XCTAssertEqual(Rotation.next(after: 2, in: c), 4)
+        XCTAssertEqual(Rotation.next(after: 4, in: c), 7)
+        XCTAssertEqual(Rotation.next(after: 7, in: c), 2, "after the last, the first")
+        XCTAssertEqual(Rotation.next(after: 1, in: c), 2, "a state before the range enters it")
+        XCTAssertEqual(Rotation.next(after: 3, in: c), 4, "a gone number goes on from its place")
+        XCTAssertEqual(Rotation.next(after: 8, in: c), 2, "a state past the end starts over")
+        XCTAssertEqual(Rotation.next(after: 5, in: [5]), 5, "one GIF, again")
+        XCTAssertNil(Rotation.next(after: nil, in: []))
+        XCTAssertNil(Rotation.next(after: 3, in: []))
+    }
+
+    func testStateRoundTripAndWhatIsNoState() {
+        for number in [1, 151, 10001] {
+            XCTAssertEqual(Rotation.number(inState: Rotation.state(for: number)), number)
+        }
+        XCTAssertEqual(Rotation.state(for: 6), Data("6\n".utf8), "one line")
+        XCTAssertEqual(Rotation.number(inState: Data("12\nignored\n".utf8)), 12)
+        XCTAssertEqual(Rotation.number(inState: Data("12\r\n".utf8)), 12)
+        XCTAssertEqual(Rotation.number(inState: Data("12".utf8)), 12)
+        for bad in ["", "\n", "0\n", "-3\n", "012\n", "12 \n", " 12\n", "name.gif\n", "12.gif\n", "\n12\n"] {
+            XCTAssertNil(Rotation.number(inState: Data(bad.utf8)), bad)
+        }
     }
 }
 
 final class SpriteNameTests: XCTestCase {
-    func testRuleOfSpriteNameSh() throws {
-        XCTAssertEqual(try SpriteName.from(fileName: "my sprite.gif"), "My sprite")
-        XCTAssertEqual(try SpriteName.from(fileName: "  Nidoran F .GIF"), "Nidoran F")
-        XCTAssertEqual(try SpriteName.from(fileName: "Farfetch'd.gif"), "Farfetch'd")
-        XCTAssertEqual(try SpriteName.from(fileName: "abcdefghijklmnopqrs.gif"), "Abcdefghijklmno")
-        XCTAssertEqual(try SpriteName.from(fileName: "abcdefghijklmn opq.gif"), "Abcdefghijklmn", "the cut leaves no trailing space")
-        XCTAssertEqual(try SpriteName.from(fileName: "noext"), "Noext")
-    }
-
-    func testRejectsEmptyAndNonASCII() {
-        XCTAssertThrowsError(try SpriteName.from(fileName: ".gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
-        XCTAssertThrowsError(try SpriteName.from(fileName: "   .gif")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
-        XCTAssertEqual(try SpriteName.from(fileName: ".hidden.gif"), ".hidden", "as sprite-name.sh: only the last extension goes")
-        XCTAssertThrowsError(try SpriteName.from(fileName: "Nidoran♀.gif")) {
-            XCTAssertEqual($0 as? SpriteName.Error, .notPrintableASCII)
-        }
-    }
-
-    func testKatakanaIsTheFontsCharactersComposedWithin15Bytes() throws {
-        XCTAssertEqual(try SpriteName.katakana("テストテス"), "テストテス", "five katakana: 15 bytes")
-        XCTAssertEqual(try SpriteName.katakana("ガギグ♀"), "ガギグ♀")
-        XCTAssertEqual(try SpriteName.katakana("ア♂Ｚ：２"), "ア♂Ｚ：２", "the gender signs, a fullwidth capital, colon and digit")
-        XCTAssertEqual(try SpriteName.katakana("ー・ヴ"), "ー・ヴ", "U+30FB and U+30FC are in the block")
-        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}ヒ\u{309A}"), "ガピ", "NFD composes to NFC: 6 bytes, not 12")
-        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}ヒ\u{309A}").utf8.count, 6)
-        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}テストア"), "ガテストア", "18 bytes decomposed, 15 composed: the bytes count after composing")
-        XCTAssertEqual(try SpriteName.katakana("カ\u{3099}テストア").utf8.count, 15)
-        XCTAssertThrowsError(try SpriteName.katakana("テストテスト")) { XCTAssertEqual($0 as? SpriteName.Error, .tooLong) }
-        XCTAssertThrowsError(try SpriteName.katakana("")) { XCTAssertEqual($0 as? SpriteName.Error, .empty) }
-        // Hiragana, a kanji, a halfwidth katakana, a fullwidth small letter,
-        // ASCII, a space, a lone combining dakuten and U+30A0 (before the block).
-        for text in ["ぴ", "鳥", "ｱ", "ａ", "Aテ", "テ ス", "\u{3099}", "\u{30A0}"] {
-            XCTAssertThrowsError(try SpriteName.katakana(text), text) {
-                XCTAssertEqual($0 as? SpriteName.Error, .outsideTheFont, text)
-            }
-        }
-        XCTAssertEqual(SpriteName.katakanaRanges.reduce(0) { $0 + $1.count }, 131, "sprite_pack.KATAKANA_RANGES: 2 + 92 + 11 + 26")
-    }
-
-    func testChoosePrefersTheDictionaryAndFallsBackToTheFileName() throws {
-        let d = NameDictionary(japanese: [1: "テストテス", 2: "テストテスト", 3: "ぴ", 4: "カ\u{3099}", 5: ""])
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 1, dictionary: d),
+    func testTheToolsLineIsTheNameAsItsBytesAre() {
+        XCTAssertEqual(SpriteName.choose(number: 1, toolOutput: Data("テストテス\n".utf8)),
                        .init(name: "テストテス", source: .katakana))
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 2, dictionary: d),
-                       .init(name: "Test one", source: .fileName(.tooLong)), "18 bytes: the file name, uncut")
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 3, dictionary: d),
-                       .init(name: "Test one", source: .fileName(.outsideTheFont)))
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 4, dictionary: d),
-                       .init(name: "ガ", source: .katakana), "composed")
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 4, dictionary: d).name.utf8.count, 3,
+        XCTAssertEqual(SpriteName.choose(number: 1, toolOutput: Data("Mr. Test\n".utf8)),
+                       .init(name: "Mr. Test", source: .ascii), "not cut at its dot, as a file name would be")
+        XCTAssertEqual(SpriteName.choose(number: 1, toolOutput: Data("テスト\nnoise\n".utf8)).name, "テスト", "the first line")
+        XCTAssertEqual(SpriteName.choose(number: 1, toolOutput: Data("テスト".utf8)).name, "テスト", "no newline")
+        XCTAssertEqual(Array(SpriteName.choose(number: 1, toolOutput: Data("ガピ\n".utf8)).name.utf8).count, 6,
                        "composed in bytes too: String's == takes NFD for NFC")
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 5, dictionary: d),
-                       .init(name: "Test one", source: .fileName(.noEntry)), "an empty ja is no name")
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 6, dictionary: d),
-                       .init(name: "Test one", source: .fileName(.noEntry)))
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: nil, dictionary: d),
-                       .init(name: "Test one", source: .fileName(.notInOrder)))
-        XCTAssertEqual(try SpriteName.choose(fileName: "test one.gif", place: 1, dictionary: nil),
-                       .init(name: "Test one", source: .fileName(.noDictionary)))
-        XCTAssertThrowsError(try SpriteName.choose(fileName: "♀.gif", place: 2, dictionary: d), "the fallback keeps its errors") {
-            XCTAssertEqual($0 as? SpriteName.Error, .notPrintableASCII)
-        }
-        XCTAssertEqual(try SpriteName.choose(fileName: "♀.gif", place: 1, dictionary: d).name, "テストテス",
-                       "a file name of no use when the dictionary serves")
+    }
+
+    func testTheNumberIsTheLastResort() {
+        XCTAssertEqual(SpriteName.choose(number: 6, toolOutput: nil), .init(name: "6", source: .ascii), "no CSV in the config")
+        XCTAssertEqual(SpriteName.choose(number: 10001, toolOutput: Data("\n".utf8)), .init(name: "10001", source: .ascii), "no name in the CSV")
+        XCTAssertEqual(SpriteName.choose(number: 6, toolOutput: Data()), .init(name: "6", source: .ascii))
+        XCTAssertEqual(SpriteName.choose(number: Int.max, toolOutput: nil).name.utf8.count, SpriteName.maxBytes, "a pack holds 15 bytes")
+    }
+
+    func testTheLogSaysTheAlphabetNeverWhichASCII() {
         XCTAssertEqual("\(SpriteName.Source.katakana)", "katakana from the name dictionary")
-        for why in [SpriteName.Fallback.noDictionary, .notInOrder, .noEntry, .tooLong, .outsideTheFont] {
-            XCTAssertEqual("\(SpriteName.Source.fileName(why))", "ASCII from the file name", "never why")
-        }
+        XCTAssertEqual("\(SpriteName.Source.ascii)", "ASCII")
+    }
+
+    func testKatakanaRangesMatchSpritePack() {
+        XCTAssertEqual(SpriteName.katakanaRanges.reduce(0) { $0 + $1.count }, 131, "sprite_pack.KATAKANA_RANGES: 2 + 92 + 11 + 26")
     }
 }
 
