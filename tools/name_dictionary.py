@@ -75,8 +75,8 @@ def sprite_name(species):
     """The name the HP bar shows for one species of read_names, or None: the
     user's rule (canon t-rq9h), its katakana name when the bar can show it,
     else its English one, whole or not at all (a cut name would be another
-    name). No character is folded to fit: an English name outside printable
-    ASCII gives none."""
+    name). No character is folded to fit: a name outside the bar's two alphabets
+    gives none."""
     for language in ("ja", "en"):
         name = species.get(language)
         if name is None:
