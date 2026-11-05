@@ -145,7 +145,7 @@ consumer's `prospector.conf` turns it off) the device advertises connectably
 as `Prospector Dongle` about once a second and offers one GATT service through
 which a central writes a sprite pack into the sprite room, a 384 KiB flash
 partition the shield overlay cuts from the code partition; every pack of the
-user's collection fits (the largest is 206 KB). The new sprite plays as soon
+user's collection fits (the largest is 319 KB). The new sprite plays as soon
 as the transfer ends, named as the pack says, and plays again after a reboot
 or a reflash (the UF2 bootloader leaves the room alone). During the transfer
 the last picture stays on the screen; a transfer that fails, or a pack that

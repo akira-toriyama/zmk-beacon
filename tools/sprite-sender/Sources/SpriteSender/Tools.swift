@@ -21,8 +21,8 @@ enum Tools {
 
     enum Error: Swift.Error, CustomStringConvertible {
         /// The tool's exit status and its own `<tool>:` line when it printed
-        /// one. A Python traceback (an unreadable file, say) names the GIF's
-        /// path, so nothing else of its stderr is kept.
+        /// one. A Python traceback (a pack that cannot be written, say) can name
+        /// the GIF's path, so nothing else of its stderr is kept.
         case exited(tool: String, status: Int32, message: String?)
 
         var description: String {

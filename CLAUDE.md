@@ -57,6 +57,14 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   fit (with a complete CSV, `ASCII` is a name of
   six katakana or more). That and the pack's size it logs can point to
   the GIF, so its lines stay out of anything public (`Log.swift`).
+  **A test never runs `daily` without `--dry-run`, nor `send`**: any build on
+  this Mac, a bare `swift build` in a scratch copy too, reaches the real
+  Prospector Dongle over BLE (TCC attributes it to the terminal or editor that
+  started it), and the sprite room keeps no copy of what it overwrites
+  (2026-11-05, canon e-ehzy: a review's scripts overwrote it four times, one
+  assuming its runs stopped before the send, one with a stub patch that failed
+  without stopping the script). For the path past `--dry-run`, stub `Sender` in
+  a copy and check that the stub took. `report` only reads.
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
 
 ## Build
