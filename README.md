@@ -145,7 +145,7 @@ consumer's `prospector.conf` turns it off) the device advertises connectably
 as `Prospector Dongle` about once a second and offers one GATT service through
 which a central writes a sprite pack into the sprite room, a 384 KiB flash
 partition the shield overlay cuts from the code partition; every pack of the
-user's collection fits (the largest is 206 KB). The new sprite plays as soon
+user's collection fits (the largest is 319 KB). The new sprite plays as soon
 as the transfer ends, named as the pack says, and plays again after a reboot
 or a reflash (the UF2 bootloader leaves the room alone). During the transfer
 the last picture stays on the screen; a transfer that fails, or a pack that
@@ -209,12 +209,11 @@ numbers and why.
 `tools/sprite-sender/` is the Mac side of the swap: a Swift app that picks the
 next GIF of a collection, packs it (with its back view when the collection has
 one) through `sprite_pack.py`, and writes the pack into the sprite room over
-BLE. It goes through the collection in the order of the config's order file
-(one file name a line; the user's lists the species in National Pokédex
-order), then the rest in file-name order, or through a range of the order's
-places only, one GIF a run, around and around, and a LaunchAgent runs it
-once a day (the user's dotfiles). The collection, the order file and the
-sender's config stay off every repository:
+BLE. The collection is a directory of `<number>.gif` files; it goes through
+them in number order, or through a range of the numbers only, one GIF a run,
+around and around, and a LaunchAgent runs it once a day (the user's dotfiles).
+The collection stays off every repository, and so does the state file, whose
+number names the GIF:
 
 ```sh
 cd tools/sprite-sender && ./package.sh          # SpriteSender.app, signed (its header)
@@ -224,59 +223,54 @@ SpriteSender.app/Contents/MacOS/sprite-sender report            # the device's r
 SpriteSender.app/Contents/MacOS/sprite-sender colours --config <sender.json> [--count N]
 ```
 
-`sender.json` sits next to the collection, with paths relative to itself:
-`{"front": "<dir>", "back": "<dir>", "state": "<file>", "order": "<file>", "range": "<first> ~ <last>", "names": "<file>"}`
-(`back`, `order`, `range` and `names` optional). `range` needs `order` and keeps only
-the GIFs at those places of it, counted from 1 over its names: `"1 ~ 151"`
-goes from the first to the 151st and back to the first, and `"100 ~"` runs
-from the 100th to the order's end; the GIFs the order does not list stay out.
-A state outside the range continues at the range's next place, wrapping to
-its first, and an older sender ignores the key.
-The sprite name comes from the name dictionary when the config has one
-(`names`, which needs `order`): a JSON array of `{"no": <place>, "ja":
-"<katakana name>", "en": "<English name>"}`, one object a place of the order
-(other keys are ignored, so a field can be added), that
-`tools/name_dictionary.py <pokemon_species_names.csv> -o <names.json>
-[--order <file>]` writes from PokeAPI's CSV, every species in National Pokédex
-order, and compares with the order file (a place whose file name is not its
-English name is printed: a GIF at the wrong place would get the wrong
-katakana name). The GIF's place is its position among the order's names,
-counted from 1 as `range` counts them (an empty line or a repeated name
-holds no place), and its `ja`,
-composed (NFC), is the sprite name when it is 15 bytes of UTF-8 at most and
+`sender.json` holds absolute paths, or paths relative to itself:
+`{"front": "<dir>", "back": "<dir>", "state": "<file>", "range": "<first> ~ <last>", "names": "<csv>"}`
+(`back`, `range` and `names` optional). A GIF of the collection is a file of
+`front` named a positive integer as plain digits and `.gif`, exactly:
+`<number>-<form>.gif`, any other name and the subdirectories stay out. Its back
+view is the file of the same name in `back`; without one the pack holds the
+front only. `range` keeps only those numbers: `"1 ~ 151"` goes from the first
+to the 151st and back to the first, and `"100 ~"` runs from 100 to the last
+number there is. Give a range when `front` holds more than the set you want:
+without one every number is in the rotation, and in a directory of National
+Pokédex GIFs not every number is a species. A state outside the range continues
+at the next number in it, wrapping to the first. A config with the `order` key
+of the sender before the numbered collection is a config error (exit 2).
+The sprite name comes from `names`, PokeAPI's
+`pokemon_species_names.csv`, with the GIF's number as the species' National
+Pokédex number: each run, `tools/name_dictionary.py <csv> --number <n>` prints
+the katakana name, composed (NFC), when it is 15 bytes of UTF-8 at most and
 every character is in the katakana font (`sprite_pack.py`'s
-`KATAKANA_RANGES`); otherwise, and without the key, the name is the GIF's
-file name without its extension, trimmed, with its first letter upper-cased,
-cut to 15 characters. The log says which (`name: katakana from the name
-dictionary` or `name: ASCII from the file name`), never the name or its
-length; a dictionary the config names but that cannot be read or is
-not that array is a config error (exit 2), like the order file. The state file holds the
-name of the GIF tried last, written before the transfer, so a GIF the device
-refuses costs one day. Exit 0 when the device shows the pack, 1 when it does
-not (no device in range, the drive not mounted, a refused pack: the next day
-tries the next GIF), 2 for bad usage or config. `colours` prints the colours
-of the GIF the state names, the sprite on the device after a `daily` that
-succeeded, and of its back view when the collection has one, weighed as
-`sprite_colours.py` (above) says, and sends nothing; it exits 1 with no
-state, no readable front GIF, a config it cannot read (the drive not
-mounted) or the colour tool failing, 2 for bad usage or config. The
-user's LaunchAgent runs it after each successful swap and hands the line to
-the keyboard (canon t-0967, daily since 2026-10-21). No line the sender logs
-names a GIF, the sprite, the name's length or a GIF's place in the rotation:
-matched against the public order or the public list of names, a place or a
-rare length names the subject. Lines still tell something of the GIF: the
-name's alphabet (the `name:` line, the device's report's `name=`) says
-whether the name dictionary's name fit the HP bar, which holds five
-katakana, so with a complete dictionary `ASCII` is a name of six or more, a
-length, and a run of such days can place the GIF; a run that cannot name
-the GIF (`failed: the GIF's file name gives no sprite name`) says that
-neither the name dictionary's name nor the file name serves; the pack's
-size (the `pack:`, `start` and `end answered:` lines, the erase time of
-`begin answered`, the report's `expected` and `received`) can name the GIF
-to someone who makes packs from the same collection. So keep the sender's
-lines out of anything public. macOS asks once for Bluetooth; the app is signed with a persistent
-identity so that the answer survives a rebuild. A pack showed about a tenth
-of a second a KB after BEGIN (hardware 2026-10-13).
+`KATAKANA_RANGES`), else the English one when it is 15 bytes of printable
+ASCII, whole, else nothing. With nothing, and without the key, the name is the
+GIF's number. The log says which alphabet (`name: katakana from the name
+dictionary` or `name: ASCII`), never the name, its length or whether an ASCII
+name is the number; a CSV the config names but that cannot be read or does
+not have the columns is a config error (exit 2). The state file holds the
+number of the GIF tried last, written before the transfer, so a GIF the device
+refuses costs one day; its directory is made when missing, and a state that is
+no number starts the rotation over. Exit 0 when the device shows the pack, 1
+when it does not (no device in range, a config or collection that cannot be
+read, a refused pack: the next day tries the next GIF), 2 for bad usage or
+config. `colours` prints the colours of the GIF the state names, the sprite on
+the device after a `daily` that succeeded, and of its back view when the
+collection has one, weighed as `sprite_colours.py` (above) says, and sends
+nothing; it exits 1 with no state, no readable front GIF, a config it cannot
+read or the colour tool failing, 2 for bad usage or config. The user's
+LaunchAgent runs it after each successful swap and hands the line to the
+keyboard (canon t-0967, daily since 2026-10-21). No line the sender logs names
+a GIF, the sprite, the name's length or a GIF's number: a number, or a rare
+length matched against the public list of names, names the subject. Lines still
+tell something of the GIF: the name's alphabet (the `name:` line, the device's
+report's `name=`) says whether the katakana name fit the HP bar, which holds
+five katakana, so with a complete CSV `ASCII` is a name of six or more, a
+length, and a run of such days can place the GIF; the pack's size (the `pack:`,
+`start` and `end answered:` lines, the erase time of `begin answered`, the
+report's `expected` and `received`) can name the GIF to someone who makes packs
+from the same collection. So keep the sender's lines out of anything public.
+macOS asks once for Bluetooth; the app is signed with a persistent identity so
+that the answer survives a rebuild. A pack showed about a tenth of a second a
+KB after BEGIN (hardware 2026-10-13).
 
 ## What the module provides
 

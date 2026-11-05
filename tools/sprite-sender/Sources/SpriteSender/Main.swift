@@ -5,11 +5,11 @@ import SpriteSenderCore
 ///
 ///   sprite-sender daily --config <sender.json> [--dry-run]
 ///       The next GIF of the rotation (SpriteSenderCore.Rotation), packed
-///       with its back view when the config has one, named after the name
-///       dictionary when the config has one and the HP bar can show that name,
-///       else after its file (SpriteSenderCore.SpriteName), and sent to the
-///       device. --dry-run packs and prints the sizes but moves no state and
-///       sends nothing.
+///       with its back view when the config has one, named by
+///       tools/name_dictionary.py when the config names its CSV, else after its
+///       number (SpriteSenderCore.SpriteName), and sent to the device.
+///       --dry-run packs and prints the sizes but moves no state and sends
+///       nothing.
 ///   sprite-sender send <pack.spk>
 ///       One pack as it is: the hardware check.
 ///   sprite-sender report
@@ -106,13 +106,15 @@ enum Main {
     static func config(at configPath: String) -> SenderConfig {
         let configURL = URL(fileURLWithPath: configPath).standardizedFileURL
         guard let json = FileManager.default.contents(atPath: configURL.path) else {
-            // The collection lives on an external drive: not mounted is a day skipped, not a config error.
-            Exit.failure("cannot read the config file (the drive may not be mounted)")
+            // A volume that is not there is a day skipped, not a config error.
+            Exit.failure("cannot read the config file")
         }
         do {
             return try SenderConfig(json: json, base: configURL.deletingLastPathComponent())
         } catch SenderConfig.Error.badRange {
             Exit.usage("bad config file: range is not \"<first> ~ <last>\" or \"<first> ~\" (ASCII digits from 1, the ASCII tilde)")
+        } catch SenderConfig.Error.orderIsGone {
+            Exit.usage("bad config file: order is gone: the collection is <number>.gif files, in number order, and range counts those numbers")
         } catch {
             Exit.usage("bad config file: \(error)")
         }
@@ -127,56 +129,20 @@ enum Main {
         } catch {
             Exit.failure("cannot list the front directory")
         }
-        var order: [String] = []
-        if let orderFile = config.orderFile {
-            guard let data = fm.contents(atPath: orderFile.path) else {
-                Exit.usage("cannot read the order file the config names")
-            }
-            order = Rotation.order(in: data)
+        let candidates = Rotation.candidates(entries, range: config.range)
+        let last = fm.contents(atPath: config.stateFile.path).flatMap(Rotation.number(inState:))
+        guard let chosen = Rotation.next(after: last, in: candidates) else {
+            Exit.failure(config.range == nil ? "the front directory has no <number>.gif" : "the front directory has no <number>.gif in the range")
         }
-        if let range = config.range, range.first > order.count {
-            Exit.usage("the range starts after the order file's \(order.count) names")
-        }
-        var dictionary: NameDictionary?
-        if let namesFile = config.namesFile {
-            guard let data = fm.contents(atPath: namesFile.path) else {
-                Exit.usage("cannot read the name dictionary the config names")
-            }
-            do {
-                dictionary = try NameDictionary(json: data)
-            } catch NameDictionary.Error.duplicateNumber {
-                Exit.usage("bad name dictionary: a number appears twice")
-            } catch {
-                Exit.usage("bad name dictionary: not a JSON array of objects with an integer \"no\"")
-            }
-        }
-        let candidates = Rotation.candidates(entries, order: order, range: config.range)
-        let last = fm.contents(atPath: config.stateFile.path).flatMap(Rotation.name(inState:))
-        guard let chosen = Rotation.next(after: last, in: candidates, order: order) else {
-            Exit.failure(config.range == nil ? "the front directory has no GIF" : "the front directory has no GIF in the range")
-        }
-        // The counts only: the chosen GIF's place in the rotation is its
-        // place in a numbered order, which names the subject (Log.swift).
-        // Nor the range's bounds or a missing state: without a state the
-        // pick is the range's first GIF, and a range of one place is the
-        // place.
-        var about: [String] = []
-        if !order.isEmpty { about.append("\(order.count) listed") }
-        if config.range != nil { about.append("a range") }
-        if let dictionary { about.append("\(dictionary.count) names") }
-        Log.line("rotation: \(candidates.count) GIFs\(about.isEmpty ? "" : " (\(about.joined(separator: ", ")))")")
+        // The count only: the chosen GIF's number names the subject
+        // (Log.swift). Nor the range's bounds or a missing state: without a
+        // state the pick is the range's first GIF, and a range of one number
+        // is the number.
+        Log.line("rotation: \(candidates.count) GIFs\(config.range == nil ? "" : " (a range)")")
 
-        let place = Rotation.place(of: chosen, in: order)
-        let name: String
-        do {
-            let choice = try SpriteName.choose(fileName: chosen, place: place, dictionary: dictionary)
-            name = choice.name
-            Log.line("name: \(choice.source)")
-        } catch {
-            if !dryRun { moveState(config, to: chosen) }
-            Exit.failure("the GIF's file name gives no sprite name: \(error)")
-        }
-        let front = config.frontDirectory.appendingPathComponent(chosen)
+        let choice = spriteName(config, of: chosen)
+        Log.line("name: \(choice.source)")
+        let front = config.frontDirectory.appendingPathComponent(Rotation.fileName(of: chosen))
         let back = backView(config, of: chosen)
 
         if !dryRun {
@@ -188,7 +154,7 @@ enum Main {
         }
         let pack: Data
         do {
-            pack = try Packer.pack(front: front, back: back, name: name)
+            pack = try Packer.pack(front: front, back: back, name: choice.name)
         } catch {
             Exit.failure("the converter refused the GIF: \(error)")
         }
@@ -206,10 +172,10 @@ enum Main {
     /// daily that succeeded, never asks.
     static func colours(configPath: String, count: Int?) -> Never {
         let config = config(at: configPath)
-        guard let last = FileManager.default.contents(atPath: config.stateFile.path).flatMap(Rotation.name(inState:)) else {
+        guard let last = FileManager.default.contents(atPath: config.stateFile.path).flatMap(Rotation.number(inState:)) else {
             Exit.failure("no state: nothing has been sent yet")
         }
-        let front = config.frontDirectory.appendingPathComponent(last)
+        let front = config.frontDirectory.appendingPathComponent(Rotation.fileName(of: last))
         guard isRegularFile(front) else {
             Exit.failure("the GIF the state names is not a readable file")
         }
@@ -221,11 +187,25 @@ enum Main {
         Exit.ok()
     }
 
+    /// The GIF's sprite name, before the state moves: a CSV that is not what
+    /// the tool reads is a config error, which costs no GIF of the rotation.
+    static func spriteName(_ config: SenderConfig, of number: Int) -> SpriteName.Choice {
+        guard let csv = config.namesFile else { return SpriteName.choose(number: number, toolOutput: nil) }
+        do {
+            let output = try Tools.run("name_dictionary.py", [csv.path, "--number", String(number)])
+            return SpriteName.choose(number: number, toolOutput: output)
+        } catch Tools.Error.exited(_, 2, let message?) {
+            Exit.usage(message)
+        } catch {
+            Exit.failure("no sprite name: \(error)")
+        }
+    }
+
     /// The GIF's back view: the file of the same name in the config's back
     /// directory, when the collection has one. The one rule for the pack
     /// (daily) and the colours.
-    static func backView(_ config: SenderConfig, of name: String) -> URL? {
-        guard let back = config.backDirectory?.appendingPathComponent(name) else { return nil }
+    static func backView(_ config: SenderConfig, of number: Int) -> URL? {
+        guard let back = config.backDirectory?.appendingPathComponent(Rotation.fileName(of: number)) else { return nil }
         guard isRegularFile(back) else {
             Log.line("no back view for this GIF: front only")
             return nil
@@ -235,8 +215,10 @@ enum Main {
 
     /// The rotation moves before the transfer (Rotation). The error is not
     /// printed: Foundation's names the path.
-    static func moveState(_ config: SenderConfig, to chosen: String) {
+    static func moveState(_ config: SenderConfig, to chosen: Int) {
         do {
+            try FileManager.default.createDirectory(
+                at: config.stateFile.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Rotation.state(for: chosen).write(to: config.stateFile, options: .atomic)
         } catch {
             Exit.failure("cannot write the state file")

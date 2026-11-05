@@ -30,10 +30,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   show most, for the key LEDs' palette of canon's keyboard: its docstring
   holds the rule and the numbers measured on the user's collection) on the
   same two;
-  `name_dictionary.py` (its docstring) writes the sprite sender's name
-  dictionary, the katakana names by National Pokédex number, from PokeAPI's
-  species names CSV and compares it with the sender's order file; its output
-  names species, so it goes to the terminal only;
+  `name_dictionary.py` (its docstring) prints one sprite's name, by National
+  Pokédex number, from PokeAPI's species names CSV, for the sender at each run:
+  the one rule of which name a sprite gets; its output names a species, so it
+  goes down the sender's pipe only;
   `test_sprite_pack.py`, `test_sprite_colours.py` and `test_name_dictionary.py` write their own GIFs
   and CSV (`python3 -m unittest discover
   tools`, CI `tools-test.yml`); `pkmn_font.py` (its docstring) renders the
@@ -42,21 +42,29 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   edit them, and its `preview` prints glyphs as pixels. The 1,298-GIF checks against Pillow and the
   round trips are local only: the GIFs are personal files. `sprite-sender/`
   (Swift, no dependencies; README "The sprite sender"): `SpriteSenderCore` is
-  pure (config, rotation, the name dictionary and the name rule, report v1, page plan; `swift test` on
+  pure (config, rotation, the name's last resort, report v1, page plan; `swift test` on
   CI's macOS runner, `tools-test.yml`, as a Mac with only CommandLineTools
   has no XCTest) and `SpriteSender` does files, the Python tools as child
-  processes (`Tools.swift`: the pack converter, the colours) and
+  processes (`Tools.swift`: the pack converter, the colours, the name) and
   CoreBluetooth (Swift 5 language mode: CoreBluetooth's delegate types are
   not Sendable). `package.sh` makes `SpriteSender.app` with the Python
   tools in its Resources, signed with the `chord-dev` identity (canon
   t-3cf6: the Bluetooth permission is keyed to identity and bundle id).
-  Nothing it logs names a GIF or the sprite, nor the GIF's place in the
-  rotation, which in a numbered order names the subject, nor the name's
+  Nothing it logs names a GIF or the sprite, nor the GIF's number, which
+  names the subject, nor the name's
   length, which a rare one does against the public list of names: of the
-  name it logs the alphabet, which still says whether the name
-  dictionary's name fit (with a complete dictionary, `ASCII` is a name of
+  name it logs the alphabet, which still says whether the katakana name
+  fit (with a complete CSV, `ASCII` is a name of
   six katakana or more). That and the pack's size it logs can point to
   the GIF, so its lines stay out of anything public (`Log.swift`).
+  **A test never runs `daily` without `--dry-run`, nor `send`**: any build on
+  this Mac, a bare `swift build` in a scratch copy too, reaches the real
+  Prospector Dongle over BLE (TCC attributes it to the terminal or editor that
+  started it), and the sprite room keeps no copy of what it overwrites
+  (2026-11-05, canon e-ehzy: a review's scripts overwrote it four times, one
+  assuming its runs stopped before the send, one with a stub patch that failed
+  without stopping the script). For the path past `--dry-run`, stub `Sender` in
+  a copy and check that the stub took. `report` only reads.
 - Tasks: `furrow list -r zmk-beacon` (the 2026-09-29 refactor: epic e-vgt5).
 
 ## Build
@@ -258,12 +266,13 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   font by a byte of 0x80 or above, and canon's `sprite-name.py` and the
   sender's `SpriteName` must stay within it. `SpriteName.katakanaRanges`
   copies `KATAKANA_RANGES` (Swift cannot read the Python): change the two
-  together, and `tools/pkmn_font.py` renders whatever the ranges say. The
-  sender prefers the name dictionary's katakana name (`names` in its config,
-  keyed by the GIF's place in the order) and falls back to the file name
-  (canon t-rq9h, the user's rule: katakana when it can be shown, else as
-  before); canon's `sprite-name.py` looks the name up the same way for a
-  local build, and the two are copies of both rules.
+  together, and `tools/pkmn_font.py` renders whatever the ranges say. Which
+  name a GIF gets is `tools/name_dictionary.py`'s rule (canon t-rq9h, the
+  user's rule: katakana when it can be shown, else as before; here the English
+  name, whole, keyed by the GIF's number); the sender only falls back to the
+  number. canon's `sprite-name.py` copies the rule for a local build: it runs
+  before the pin's checkout and on a machine with no sender, so change the
+  two together.
 - Change the sprite pack only with a new magic (`SPK1`, tools/sprite_pack.py
   and src/sprite_pack.h together): the player rejects a file it does not know
   instead of drawing it wrong.

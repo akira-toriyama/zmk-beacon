@@ -1,35 +1,30 @@
 #!/usr/bin/env python3
-"""The sprite sender's name dictionary from PokeAPI's species names.
+"""A sprite's name from PokeAPI's species names.
 
-  name_dictionary.py <pokemon_species_names.csv> -o <names.json> [--order <file>]
+  name_dictionary.py <pokemon_species_names.csv> --number <n>
 
 Reads PokeAPI's data/v2/csv/pokemon_species_names.csv (columns
 pokemon_species_id, local_language_id, name, genus; languages.csv: 1 is
-ja-Hrkt, the katakana names, 9 is en) and writes the dictionary the sender
-reads (tools/sprite-sender, SpriteSenderCore/NameDictionary.swift): a JSON
-array in number order, one object a species, `no`, `ja` (composed, NFC) and
-`en`, one a line. Every species goes in, whether or not its name fits the HP
-bar: the sender decides that (sprite_pack.check_name's rule, 15 bytes of the
-katakana font) and falls back to the file name.
+ja-Hrkt, the katakana names, 9 is en) and prints the one name the HP bar shows
+for species <n> (sprite_name, composed, NFC): the sprite sender runs this each
+day (tools/sprite-sender, Main.spriteName). The line is empty when the CSV has
+no such name: the sender then names the sprite after its number.
 
---order <file> compares the dictionary with the sender's order file (one GIF
-file name a line; a name's place is its position among the names, counted
-from 1, empty lines and repeats dropped as the sender's Rotation.order drops
-them, repeats by canonical equivalence as Swift's String compares): a place
-whose file name without its extension is not the English name (both
-composed, NFC) is printed with both spellings, so a GIF at the wrong place
-would show the wrong katakana name. It also counts the places whose katakana
-name the HP bar can show. The output names species, which the user's
-collection is made of: it is for the terminal, never for a commit or a doc
-(the dictionary lives next to the order file, off every repository).
+The rule lives here so that every route to a sprite shares it: the sender has
+none of its own. canon's assets/sprite-name.py copies it for a local build
+(it runs before zmk-beacon's pin is checked out): change the two together.
 
-Standard library only (macOS /usr/bin/python3, 3.9). Exit 0; 2 for a CSV
-without the columns, not UTF-8 (a BOM is fine) or without a name in either
-language, or an unreadable file.
+The output names a species, which the user's collection is made of: it is for
+the sender's pipe, never for a log, a commit or a doc. No message carries a
+value of the CSV, not even a number.
+
+Standard library only (macOS /usr/bin/python3, 3.9). stdout is UTF-8 whatever
+the locale: launchd gives its jobs none. Exit 0; 2 for a CSV without the
+columns, not UTF-8 (a BOM is fine) or without a name in either language, or an
+unreadable file.
 """
 import argparse
 import csv
-import json
 import os
 import sys
 import unicodedata
@@ -46,14 +41,12 @@ class DictionaryError(ValueError):
 
 
 def read_names(csv_path):
-    """[{"no", "ja", "en"}, ...] in number order from PokeAPI's CSV; a species
+    """{number: {"ja", "en"}} from PokeAPI's CSV, composed (NFC); a species
     without a name in one language gets no key for it."""
-    ja = {}
-    en = {}
+    names = {}
     try:
         with open(csv_path, newline="", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
+            for row in csv.DictReader(f):
                 try:
                     number = int(row["pokemon_species_id"])
                     language = int(row["local_language_id"])
@@ -64,107 +57,49 @@ def read_names(csv_path):
                 if number < 1 or not name:
                     continue
                 if language == LANGUAGE_JA:
-                    ja[number] = unicodedata.normalize("NFC", name)
+                    names.setdefault(number, {})["ja"] = unicodedata.normalize("NFC", name)
                 elif language == LANGUAGE_EN:
-                    en[number] = unicodedata.normalize("NFC", name)
+                    names.setdefault(number, {})["en"] = unicodedata.normalize("NFC", name)
     except OSError as e:
         raise DictionaryError("cannot read the CSV: %s" % e.strerror)
     except UnicodeDecodeError:
         raise DictionaryError("the CSV is not UTF-8")
     except csv.Error as e:
         raise DictionaryError("the CSV does not parse: %s" % e)
-    if not ja and not en:
+    if not names:
         raise DictionaryError("the CSV names no species in Japanese or English")
-    entries = []
-    for number in sorted(set(ja) | set(en)):
-        entry = {"no": number}
-        if number in ja:
-            entry["ja"] = ja[number]
-        if number in en:
-            entry["en"] = en[number]
-        entries.append(entry)
-    return entries
-
-
-def dumps(entries):
-    """The file: one object a line, UTF-8 as it is (the sender reads any JSON;
-    a line a species diffs by species)."""
-    lines = [json.dumps(e, ensure_ascii=False, separators=(", ", ": ")) for e in entries]
-    return "[\n" + ",\n".join(lines) + "\n]\n"
-
-
-def read_order(path):
-    """The order file's names, composed (NFC): one a line, exactly, empty
-    lines skipped, a name's first line its place (the sender's
-    Rotation.order, whose Set<String> takes a decomposed spelling for the
-    composed one)."""
-    with open(path, "rb") as f:
-        data = f.read()
-    names = []
-    seen = set()
-    for line in data.split(b"\n"):
-        if line.endswith(b"\r"):
-            line = line[:-1]
-        if not line:
-            continue
-        name = unicodedata.normalize("NFC", line.decode("utf-8", "replace"))
-        if name not in seen:
-            seen.add(name)
-            names.append(name)
     return names
 
 
-def shows(ja):
-    """Whether the HP bar shows the katakana name (the sender's rule)."""
-    try:
-        sprite_pack.check_name(ja)
-    except sprite_pack.PackError:
-        return False
-    return any(ord(c) >= 0x80 for c in ja)
-
-
-def compare(entries, order):
-    """(places, mismatches, shown): the order's places, the [(place, stem,
-    en)] whose file name without its extension differs from the English name
-    (en None when the dictionary has no entry; `order` as read_order gives
-    it, composed), and the places whose katakana name the HP bar shows."""
-    by_number = {e["no"]: e for e in entries}
-    mismatches = []
-    shown = 0
-    for place, file_name in enumerate(order, 1):
-        stem = file_name.rsplit(".", 1)[0] if "." in file_name else file_name
-        entry = by_number.get(place, {})
-        if stem != entry.get("en"):
-            mismatches.append((place, stem, entry.get("en")))
-        if "ja" in entry and shows(entry["ja"]):
-            shown += 1
-    return len(order), mismatches, shown
+def sprite_name(species):
+    """The name the HP bar shows for one species of read_names, or None: the
+    user's rule (canon t-rq9h), its katakana name when the bar can show it,
+    else its English one, whole or not at all (a cut name would be another
+    name). No character is folded to fit: a name outside the bar's two alphabets
+    gives none."""
+    for language in ("ja", "en"):
+        name = species.get(language)
+        if name is None:
+            continue
+        try:
+            return sprite_pack.check_name(name)
+        except sprite_pack.PackError:
+            pass
+    return None
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="the sprite sender's name dictionary from PokeAPI's CSV")
+    parser = argparse.ArgumentParser(description="a sprite's name from PokeAPI's species names")
     parser.add_argument("csv", help="PokeAPI's pokemon_species_names.csv")
-    parser.add_argument("-o", "--output", required=True, help="the names.json to write")
-    parser.add_argument("--order", help="the sender's order file to compare the English names with")
+    parser.add_argument("--number", type=int, required=True, help="the species' number")
     args = parser.parse_args(argv)
     try:
-        entries = read_names(args.csv)
-        with open(args.output, "w", encoding="utf-8", newline="\n") as f:
-            f.write(dumps(entries))
-        print("%d species, %d with a Japanese name, %d with an English name -> %s" % (
-            len(entries), sum("ja" in e for e in entries), sum("en" in e for e in entries), args.output))
-        if args.order:
-            places, mismatches, shown = compare(entries, read_order(args.order))
-            print("%d places in the order: %d file names equal the English name, %d katakana names the HP bar shows" % (
-                places, places - len(mismatches), shown))
-            for place, stem, en in mismatches:
-                print("  place %d: file %r, English %s" % (place, stem, repr(en) if en is not None else "none"))
+        name = sprite_name(read_names(args.csv).get(args.number, {}))
     except DictionaryError as e:
         print("name_dictionary: %s" % e, file=sys.stderr)
         return 2
-    except OSError as e:
-        print("name_dictionary: %s: %s" % (e.strerror, e.filename), file=sys.stderr)
-        return 2
+    sys.stdout.buffer.write(((name or "") + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
     return 0
 
 

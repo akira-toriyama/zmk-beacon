@@ -350,6 +350,14 @@ class SpritePackTest(unittest.TestCase):
                                    input=stdin, capture_output=True)
                 self.assertEqual(r.returncode, 2, stdin)
                 self.assertTrue(r.stderr.startswith(b"sprite_pack: "), r.stderr)
+            for args in (["pack", "--name", "X", "-o", out, os.path.join(d, "none.gif")],
+                         ["pack", "--name", "X", "-o", out, d],
+                         ["check", os.path.join(d, "none.spk"), gif_path],
+                         ["info", os.path.join(d, "none.spk")]):
+                r = subprocess.run([sys.executable, script] + args, capture_output=True)
+                self.assertEqual(r.returncode, 2, args)
+                self.assertTrue(r.stderr.startswith(b"sprite_pack: "), r.stderr)
+                self.assertNotIn(d.encode(), r.stderr, "no path: a GIF's names its subject")
             r = subprocess.run([sys.executable, script, "pack", "--name-stdin", "-o", out, gif_path],
                                input=b"Plain", capture_output=True)
             self.assertEqual(r.returncode, 0)

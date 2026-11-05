@@ -306,8 +306,11 @@ def check(data, gifs):
 
 
 def _read(path):
-    with open(path, "rb") as f:
-        return f.read()
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except OSError as e:
+        raise PackError("cannot read a file: %s" % (e.strerror or "error"))
 
 
 def _name_on_stdin():

@@ -1,40 +1,36 @@
 import Foundation
 
-/// The config file: one JSON object next to the GIFs, off every repository
-/// (its paths name the collection). Relative paths resolve against the file's
-/// directory, so the whole collection moves as one.
+/// The config file: one JSON object. Absolute paths stay as they are and
+/// relative ones resolve against the file's directory, so the file need not
+/// sit with the collection.
 ///
-///   { "front": "front", "back": "back", "state": "sender-state", "order": "order.txt",
-///     "range": "1 ~ 151", "names": "names.json" }
+///   { "front": "<dir>", "back": "<dir>", "state": "<file>", "range": "1 ~ 151",
+///     "names": "<pokemon_species_names.csv>" }
 ///
 /// `back` is optional: without it every pack holds the front animation only.
-/// `state` is the file the rotation keeps its position in (Rotation).
-/// `order` is optional: a file naming the GIFs in the order to show them,
-/// one file name a line (Rotation; the user's collection lists its species
-/// in National Pokédex order). Without it the rotation is file-name order.
-/// `range` is optional and needs `order`: the places of the order the
-/// rotation keeps (Rotation.PlaceRange; with the user's order, the species'
-/// numbers). A sender older than the key ignores it and shows them all.
-/// `names` is optional and needs `order`: the name dictionary
-/// (NameDictionary), whose katakana name of the GIF's place becomes the
-/// sprite name when the HP bar can show it (SpriteName.choose). An older
-/// sender ignores it and names the GIF after its file.
+/// `state` is the file the rotation keeps its position in (Rotation); its
+/// number names the GIF, so it stays out of anything public, and its directory
+/// is made when missing.
+/// `range` is optional: the numbers the rotation keeps (Rotation.NumberRange).
+/// Without it, every `<number>.gif` of the front directory.
+/// `names` is optional: the CSV tools/name_dictionary.py takes a GIF's sprite
+/// name from. Without it the name is the number (SpriteName.choose).
+/// `order` is a config error: the order file went with the numbered collection,
+/// and a config that still names one was written for a sender that read it.
 public struct SenderConfig: Equatable, Sendable {
     public var frontDirectory: URL
     public var backDirectory: URL?
     public var stateFile: URL
-    public var orderFile: URL?
-    public var range: Rotation.PlaceRange?
+    public var range: Rotation.NumberRange?
     public var namesFile: URL?
 
     public init(
-        frontDirectory: URL, backDirectory: URL?, stateFile: URL, orderFile: URL? = nil,
-        range: Rotation.PlaceRange? = nil, namesFile: URL? = nil
+        frontDirectory: URL, backDirectory: URL?, stateFile: URL,
+        range: Rotation.NumberRange? = nil, namesFile: URL? = nil
     ) {
         self.frontDirectory = frontDirectory
         self.backDirectory = backDirectory
         self.stateFile = stateFile
-        self.orderFile = orderFile
         self.range = range
         self.namesFile = namesFile
     }
@@ -43,6 +39,7 @@ public struct SenderConfig: Equatable, Sendable {
         var front: String
         var back: String?
         var state: String
+        /// Only to refuse it: JSONDecoder ignores a key that is not declared.
         var order: String?
         var range: String?
         var names: String?
@@ -51,10 +48,9 @@ public struct SenderConfig: Equatable, Sendable {
     public enum Error: Swift.Error, Equatable {
         case notAnObject(String)
         case emptyPath(String)
-        /// Without the text: it may name GIFs, and this error reaches the log.
+        /// Without the text: this error reaches the log.
         case badRange
-        case rangeWithoutOrder
-        case namesWithoutOrder
+        case orderIsGone
     }
 
     /// Parses the file's bytes; `base` is the directory the relative paths
@@ -66,6 +62,7 @@ public struct SenderConfig: Equatable, Sendable {
         } catch {
             throw Error.notAnObject(String(describing: error))
         }
+        guard file.order == nil else { throw Error.orderIsGone }
         func resolve(_ path: String, _ key: String) throws -> URL {
             guard !path.isEmpty else { throw Error.emptyPath(key) }
             return URL(fileURLWithPath: path, relativeTo: base).standardizedFileURL
@@ -73,15 +70,10 @@ public struct SenderConfig: Equatable, Sendable {
         frontDirectory = try resolve(file.front, "front")
         backDirectory = try file.back.map { try resolve($0, "back") }
         stateFile = try resolve(file.state, "state")
-        orderFile = try file.order.map { try resolve($0, "order") }
         if let text = file.range {
-            guard let places = Rotation.PlaceRange(text) else { throw Error.badRange }
-            guard orderFile != nil else { throw Error.rangeWithoutOrder }
-            range = places
+            guard let numbers = Rotation.NumberRange(text) else { throw Error.badRange }
+            range = numbers
         }
         namesFile = try file.names.map { try resolve($0, "names") }
-        if namesFile != nil {
-            guard orderFile != nil else { throw Error.namesWithoutOrder }
-        }
     }
 }
