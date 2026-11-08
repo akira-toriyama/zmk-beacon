@@ -303,10 +303,20 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   the sprite name into a commit, a PR, a doc, a test or a workflow here (the
   user's collection is the user's; this repository is public). `.gitignore` has
   `*.[gG][iI][fF]` and `*.spk` (`core.ignorecase` is false on this
-  case-sensitive volume). Tests use GIFs they write themselves.
+  case-sensitive volume). Tests use GIFs they write themselves. The picture ban
+  enforces it (canon t-gm39, 2026-11-08): the hub's `picture-ban` reusable
+  (caller `.github/workflows/picture-ban.yml`) fails a PR on a tracked picture by
+  name or first bytes (GIF, PNG, JPEG, WebP, BMP), a sprite pack (`.spk`,
+  `beacon_sprite_pack.inc`), a path naming the sprites' source or a `sprites/`
+  directory, or a binary of 16 KiB or more (the repository tracks no binary),
+  and the same script is every clone's pre-commit hook: once per clone,
+  `bash ../.github/scripts/picture-ban-check.sh --install-hook` from the hub's
+  clone beside this one (the hook fails a commit when that clone has moved, and
+  says how to reinstall), so a picture never reaches history, where a red PR
+  would still leave it.
 - `CONFIG_BEACON_SPRITE_GIF` takes an absolute path. `build.sh --sprite` copies
   the GIF to `$ZMK_WS/sprite/sprite.gif`, and the build embeds it as
-  `build/<image name>/modules/zmk-beacon/beacon_sprite_gif.inc` (build tree only).
+  `build/<image name>/modules/zmk-beacon/beacon_sprite_pack.inc` (build tree only).
 - The name (`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`) goes with the GIF's
   path into the fragment `$ZMK_WS/sprite/sprite.conf`, never into `-DCONFIG_...`:
   west prints the whole cmake command line when the configure step fails
@@ -316,8 +326,8 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   `CONFIG_BEACON_SPRITE_*`, and no message echoes a path or a value. `BEACON_SPRITE_NAME` has no Kconfig dependency, so kconfig.py
   never prints it (its help says why).
 - CI and `release.yml` build without a sprite or a name, so no release carries
-  either. canon keeps the GIF in its ignored `assets/` and derives the name from
-  its name dictionary or the file name (`assets/sprite-name.py` there).
+  either. canon builds from a GIF off its repository and derives the name from
+  the sender's name dictionary or the file name (`assets/sprite-name.py` there).
 - The katakana font's glyphs are whole blocks (`sprite_pack.KATAKANA_RANGES`),
   never a subset cut to the names in use: a font made of a name's characters
   would tell the subject. Tests and docs use made-up katakana.
@@ -327,9 +337,11 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 - glyph: `<:code:>[(scope)]<sigil> <subject>`, English
   ([CONTRIBUTING.md](https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md),
   codes: `glyph emoji`); `glyph lint --range origin/main..HEAD` before pushing,
-  `glyph hook install` once per clone. PR bodies end with the `SetStatus-task:` line.
+  `glyph hook install` and the picture ban's hook (Privacy) once per clone. PR
+  bodies end with the `SetStatus-task:` line.
 - Public repository on free Actions minutes: PR gates are deterministic checks
-  only; never add a workflow that calls a paid API.
+  only (`picture-ban` among them, Privacy); never add a workflow that calls a
+  paid API.
 - Hardware claims in docs and task bodies carry a date. Repeat a check only when
   the first result failed or was ambiguous.
 - Fleet-managed, never edited here (fleet-sync in akira-toriyama/.github

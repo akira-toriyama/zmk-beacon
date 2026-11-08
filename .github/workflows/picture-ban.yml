@@ -1,0 +1,17 @@
+# The picture ban's PR gate: the hub's picture-ban reusable judges this
+# repository's tracked files (a picture by name or first bytes, a sprite pack,
+# a path naming the sprites' source, a binary of 16 KiB or more: the header of
+# the hub's scripts/picture-ban-check.sh). The same script is the pre-commit
+# hook of every clone (CLAUDE.md, Privacy). Per-repo caller, not fleet-synced:
+# only the sprite repositories (canon, zmk-beacon, zmk-lantern) carry it.
+name: picture-ban
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  picture-ban:
+    uses: akira-toriyama/.github/.github/workflows/picture-ban.yml@v2
