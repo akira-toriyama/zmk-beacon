@@ -1,0 +1,176 @@
+name: prospector-sprite
+
+# Reusable: a Prospector Dongle image with one sprite embedded, built in the
+# caller's run from a number, for anyone with the device and a GitHub account
+# (README "A sprite image from GitHub Actions"; the template repository
+# akira-toriyama/prospector-sprite-template calls it from workflow_dispatch).
+# The picture exists in the caller's run and artifact only: this repository
+# never calls it (CI and the release build without a sprite), and a run here
+# would put a picture into a public run.
+#
+# What it does: checks THIS repository out at the commit the caller pinned
+# (job.workflow_repository / job.workflow_sha: the caller's tree is never
+# read, so the caller needs no config of its own), fetches the GIF and the
+# names CSV from their repositories at fixed commits (tools/sprite_fetch.py:
+# the inputs, their defaults, the fold of the name and the exits are its
+# docstring), writes a config of this module's own config/west.yml and a
+# prospector.conf, and builds the prospector shield the way zmk-build.yml
+# does (ZMK main at the time of the run, zmk-build-arm:stable, the repository
+# as -DZMK_EXTRA_MODULES), the GIF's path and the name in an EXTRA_CONF_FILE
+# fragment, never -DCONFIG_* (west prints the cmake command line when the
+# configure step fails). The artifact `prospector-sprite` holds
+# prospector-sprite.uf2.
+#
+# The image receives no sprite over BLE and neither advertises nor connects
+# (CONFIG_BEACON_SPRITE_RECEIVE=n: the sprite room's pack is not read, so the
+# embedded one plays, and the pack may take about 150 KB of flash, against
+# about 80 KB with the receiver), and its screen stays lit without a keyboard
+# (CONFIG_BEACON_SCREEN_OFF_AFTER_S=0). `extra_conf` appends Kconfig lines to
+# that prospector.conf. A pack too large for flash fails at the link
+# (`region FLASH overflowed`), a GIF that does not convert or fit in CMake
+# (README, Limits).
+#
+# Pinning: the template pins this workflow by full commit SHA, so a copy of
+# it moves only when its owner moves it. The GIF and the CSV are pinned by
+# the inputs' refs; ZMK and the build image are not (README says so).
+
+on:
+  workflow_call:
+    inputs:
+      number:
+        description: "The sprite's number: the file <number>.gif of sprites_dir, and the species row of the names CSV (a positive integer)"
+        type: string
+        required: true
+      lang:
+        description: "The name's language: en (the English name), or ja (the katakana name when the HP bar shows it, else the English one)"
+        type: string
+        default: en
+      name:
+        description: "The name itself, in place of the CSV's: 15 bytes of UTF-8 at most, all printable ASCII or all katakana"
+        type: string
+        default: ""
+      sprites_repo:
+        description: "The GIFs' repository, owner/repo (empty = tools/sprite_fetch.py's default)"
+        type: string
+        default: ""
+      sprites_ref:
+        description: "A commit of sprites_repo (empty = the default's pinned commit; required with another repository)"
+        type: string
+        default: ""
+      sprites_dir:
+        description: "The GIFs' directory in it (empty = the default)"
+        type: string
+        default: ""
+      names_repo:
+        description: "The species names CSV's repository, owner/repo (empty = the default)"
+        type: string
+        default: ""
+      names_ref:
+        description: "A commit of names_repo (empty = the default's pinned commit; required with another repository)"
+        type: string
+        default: ""
+      names_path:
+        description: "The CSV's path in it (empty = the default)"
+        type: string
+        default: ""
+      extra_conf:
+        description: "Kconfig lines appended to the image's prospector.conf"
+        type: string
+        default: ""
+    secrets:
+      sprites_token:
+        description: "A token sent with both fetches, for a private sprites or names repository"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A ZMK build from a cold west workspace takes about ten minutes; bound it
+    # anyway (house rule).
+    timeout-minutes: 60
+    # The toolchain image ZMK's own reusable workflow builds in; its Python
+    # runs tools/sprite_fetch.py and the pack converter (standard library).
+    container:
+      image: zmkfirmware/zmk-build-arm:stable
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # job.workflow_repository / job.workflow_sha name the repository and the
+      # resolved commit of the workflow file defining this job — THIS file, at
+      # the commit the caller pinned — the self-checkout the hub's repo-policy
+      # and picture-ban reusables use, waived in .github/actionlint.yaml
+      # (actionlint's `job` schema predates the properties). The caller's own
+      # tree is never checked out.
+      - name: Fetch zmk-beacon at this workflow's own commit
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          # Build-only, never pushes.
+          persist-credentials: false
+
+      - name: Fetch the GIF and its name
+        env:
+          SPRITE_NUMBER: ${{ inputs.number }}
+          SPRITE_LANG: ${{ inputs.lang }}
+          SPRITE_NAME: ${{ inputs.name }}
+          SPRITES_REPO: ${{ inputs.sprites_repo }}
+          SPRITES_REF: ${{ inputs.sprites_ref }}
+          SPRITES_DIR: ${{ inputs.sprites_dir }}
+          NAMES_REPO: ${{ inputs.names_repo }}
+          NAMES_REF: ${{ inputs.names_ref }}
+          NAMES_PATH: ${{ inputs.names_path }}
+          SPRITES_TOKEN: ${{ secrets.sprites_token }}
+        run: |
+          set -euo pipefail
+          python3 tools/sprite_fetch.py --number "$SPRITE_NUMBER" --lang "$SPRITE_LANG" --name "$SPRITE_NAME" \
+            --sprites-repo "$SPRITES_REPO" --sprites-ref "$SPRITES_REF" --sprites-dir "$SPRITES_DIR" \
+            --names-repo "$NAMES_REPO" --names-ref "$NAMES_REF" --names-path "$NAMES_PATH" \
+            --out "$RUNNER_TEMP/sprite"
+
+      - name: Write the config (this module's west.yml, a prospector.conf without the receiver)
+        env:
+          EXTRA_CONF: ${{ inputs.extra_conf }}
+        run: |
+          set -euo pipefail
+          ws="$RUNNER_TEMP/ws"
+          mkdir -p "$ws/config"
+          cp config/west.yml "$ws/config/west.yml"
+          {
+            echo 'CONFIG_BEACON_SPRITE_RECEIVE=n'
+            echo 'CONFIG_BEACON_SCREEN_OFF_AFTER_S=0'
+            if [ -n "$EXTRA_CONF" ]; then printf '%s\n' "$EXTRA_CONF"; fi
+          } > "$ws/config/prospector.conf"
+          cat "$ws/config/prospector.conf"
+
+      - name: West init + update (ZMK @ main)
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory '*'
+          cd "$RUNNER_TEMP/ws"
+          west init -l config
+          west update --fetch-opt=--filter=tree:0
+          west zephyr-export
+
+      - name: Build firmware
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/ws"
+          west build -p -s zmk/app -b xiao_ble/nrf52840/zmk -- \
+            -DSHIELD=prospector \
+            -DZMK_CONFIG="$RUNNER_TEMP/ws/config" \
+            -DZMK_EXTRA_MODULES="$GITHUB_WORKSPACE" \
+            -DEXTRA_CONF_FILE="$RUNNER_TEMP/sprite/sprite.conf"
+          cp build/zephyr/zmk.uf2 "$GITHUB_WORKSPACE/prospector-sprite.uf2"
+          grep -E '^CONFIG_BEACON_(SPRITE_RECEIVE|SPRITE_EMBEDDED|SCREEN_OFF_AFTER_S)' build/zephyr/.config || true
+
+      - name: Upload the image
+        uses: actions/upload-artifact@v7
+        with:
+          name: prospector-sprite
+          path: prospector-sprite.uf2
+          if-no-files-found: error
