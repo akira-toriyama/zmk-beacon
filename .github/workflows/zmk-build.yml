@@ -96,17 +96,24 @@ jobs:
       # Zephyr only warns about a value that does not take, so a line of
       # config/<shield>.conf whose dependency stopped being met (the
       # broadcaster's check build) would leave the build green and checking
-      # nothing: every CONFIG_ line of it must be in .config verbatim.
+      # nothing: every CONFIG_ line of it must be in .config verbatim, and an
+      # =n one must leave no CONFIG_X= line ("# CONFIG_X is not set", or no
+      # line at all for a symbol whose dependencies are unmet).
       - name: Check that config/<shield>.conf took
         env:
           SHIELD: ${{ matrix.shield }}
         run: |
           set -euo pipefail
           conf="config/$SHIELD.conf"
+          cfg="$RUNNER_TEMP/ws/build/zephyr/.config"
           [ -f "$conf" ] || exit 0
           missing=0
           while IFS= read -r line; do
-            if ! grep -qxF "$line" "$RUNNER_TEMP/ws/build/zephyr/.config"; then
+            case "$line" in
+              *=n) if grep -q "^${line%=n}=" "$cfg"; then took=0; else took=1; fi ;;
+              *) if grep -qxF "$line" "$cfg"; then took=1; else took=0; fi ;;
+            esac
+            if [ "$took" -eq 0 ]; then
               echo "::error file=$conf::$line did not take (the Kconfig warnings above say why)"
               missing=1
             fi

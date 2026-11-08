@@ -108,8 +108,9 @@ jobs:
     needs: [version, build]
     # After a partial build too: a red check build (corne_left, build.yaml)
     # must not leave the notes the version job already upserted over an older
-    # prospector.uf2. A missing prospector.uf2 still stops the Collect step.
-    if: ${{ !cancelled() && needs.version.outputs.release == 'true' }}
+    # prospector.uf2. A missing prospector.uf2 still stops the Collect step;
+    # a failed version job, after which no build ran, skips the job.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.release == 'true' }}
     # Assets only: upload the firmware and prune anything outside the
     # allowlist. The draft itself (create / update / stale deletion / target)
     # is glyph's, in the `version` job.
