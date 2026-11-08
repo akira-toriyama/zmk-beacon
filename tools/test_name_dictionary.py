@@ -14,10 +14,12 @@ import name_dictionary  # noqa: E402
 TOOL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "name_dictionary.py")
 
 # 1 fits; 2 fits, decomposed in the CSV; 3 is 18 bytes of katakana; 4 is
-# hiragana; 5 has an empty ja; 6 has no ja and an English name that is not ASCII;
-# 7 has neither name fit; 8 has an English name of 16 bytes, cut by no one; 9 has
-# only other languages' rows; 11 has the font's signs and fullwidth forms, which
-# a compatibility normalization would fold out of the font.
+# hiragana; 5 has an empty ja; 6 has no ja and an English name that is not ASCII
+# after the fold (an accent); 7 has 21 bytes of katakana and an English name
+# that the fold makes fit (a typographic apostrophe); 8 has an English name of
+# 16 bytes, cut by no one; 9 has only other languages' rows; 11 has the font's
+# signs and fullwidth forms, which a compatibility normalization would fold out
+# of the font; 12 and 13 end in the gender signs, in both languages.
 CSV = ("pokemon_species_id,local_language_id,name,genus\n"
        "1,1,テスト,たね\n"
        "1,2,Tesuto,\n"
@@ -36,7 +38,10 @@ CSV = ("pokemon_species_id,local_language_id,name,genus\n"
        "8,9,abcdefghijklmnop,\n"
        "9,5,Neuf,\n"
        "11,1,ア♂Ｚ：２,\n"
-       "11,9,Test two,\n")
+       "11,9,Test two,\n"
+       "12,1,テスト♀,\n"
+       "12,9,Twelfth♀,\n"
+       "13,9,Thirteen♂,\n")
 
 
 class NameDictionaryTest(unittest.TestCase):
@@ -49,12 +54,12 @@ class NameDictionaryTest(unittest.TestCase):
     def tearDown(self):
         self.dir.cleanup()
 
-    def name(self, number):
-        return name_dictionary.sprite_name(name_dictionary.read_names(self.csv).get(number, {}))
+    def name(self, number, lang="ja"):
+        return name_dictionary.sprite_name(name_dictionary.read_names(self.csv).get(number, {}), lang)
 
     def test_names_by_number_composed(self):
         names = name_dictionary.read_names(self.csv)
-        self.assertEqual(sorted(names), [1, 2, 3, 4, 5, 6, 7, 8, 11], "a row of another language holds no number")
+        self.assertEqual(sorted(names), [1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13], "a row of another language holds no number")
         self.assertEqual(names[1], {"ja": "テスト", "en": "Test"})
         self.assertEqual(names[2]["ja"], "ガピ", "NFC")
         self.assertEqual(len(names[2]["ja"].encode("utf-8")), 6)
@@ -66,12 +71,33 @@ class NameDictionaryTest(unittest.TestCase):
         self.assertEqual(self.name(3), "Mr. Third", "18 bytes of katakana: the English name, not cut at its dot")
         self.assertEqual(self.name(4), "Fourth", "hiragana is outside the font")
         self.assertEqual(self.name(5), "Fifth one", "an empty ja is no name")
-        self.assertIsNone(self.name(6), "an English name outside printable ASCII")
-        self.assertIsNone(self.name(7), "neither fits")
+        self.assertIsNone(self.name(6), "an English name outside printable ASCII after the fold")
+        self.assertEqual(self.name(7), "Sev'nth", "21 bytes of katakana: the English name, its apostrophe folded")
         self.assertIsNone(self.name(8), "16 bytes: not cut, a cut name would be another name")
         self.assertIsNone(self.name(9), "a number without a Japanese or English row")
         self.assertIsNone(self.name(10), "a number the CSV has no row of")
-        self.assertEqual(self.name(11), "ア♂Ｚ：２", "the font's fullwidth forms stay: nothing is folded")
+        self.assertEqual(self.name(11), "ア♂Ｚ：２", "the font's fullwidth forms stay: a katakana name is never folded")
+        self.assertEqual(self.name(12), "テスト♀", "the gender sign is in the katakana font")
+
+    def test_lang_en_is_the_english_name_alone_folded(self):
+        self.assertEqual(self.name(1, "en"), "Test", "not the katakana name")
+        self.assertEqual(self.name(12, "en"), "Twelfth F", "a trailing female sign: a space and F")
+        self.assertEqual(self.name(13, "en"), "Thirteen M", "a trailing male sign: a space and M")
+        self.assertEqual(self.name(13), "Thirteen M", "the fold serves the ja rule's English fallback too")
+        self.assertEqual(self.name(7, "en"), "Sev'nth")
+        self.assertIsNone(self.name(6, "en"), "an accent is not folded")
+        self.assertEqual(self.name(5, "en"), "Fifth one")
+        self.assertIsNone(self.name(9, "en"))
+        with self.assertRaises(KeyError):
+            self.name(1, "fr")
+
+    def test_fold_english(self):
+        fold = name_dictionary.fold_english
+        self.assertEqual(fold("A♀"), "A F")
+        self.assertEqual(fold("A♂"), "A M")
+        self.assertEqual(fold("A♀B"), "A♀B", "a sign inside the name is not the collection's case")
+        self.assertEqual(fold("A’b’c"), "A'b'c", "every typographic apostrophe")
+        self.assertEqual(fold("Plain"), "Plain")
 
     def run_tool(self, *args, env=None):
         return subprocess.run([sys.executable, TOOL, *args], capture_output=True, env=env)
@@ -83,6 +109,14 @@ class NameDictionaryTest(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout, "ガピ\n".encode("utf-8"))
         self.assertEqual(done.stderr, b"")
+
+    def test_the_tool_takes_lang(self):
+        done = self.run_tool(self.csv, "--number", "1", "--lang", "en")
+        self.assertEqual((done.returncode, done.stdout), (0, b"Test\n"))
+        done = self.run_tool(self.csv, "--number", "1", "--lang", "ja")
+        self.assertEqual((done.returncode, done.stdout), (0, "テスト\n".encode("utf-8")))
+        done = self.run_tool(self.csv, "--number", "1", "--lang", "fr")
+        self.assertEqual(done.returncode, 2)
 
     def test_the_tool_prints_an_empty_line_for_no_name(self):
         for number in ("6", "10", "0", "-1"):

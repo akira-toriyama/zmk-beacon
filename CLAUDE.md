@@ -31,11 +31,17 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   holds the rule and the numbers measured on the user's collection) on the
   same two;
   `name_dictionary.py` (its docstring) prints one sprite's name, by National
-  Pokédex number, from PokeAPI's species names CSV, for the sender at each run:
-  the one rule of which name a sprite gets; its output names a species, so it
-  goes down the sender's pipe only;
-  `test_sprite_pack.py`, `test_sprite_colours.py` and `test_name_dictionary.py` write their own GIFs
-  and CSV (`python3 -m unittest discover
+  Pokédex number, from PokeAPI's species names CSV, for the sender at each run
+  and for `sprite_fetch.py`: the one rule of which name a sprite gets (`--lang
+  ja`, the sender's: katakana when the bar shows it, else English; `en`: English
+  alone; an English name folded first, the gender signs and the typographic
+  apostrophe, nothing else); its output names a species, so it goes down a
+  pipe only; `sprite_fetch.py` (its docstring) fetches one GIF and the CSV from
+  their repositories at fixed commits and writes the build's Kconfig fragment,
+  for the reusable workflow `prospector-sprite.yml` (below);
+  `test_sprite_pack.py`, `test_sprite_colours.py`, `test_name_dictionary.py` and
+  `test_sprite_fetch.py` write their own GIFs and CSV, the last serving them
+  from an HTTP server of its own (`python3 -m unittest discover
   tools`, CI `tools-test.yml`); `pkmn_font.py` (its docstring) renders the
   name row's katakana font, `src/font_pkmn.{c,h}`, from the pkmn TTF, which
   is not in the repository (clone nue-of-k/pkmn): run it again rather than
@@ -95,6 +101,17 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   sender's `swift build` and `swift test` on macOS).
   `release.yml` keeps a rolling draft release of `prospector.uf2`, tagged when
   published by hand. A ruleset requires `build / Build (xiao_ble/nrf52840/zmk, prospector)`.
+- `prospector-sprite.yml` is a reusable for other people's runs (README "A
+  sprite image from GitHub Actions"; the template repository
+  `akira-toriyama/prospector-sprite-template` calls it by full SHA, and the
+  hub's fleet-sync excludes that repository): it checks this repository out at
+  `job.workflow_repository` / `job.workflow_sha` (waived in
+  `.github/actionlint.yaml`), builds the shield from this `config/west.yml`
+  with a `prospector.conf` of `CONFIG_BEACON_SPRITE_RECEIVE=n` and
+  `CONFIG_BEACON_SCREEN_OFF_AFTER_S=0`, and embeds the GIF `sprite_fetch.py`
+  fetched. **Never call it from this repository's CI**: its artifact holds a
+  picture, and this repository's runs are public. Its first live run: canon
+  t-hkc6 (2026-11-08).
 
 ## Debugging and device operations
 
@@ -269,10 +286,12 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   together, and `tools/pkmn_font.py` renders whatever the ranges say. Which
   name a GIF gets is `tools/name_dictionary.py`'s rule (canon t-rq9h, the
   user's rule: katakana when it can be shown, else as before; here the English
-  name, whole, keyed by the GIF's number); the sender only falls back to the
-  number. canon's `sprite-name.py` copies the rule for a local build: it runs
-  before the pin's checkout and on a machine with no sender, so change the
-  two together.
+  name, whole, keyed by the GIF's number, folded first by its `fold_english`,
+  the three rules of the user's former table of ASCII names, canon t-c03v);
+  the sender and `sprite_fetch.py` only fall back to the number. canon's
+  `assets/sprite-name.py` copies the rule and the fold for a local build: it
+  runs before the pin's checkout and on a machine with no sender, so change
+  the two together.
 - Change the sprite pack only with a new magic (`SPK1`, tools/sprite_pack.py
   and src/sprite_pack.h together): the player rejects a file it does not know
   instead of drawing it wrong.
@@ -299,9 +318,13 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
 
 - **The sprite GIF is a personal file, and its name names the subject.** Never
   commit a GIF, a sprite pack, an `.inc`, frames, previews or anything made from
-  one, and never write the GIF's path or file name, its subject, its source or
-  the sprite name into a commit, a PR, a doc, a test or a workflow here (the
-  user's collection is the user's; this repository is public). `.gitignore` has
+  one, and never write the user's GIF's path or file name, its number, its
+  subject or the sprite name into a commit, a PR, a doc, a test or a workflow
+  here (the user's collection is the user's; this repository is public). The
+  public sources the Actions route fetches from by default (PokeAPI's two
+  repositories, pinned in `tools/sprite_fetch.py`) are named in the workflow
+  and the README (canon t-4555, 2026-11-08): what stays out is which of their
+  files the user shows. `.gitignore` has
   `*.[gG][iI][fF]` and `*.spk` (`core.ignorecase` is false on this
   case-sensitive volume). Tests use GIFs they write themselves. The picture ban
   enforces it (canon t-gm39, 2026-11-08): the hub's `picture-ban` reusable

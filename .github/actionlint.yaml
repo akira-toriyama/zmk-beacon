@@ -1,0 +1,17 @@
+# actionlint config for this repository's workflows, read by the fleet's
+# actionlint reusable from the caller's checkout.
+#
+# The ignores below are a gap in actionlint's model of the `job` context, not
+# lints being dodged: `job.workflow_repository` and `job.workflow_sha` are
+# documented properties (runner v2.334.0, 2026-04) naming the repository and
+# the resolved commit of the workflow file that defines the current job — for
+# a reusable workflow, itself. prospector-sprite.yml checks this repository
+# out with them at exactly the commit the caller pinned (the hub's
+# repo-policy.yml and picture-ban.yml do the same with the same waiver).
+# Scoped to that file and those two properties, so every other expression
+# error in it still gates.
+paths:
+  .github/workflows/prospector-sprite.yml:
+    ignore:
+      - 'property "workflow_repository" is not defined'
+      - 'property "workflow_sha" is not defined'

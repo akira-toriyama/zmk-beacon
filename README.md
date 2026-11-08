@@ -127,8 +127,15 @@ Limits:
   for any GIF of the box at 15 colours, or about 200x140 px beyond that.
 - Frame delays of 0 and 10 ms play as 100 ms, as browsers do (the converter
   writes them so).
+- An embedded pack must fit the image's flash next to the code: about 150 KB
+  with the receiver off (`CONFIG_BEACON_SPRITE_RECEIVE=n`), about 80 KB with
+  it (a 364,544 byte code partition, of which the code took 213,928 bytes
+  without the receiver and 283,992 with it, zmk main of 2026-11; `sprite_pack.py
+  pack` prints a pack's bytes). One too large fails at the link, with
+  ``region `FLASH' overflowed by N bytes``, not in CMake.
 - The GIF is a personal file and never enters a repository: build locally with
-  `./scripts/build.sh --sprite <gif>` (`firmware/prospector-sprite.uf2`).
+  `./scripts/build.sh --sprite <gif>` (`firmware/prospector-sprite.uf2`), or in
+  your own GitHub Actions run (A sprite image from GitHub Actions, below).
   `--sprite-name <text>` adds the name (15 bytes of UTF-8 at most, printable
   ASCII or katakana, without a double quote, a backslash or `??`); it names
   the GIF's subject, so it stays out of
@@ -242,8 +249,11 @@ Pokédex number: each run, `tools/name_dictionary.py <csv> --number <n>` prints
 the katakana name, composed (NFC), when it is 15 bytes of UTF-8 at most and
 every character is in the katakana font (`sprite_pack.py`'s
 `KATAKANA_RANGES`), else the English one when it is 15 bytes of printable
-ASCII, whole, else nothing. With nothing, and without the key, the name is the
-GIF's number. The log says which alphabet (`name: katakana from the name
+ASCII, whole, else nothing; an English name is first folded where the
+collection's names need it and nowhere else (a gender sign at its end to a
+space and `F` or `M`, a typographic apostrophe to `'`), and `--lang en` gives
+the English name alone (the Actions route's default, below). With nothing, and
+without the key, the name is the GIF's number. The log says which alphabet (`name: katakana from the name
 dictionary` or `name: ASCII`), never the name, its length or whether an ASCII
 name is the number; a CSV the config names but that cannot be read or does
 not have the columns is a config error (exit 2). The state file holds the
@@ -271,6 +281,79 @@ from the same collection. So keep the sender's lines out of anything public.
 macOS asks once for Bluetooth; the app is signed with a persistent identity so
 that the answer survives a rebuild. A pack showed about a tenth of a second a
 KB after BEGIN (hardware 2026-10-13).
+
+### A sprite image from GitHub Actions
+
+Without a Mac or Docker, a sprite image comes out of a GitHub Actions run:
+the reusable workflow `.github/workflows/prospector-sprite.yml` of this
+repository fetches one GIF and its name and builds `prospector-sprite.uf2`
+with them embedded, in the caller's run, where alone the picture exists (this
+repository's CI and release never carry one, and never call it). Three steps,
+from the template repository
+[prospector-sprite-template](https://github.com/akira-toriyama/prospector-sprite-template):
+
+1. Make a repository from the template ("Use this template"), **private**: the
+   artifact of a public repository's run can be downloaded by anyone, and it
+   holds the picture.
+2. Run its `prospector-sprite` workflow (Actions, "Run workflow") with the
+   sprite's number, and `en` or `ja` for the name. About ten minutes.
+3. Download the run's artifact `prospector-sprite` and flash the
+   `prospector-sprite.uf2` in it (Flashing, below). Another sprite is another
+   run; the artifact stays for GitHub's 90 days.
+
+The inputs and their defaults are `tools/sprite_fetch.py`'s docstring. The
+number is the file `<number>.gif` of a directory of the sprites repository at a
+fixed commit, and the species row of PokeAPI's `pokemon_species_names.csv` at
+another, each fetched from raw.githubusercontent.com in one request; the
+defaults are PokeAPI's two repositories at the commits this module was tried
+with, and another repository (a mirror, a fork, a private copy with the
+`sprites_token` secret) needs its commit given too. The name is the CSV's for
+the number: with `en` the English name, with `ja` the katakana name when the
+HP bar shows it, else the English one (The sprite sender, above, for the fold
+and the limits); the `name` input replaces it, and with none that fits, the
+number. The pictures are yours to fetch for your own device: nothing of them
+enters this repository, the template or any release.
+
+The image is for a device that gets its sprites this way. It has no receiver
+(`CONFIG_BEACON_SPRITE_RECEIVE=n`): it neither advertises nor connects, so the
+sprite sender cannot reach it, the sprite room's pack is left alone and the
+embedded one plays, and the pack may take the flash the receiver would
+(Limits: about 150 KB). Its screen stays lit while no keyboard is heard
+(`CONFIG_BEACON_SCREEN_OFF_AFTER_S=0`), so the sprite shows before the
+broadcaster is set up on the keyboard (Using the module, below). The
+`extra_conf` input appends Kconfig lines to its `prospector.conf`
+(`CONFIG_BEACON_SCREEN_OFF_AFTER_S=300` for the five minutes, say). The
+firmware is built from ZMK `main` and `zmkfirmware/zmk-build-arm:stable` as
+they are at the time of the run: the picture and its name are pinned by the
+inputs' commits, the rest moves with ZMK.
+
+A config repository of your own calls the same workflow from a job of its
+own, the workflow pinned by a commit of this repository:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      number:
+        description: "The sprite's number"
+        required: true
+jobs:
+  sprite:
+    uses: akira-toriyama/zmk-beacon/.github/workflows/prospector-sprite.yml@<commit sha>
+    with:
+      number: ${{ inputs.number }}
+```
+
+It builds with this repository's own manifest, never the caller's: the
+caller's `build.yaml`, ZMK pin and `config/` stay out of it. A repository
+whose settings require every action to be pinned by SHA may refuse the tag
+references inside the reusable (`actions/checkout@v7`); untried.
+
+A GIF that does not fit fails the run in one of three places, the log naming
+sizes and never the picture: CMake (`the GIF does not convert to a sprite
+pack`, or `needs about N bytes of the LVGL pool`), the compiler (`static
+assertion failed: "CONFIG_BEACON_SPRITE_GIF is wider than the sprite box`, or
+taller) or the linker (``region `FLASH' overflowed``; Limits, above).
 
 ## What the module provides
 
