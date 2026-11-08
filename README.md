@@ -296,7 +296,8 @@ from the template repository
    artifact of a public repository's run can be downloaded by anyone, and it
    holds the picture.
 2. Run its `prospector-sprite` workflow (Actions, "Run workflow") with the
-   sprite's number, and `en` or `ja` for the name. About ten minutes.
+   sprite's number, and `en` or `ja` for the name. About four minutes (the
+   first live run, 2026-11-08).
 3. Download the run's artifact `prospector-sprite` and flash the
    `prospector-sprite.uf2` in it (Flashing, below). Another sprite is another
    run; the artifact stays for GitHub's 90 days.
