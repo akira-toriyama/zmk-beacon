@@ -8,10 +8,16 @@
 #   ./scripts/build.sh <board>:<shield>   # a pair that build.yaml does not list
 #   ./scripts/build.sh --logging
 #   ./scripts/build.sh --sprite <gif> --sprite-name <text>
-#   ./scripts/build.sh --kconfig CONFIG_LV_USE_SYSMON=y \
+#   ./scripts/build.sh prospector --kconfig CONFIG_LV_USE_SYSMON=y \
 #     --kconfig CONFIG_LV_USE_PERF_MONITOR=y --tag perf
 #   ./scripts/build.sh --update           # west update first
 #   ./scripts/build.sh --clean            # delete the workspace and exit
+#
+# --logging and --sprite build the prospector shield only: without a target
+# the run takes build.yaml's prospector, and a run that names another target
+# stops (corne_left, the broadcaster's check: its nice!nano has no CDC ACM node
+# for the log, and the sprite is the prospector shield's). --kconfig, --tag
+# and --update with no target build both images.
 #
 # Options (local builds only: CI and releases build the plain image):
 #   --logging         USB CDC logging: CONFIG_ZMK_USB_LOGGING=y, a 4 KiB CDC ring
@@ -182,9 +188,15 @@ _build_pairs() {
   ' build.yaml
 }
 
+PROSPECTOR_ONLY=0
+if [ -n "$SPRITE" ] || [ "$LOGGING" -eq 1 ]; then PROSPECTOR_ONLY=1; fi
+
 TARGETS=()
 if [ ${#SHIELDS[@]} -eq 0 ]; then
-  while IFS= read -r line; do TARGETS+=("$line"); done < <(_build_pairs)
+  while IFS= read -r line; do
+    if [ "$PROSPECTOR_ONLY" -eq 1 ] && [ "${line##*	}" != prospector ]; then continue; fi
+    TARGETS+=("$line")
+  done < <(_build_pairs)
 else
   for arg in "${SHIELDS[@]}"; do
     if [[ "$arg" == *:* ]]; then
@@ -201,9 +213,9 @@ else
   done
 fi
 [ ${#TARGETS[@]} -gt 0 ] || die 1 "no build targets (check build.yaml)"
-if [ -n "$SPRITE" ]; then
+if [ "$PROSPECTOR_ONLY" -eq 1 ]; then
   for row in "${TARGETS[@]}"; do
-    [ "${row##*	}" = prospector ] || die 2 "--sprite builds the prospector shield only, and this run has another target"
+    [ "${row##*	}" = prospector ] || die 2 "--sprite and --logging build the prospector shield only, and this run has another target"
   done
 fi
 

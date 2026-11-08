@@ -3,9 +3,10 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * Status broadcaster for the keyboard's split central (canon's Imprint
- * Dongle): the payload of status_payload.h on a second advertising set next
- * to ZMK's own connectable one. Legacy PDU, non-connectable, non-scannable
+ * Status broadcaster for a keyboard's split central, a dongle or a central
+ * half (canon's Imprint Dongle is the one on hardware; build.yaml's corne_left
+ * is the stock central CI builds): the payload of status_payload.h on a
+ * second advertising set next to ZMK's own connectable one. Legacy PDU, non-connectable, non-scannable
  * (ADV_NONCONN_IND) with the payload in its AD, so the Prospector Dongle's
  * observer receives it with a passive scan; refreshed every
  * BEACON_PAYLOAD_INTERVAL_MS.
@@ -35,7 +36,11 @@
  *   (CONFIG_BT_CTLR_ADV_DATA_BUF_MAX=1); that is expected.
  * - The payload goes out from the first start, with 0 for a half that has not
  *   reported yet (the observer shows "--" for 0). ZMK raises the battery event
- *   once per half after every (re)connect and with 0 on disconnect.
+ *   only with CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING: a read
+ *   after every (re)connect, each Battery Level notification of the half, and
+ *   0 on disconnect; without it both bytes stay 0. Not asserted: the key presses and the modifiers work without
+ *   it, and a central that takes a Bluetooth host may leave it off for
+ *   zmk#3522, the option's unchecked write at the host's disconnect (README).
  * - Keystrokes: every key press on either half counts once, at the press
  *   (zmk_position_state_changed, which the split central raises for the
  *   halves' keys), and kicks the tick, so the new count is on air at the next
@@ -58,12 +63,15 @@
  *   into the payload once confirmed as held: pressed for MOD_CONFIRM_MS, or
  *   another, non-modifier keycode pressed meanwhile. The second is the
  *   hold-tap's interrupt: it decides before it lets the captured key through,
- *   so the keycode order tells; the first is its timer (the keymap's
- *   tapping-term-ms, hold-preferred mod-taps on the thumbs with
- *   hold-while-undecided, which press the modifier at key down and release
- *   it again when the key turns out a tap, canon config/imprint.keymap). A
- *   tap on such a thumb thus never shows, and a lone modifier shows
- *   MOD_CONFIRM_MS late. A confirmation and a release both kick the tick;
+ *   so the keycode order tells; the first stands for its timer:
+ *   MOD_CONFIRM_MS is ZMK's default tapping term and canon's thumbs' (canon
+ *   config/imprint.keymap: hold-preferred mod-taps with hold-while-undecided,
+ *   which press the modifier at key down and release it again when the key
+ *   turns out a tap), never read from the keymap. A tap on such a thumb thus
+ *   never shows, and a lone modifier shows MOD_CONFIRM_MS late; a mod-tap
+ *   without hold-while-undecided presses its modifier only at the hold
+ *   decision, so held alone it shows MOD_CONFIRM_MS after that, and at once
+ *   when another key decides the hold (that key's keycode follows it). A confirmation and a release both kick the tick;
  *   a confirmed modifier stays in the payload for MOD_LATCH_MS from its
  *   confirmation even when released sooner, because a set_data before the
  *   next advertising event replaces the one before it (above): a short
@@ -102,7 +110,8 @@ BUILD_ASSERT(CONFIG_BT_EXT_ADV_MAX_ADV_SET >= 2,
 #define LOG_PERIOD_MS 60000
 #define STACK_SIZE 1536
 #define SLOT_COUNT 2
-/* The keymap's tapping term: a modifier held this long is a hold. */
+/* A modifier keycode held this long is a hold: ZMK's default tapping term,
+ * fixed here, never read from the keymap. */
 #define MOD_CONFIRM_MS 200
 /* One advertising interval, the controller's random delay (up to 10 ms) and
  * a margin, so that a confirmed modifier goes on air at least once. */
