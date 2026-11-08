@@ -11,9 +11,9 @@
 # Consumers do not import this file; they add the repository as a project in
 # their own manifest (README).
 #
-# ZMK tracks main, not a tag: canon (the only consumer) builds against zmk@main
-# because its Cyboard board needs it, and this module has to compile on the
-# same tree.
+# ZMK tracks main, not a tag: the module needs ZMK main's Zephyr 4.1 (README),
+# and canon, the one keyboard it runs on, builds against zmk@main because its
+# Cyboard board needs it; this module has to compile on the same tree.
 manifest:
   remotes:
     - name: zmkfirmware

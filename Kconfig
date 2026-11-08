@@ -123,7 +123,9 @@ config BEACON_SPRITE_RECEIVE
       then plays that pack, named as the pack says, without a reboot, and at
       the next boot plays it again when it is whole (src/ble_receiver.c, its
       header is the protocol). No pairing and no encryption: anyone in range
-      can connect and write the room, and nothing else. On by default for the
+      can connect, write the room and read the report, which gives the name
+      of the sprite playing, where it came from, and the last transfer since
+      boot with the pack's size; nothing else. On by default for the
       prospector shield; a consumer's prospector.conf turns it off with =n.
 
       Costs on the nRF52840 against the observer-only build (2026-10-12):
@@ -191,7 +193,8 @@ config BEACON_STATUS_BROADCAST
     select BT_EXT_ADV
     help
       On the keyboard's split central (a dongle, or the half that is the
-      central), advertise the status payload (each half's battery, the
+      central), advertise the status payload (the batteries of the first two
+      peripherals, ZMK's slots 0 and 1, the
       highest active layer and its name, a count of key presses and the
       modifiers held; src/status_payload.h) as manufacturer data in a
       legacy, non-connectable, non-scannable advertising set next to ZMK's

@@ -60,9 +60,9 @@ per-key LEDs, is the lantern.
    commit of this repository's `main` (a release
    tag names one as well; v0.1.0 predates most of this page). Build both
    ends from one commit: they share the payload's layout (The status
-   advertisement, below), and a field added without a new version byte, as
-   the key presses were, is missing from an older broadcaster while a newer
-   Prospector Dongle still accepts its payload.
+   advertisement, below), and a field added without a new version byte is
+   missing from an older broadcaster while a newer Prospector Dongle still
+   accepts its payload.
 
 2. The keyboard: three lines in the split central's own conf, the central
    half's (`config/corne_left.conf` for ZMK's Corne, whose left half is the
@@ -185,8 +185,9 @@ per-key LEDs, is the lantern.
   (Swapping the sprite over BLE and The sprite sender, below).
 - **No receiver: `CONFIG_BEACON_SPRITE_RECEIVE=n`** in
   `config/prospector.conf`. With the receiver on (the default), anyone in
-  range can connect and replace the sprite (no pairing, no encryption), and
-  the status pauses while they stay connected; with it off the device only
+  range can connect, replace the sprite and read the name of the sprite
+  playing (no pairing, no encryption), and the status pauses while they stay
+  connected; with it off the device only
   listens and never transmits over BLE, the sprite sender cannot reach it,
   and an embedded pack may take the flash the receiver would (about 150 KB
   in place of about 80 KB).
@@ -281,7 +282,7 @@ bytes of UTF-8, all printable ASCII or all katakana: 15 ASCII characters, or
 
 | Shows | Meaning |
 | --- | --- |
-| A coloured bar and `65/100` | The keyboard's battery, from a status advertisement received in the last minute. |
+| A coloured bar and `65/100` | The battery of the central's peripherals (on a central half, the other half's alone), from a status advertisement received in the last minute. |
 | An empty bar and `--/100` | The keyboard is heard, but no peripheral has a reading (on a central half, the other half): off or out of range, not reported since it connected, or the central does not fetch the batteries (the third line of The least, the keyboard). |
 | Grey `HP` and `--/100` | No status advertisement in the last minute, or none since the Prospector Dongle started; a broadcaster of another payload version counts as none. |
 | Nothing: the screen is dark | No key press on the keyboard for five minutes. |
@@ -353,9 +354,10 @@ Find its port by that product string (canon's
 never by a `/dev/cu.usbmodem*` name, which follows the USB socket it is
 plugged into, nor by its USB IDs. The port's rate is a command:
 
-- 1200 baud reboots the device into its UF2 bootloader, which mounts as
-  `XIAO-SENSE` (`CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`, on by default for
-  the shield): a host flashes it with no hands on the device by setting the
+- 1200 baud reboots the device into its UF2 bootloader, whose volume is
+  `XIAO-SENSE` with the factory bootloader (The least, step 4)
+  (`CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`, on by default for the shield): a
+  host flashes it with no hands on the device by setting the
   rate, waiting for the volume, copying the image onto it and waiting for
   the device to come back (canon's `./scripts/flash-dongle.sh <image.uf2>`
   does this, and checks that the volume belongs to this device). A
@@ -406,13 +408,16 @@ press, whether or not a hold-tap or a combo later holds it back or consumes it.
 
 A pack with a back view (the pack section) shows it while a modifier is held
 on the keyboard and the front view otherwise. The keyboard reports a
-modifier once it is a hold: a modifier keycode held 0.2 s (the broadcaster's
-fixed confirm time), or a non-modifier key pressed while it is down, so a
-lone modifier key flips the sprite 0.2 s late, a mod-tap held alone 0.2 s
-after ZMK decides the hold, a quick Shift+letter for about half a second,
-and a tap shorter than 0.2 s never; a release flips it back within an
-advertising interval or two. Each switch
-starts the other view from its first frame. Both views are drawn at one
+modifier once it is a hold: its keycode held 0.2 s (the broadcaster's fixed
+confirm time, never the keymap's tapping term), or a non-modifier key pressed
+while it is down. So a lone modifier key flips the sprite 0.2 s late. A
+mod-tap held alone sends its keycode at ZMK's hold decision and flips it 0.2 s
+after that (0.4 s after the press with ZMK's default `&mt`), or 0.2 s after
+the press when it holds while undecided, which then also flips on a tap held
+longer; a mod-tap whose hold another key decides flips it at once. A quick
+Shift+letter flips the sprite for about half a second; a release flips it
+back within an advertising interval or two. Each switch starts the other
+view from its first frame. Both views are drawn at one
 scale, the one at which the larger fills the space, so the switch changes
 the drawing's size but not its pixels'. A keyboard that falls silent for a
 second leaves the front view.
@@ -476,9 +481,11 @@ does not fit the box or the LVGL pool, brings the embedded sprite back, or no
 sprite. The keyboard's status is not received while a central is connected,
 and the screen greys only after a minute without it.
 
-There is no pairing and no encryption: anyone in range can connect and write
-the room, and nothing else. A pack takes about a tenth of a second a KB from
-the first command to the picture, about half of it erasing flash and the
+There is no pairing and no encryption: anyone in range can connect, write the
+room and read the report (below), which gives the name of the sprite playing,
+where it came from, and the last transfer since boot with the pack's size;
+nothing else. A pack takes about a tenth of a second a KB from the first
+command to the picture, about half of it erasing flash and the
 rest transferring at 24 kB/s; a small pack shows within a second.
 
 The protocol, for a sender (the sprite sender below is one), is the header
@@ -557,8 +564,7 @@ to the 151st and back to the first, and `"100 ~"` runs from 100 to the last
 number there is. Give a range when `front` holds more than the set you want:
 without one every number is in the rotation, and in a directory of National
 Pokédex GIFs not every number is a species. A state outside the range continues
-at the next number in it, wrapping to the first. A config with the `order` key
-of the sender before the numbered collection is a config error (exit 2).
+at the next number in it, wrapping to the first.
 
 The sprite name comes from `names`, PokeAPI's
 `pokemon_species_names.csv`, with the GIF's number as the species' National
@@ -725,8 +731,9 @@ Prospector Dongle's image and the one the release attaches, and
 left half on the nice!nano, with the three lines of The least
 ([config/corne_left.conf](config/corne_left.conf)): built so that a change
 which breaks the broadcaster on stock ZMK fails here (CI also checks that
-every `CONFIG_` line of the shield's conf took, since Zephyr only warns about
-one that does not), never attached to a release, never run on hardware. CI
+every `CONFIG_` line of `config/<shield>.conf`, here `config/corne_left.conf`,
+took, since Zephyr only warns about one that does not), never attached to a
+release, never run on hardware. CI
 builds every `build.yaml` target on pull requests and on `main`, and once a
 week against the current ZMK `main`, nothing patched. Every push to `main`
 refreshes one rolling draft release with `prospector.uf2` attached, and it

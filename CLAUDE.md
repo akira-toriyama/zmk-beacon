@@ -25,12 +25,15 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   built, never attached to a release (release.yml's asset guard names it) and
   never run on hardware: canon's Imprint Dongle stays the one broadcaster on
   hardware, built with canon's ZMK patches and two peripherals.
-- The one consumer, [canon](https://github.com/akira-toriyama/canon), pins this
-  repository by commit SHA for both dongles (its `config/imprint_dongle.conf`:
-  `CONFIG_BEACON_STATUS_BROADCAST=y`, `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`,
+- Three repositories pin this one by commit SHA. [canon](https://github.com/akira-toriyama/canon),
+  the one keyboard on hardware, for both dongles (its
+  `config/imprint_dongle.conf`: `CONFIG_BEACON_STATUS_BROADCAST=y`,
+  `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`,
   `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y`,
-  `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y`); a merge here reaches the dongles with
-  canon's pin bump.
+  `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y`); a merge here reaches the dongles
+  with canon's pin bump. zmk-config-lantern-check, README's recipe under
+  ZMK's own workflow (Build). prospector-sprite-template, which calls the
+  reusable `prospector-sprite.yml` (Build).
 - README is written for a consumer, in the order a consumer reads it (the
   least, then the options, then what it does, then the sprite), as
   zmk-lantern's: no canon task ids, dates or history there (canon t-4hw7,
@@ -70,7 +73,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   edit them, and its `preview` prints glyphs as pixels. The 1,298-GIF checks against Pillow and the
   round trips are local only: the GIFs are personal files. `sprite-sender/`
   (Swift, no dependencies; README "The sprite sender"): `SpriteSenderCore` is
-  pure (config, rotation, the name's last resort, report v1, page plan; `swift test` on
+  pure (config, which refuses a config naming the retired `order` with any
+  value but null, SpriteSender then exiting 2, and ignores any other key it
+  does not know, rotation, the name's last resort,
+  report v1, page plan; `swift test` on
   CI's macOS runner, `tools-test.yml`, as a Mac with only CommandLineTools
   has no XCTest) and `SpriteSender` does files, the Python tools as child
   processes (`Tools.swift`: the pack converter, the colours, the name) and
@@ -141,13 +147,15 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   published by hand; its Collect step is an allowlist that lets
   `corne_left.uf2` be built and never attached, and a third build.yaml target
   fails it until named there. Its draft job runs after a partial build
-  (`!cancelled()`), so a red corne_left no longer leaves the draft's notes
-  over an older `prospector.uf2`, and a missing `prospector.uf2` still stops
-  it (the `cp` under `set -e`). zmk-build.yml fails a leg when a `CONFIG_`
-  line of `config/<shield>.conf` is not in the build's `.config` verbatim:
-  Zephyr only warns about a value that does not take, so a broadcaster whose
-  dependency stopped being met would leave the check green and checking
-  nothing (canon t-4hw7, 2026-11-08). A ruleset requires
+  (`!cancelled()`, with a version job that succeeded), so a red corne_left no
+  longer leaves the draft's notes over an older `prospector.uf2`, and a
+  missing `prospector.uf2` still stops it (the `cp` under `set -e`).
+  zmk-build.yml fails a leg when a `CONFIG_` line of `config/<shield>.conf` is
+  not in the build's `.config` verbatim (an `=n` line when `.config` has a
+  `CONFIG_X=` line: Kconfig writes `# CONFIG_X is not set`, or nothing for a
+  symbol whose dependencies are unmet): Zephyr only warns about a value that
+  does not take, so a broadcaster whose dependency stopped being met would leave
+  the check green and checking nothing (canon t-4hw7, 2026-11-08). A ruleset requires
   `build / Build (xiao_ble/nrf52840/zmk, prospector)`; the check build's job is
   `build / Build (nice_nano/nrf52840/zmk, corne_left)`, required only once the
   ruleset names it (the ruleset edit is the user's).

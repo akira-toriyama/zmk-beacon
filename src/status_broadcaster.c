@@ -63,12 +63,15 @@
  *   into the payload once confirmed as held: pressed for MOD_CONFIRM_MS, or
  *   another, non-modifier keycode pressed meanwhile. The second is the
  *   hold-tap's interrupt: it decides before it lets the captured key through,
- *   so the keycode order tells; the first is its timer (the keymap's
- *   tapping-term-ms, hold-preferred mod-taps on the thumbs with
- *   hold-while-undecided, which press the modifier at key down and release
- *   it again when the key turns out a tap, canon config/imprint.keymap). A
- *   tap on such a thumb thus never shows, and a lone modifier shows
- *   MOD_CONFIRM_MS late. A confirmation and a release both kick the tick;
+ *   so the keycode order tells; the first stands for its timer:
+ *   MOD_CONFIRM_MS is ZMK's default tapping term and canon's thumbs' (canon
+ *   config/imprint.keymap: hold-preferred mod-taps with hold-while-undecided,
+ *   which press the modifier at key down and release it again when the key
+ *   turns out a tap), never read from the keymap. A tap on such a thumb thus
+ *   never shows, and a lone modifier shows MOD_CONFIRM_MS late; a mod-tap
+ *   without hold-while-undecided presses its modifier only at the hold
+ *   decision, so held alone it shows MOD_CONFIRM_MS after that, and at once
+ *   when another key decides the hold (that key's keycode follows it). A confirmation and a release both kick the tick;
  *   a confirmed modifier stays in the payload for MOD_LATCH_MS from its
  *   confirmation even when released sooner, because a set_data before the
  *   next advertising event replaces the one before it (above): a short

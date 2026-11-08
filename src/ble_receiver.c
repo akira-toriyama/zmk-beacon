@@ -9,8 +9,11 @@
  * reboot; at boot the room's pack comes back (sprite.c asks
  * beacon_receiver_stored_pack()). The device advertises connectably as
  * CONFIG_BT_DEVICE_NAME with the service's UUID, every ADV_INTERVAL. No
- * pairing and no encryption: anyone in range can connect and write the
- * room, and nothing else (the user's call, canon t-ky5n: a toy). A transfer
+ * pairing and no encryption (the user's call, canon t-ky5n: a toy): anyone
+ * in range can connect, write the room and read the report (struct report:
+ * the name of the sprite shown and its source, the last transfer since boot
+ * with the pack's size, the connection's parameters); nothing else (the
+ * sender reads the report unpaired, so it stays readable). A transfer
  * that fails leaves the embedded pack, or no sprite, until the next one.
  *
  * The service (UUIDs below; fields little-endian):
