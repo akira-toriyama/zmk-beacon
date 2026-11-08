@@ -93,6 +93,26 @@ jobs:
             -DZMK_EXTRA_MODULES="$GITHUB_WORKSPACE"
           cp build/zephyr/zmk.uf2 "$GITHUB_WORKSPACE/$SHIELD.uf2"
 
+      # Zephyr only warns about a value that does not take, so a line of
+      # config/<shield>.conf whose dependency stopped being met (the
+      # broadcaster's check build) would leave the build green and checking
+      # nothing: every CONFIG_ line of it must be in .config verbatim.
+      - name: Check that config/<shield>.conf took
+        env:
+          SHIELD: ${{ matrix.shield }}
+        run: |
+          set -euo pipefail
+          conf="config/$SHIELD.conf"
+          [ -f "$conf" ] || exit 0
+          missing=0
+          while IFS= read -r line; do
+            if ! grep -qxF "$line" "$RUNNER_TEMP/ws/build/zephyr/.config"; then
+              echo "::error file=$conf::$line did not take (the Kconfig warnings above say why)"
+              missing=1
+            fi
+          done < <(grep -E '^CONFIG_[A-Za-z0-9_]+=' "$conf")
+          exit "$missing"
+
       # One artifact per shield, named after it, so release.yml can collect
       # dist/<shield>/<shield>.uf2 without a mapping table.
       - name: Upload firmware artifact
