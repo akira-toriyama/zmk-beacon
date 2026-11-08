@@ -19,9 +19,10 @@ import SpriteSenderCore
 ///       state names (the one tried last) and its back view when the
 ///       collection has one: one line on stdout,
 ///       RRGGBB each, the one to light the keys with first
-///       (tools/sprite_colours.py says how they are picked). canon's
-///       dongle.py palette takes the line as slots 0.. (its t-0967).
-///       Nothing is sent.
+///       (tools/sprite_colours.py says how they are picked).
+///       zmk-lantern's tools/lantern_port.py palette takes the line as
+///       slots 0.. (and canon's dongle.py palette, its t-0967). Nothing is
+///       sent.
 ///
 /// Exit codes: Exit.swift. Nothing it prints names a GIF or the sprite.
 @main
