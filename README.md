@@ -261,6 +261,165 @@ entry, no zmk-lantern), built with the Prospector Dongle by its own
 reusable workflow, which runs the same west build as ZMK's (Building this
 repository, below).
 
+## Pokémon sprites
+
+A Pokémon above the HP bar is what most people will want, and this section
+is how to get one there. The pictures are not in this repository, its CI,
+its releases or the template repository, and never will be: each person
+fetches them for their own device, from the public sources below, and
+nothing made from them (a sprite pack, an image with a sprite embedded, a
+run's artifact, a picture of the screen) is for publishing. A check on every
+pull request here, the picture ban, keeps a picture out of this repository
+by its first bytes, its name and its path.
+
+The pictures are [PokeAPI/sprites](https://github.com/PokeAPI/sprites)'
+Black/White animated sprites, `<number>.gif` under
+`sprites/pokemon/versions/generation-v/black-white/animated/`, the back views
+in its `back/`, the number a species' National Pokédex number; the names are
+[PokeAPI/pokeapi](https://github.com/PokeAPI/pokeapi)'s
+`data/v2/csv/pokemon_species_names.csv`. The commits this module was tried
+with are `DEFAULTS` in `tools/sprite_fetch.py`. The sprites are © The Pokémon
+Company (PokeAPI/sprites' `LICENCE.txt`; the repository's own contribution is
+CC0); the names come from a BSD-3-Clause data set; Pokémon and the Pokémon
+character names are trademarks of Nintendo. Build the image, or send the
+sprite, for your own device and your own use; do not publish the artifact,
+the firmware or anything made from the pictures, and keep a repository that
+builds with them private.
+
+Three routes, by what you have (Then, as you want them: a sprite, above):
+
+- **Neither a Mac nor Docker: a GitHub Actions run.** The template repository
+  builds an image with the sprite of one number embedded, named in English or
+  katakana (A sprite image from GitHub Actions, below). One sprite an image:
+  another sprite is another run and another flash.
+- **Docker: a local build.** `python3 tools/sprite_fetch.py --number <n>
+  --out <dir>` fetches the number's GIF as `<dir>/sprite.gif` and writes its
+  name into `<dir>/sprite.conf` (`--lang ja` for the katakana name, as the
+  sender names it; the Actions route's other inputs are its flags), and
+  `./scripts/build.sh --sprite <dir>/sprite.gif --sprite-name <that name>`
+  builds `firmware/prospector-sprite.uf2` (Building this repository, below).
+  The image keeps the receiver, so the embedded pack has about 80 KB (Limits,
+  above), and a pack in the sprite room plays in its place.
+- **A Mac: the sprite sender.** The image stays as it is and the sprite
+  changes over BLE, a different one every morning from a LaunchAgent, below.
+
+### The Mac route
+
+What it takes, beyond The sprite sender, below:
+
+- **A device with the receiver**: the default image, the one your config's
+  CI builds (The least, steps 3 and 4), `./scripts/build.sh prospector`, or a
+  release after v0.1.0, which predates the receiver. The Actions route's
+  image has no receiver, so a device that runs it is flashed with the default
+  image first, and the room, which that image left alone, plays again.
+- **A Mac on macOS 26 or later** (the app's declared minimum; untried below
+  it) with a Swift 6 toolchain (Xcode or the Command Line Tools) and
+  `/usr/bin/python3`, which runs the tools. There is no prebuilt app:
+  `cd tools/sprite-sender && ./package.sh` builds and signs
+  `SpriteSender.app`.
+- **A signing identity**, so that the Bluetooth permission survives a
+  rebuild: `package.sh` signs with the self-signed identity `chord-dev` of
+  the login keychain when it finds one, and `SIGN_IDENTITY=<name>` names
+  another; without one it signs ad hoc, and macOS asks again after every
+  build. Keychain Access makes one (Certificate Assistant, Create a
+  Certificate, of the type Code Signing), as does
+  [chord](https://github.com/akira-toriyama/chord)'s `setup-signing-cert.sh`
+  (openssl and `security import`; its name is `chord-dev`, the default here).
+- **The Bluetooth dialog answered once, by hand**: run the sender from a
+  terminal first. The app waits ten minutes for the answer and exits 1
+  without one, as it does when refused (System Settings, Privacy & Security,
+  Bluetooth), and a run from a LaunchAgent cannot answer it.
+- **The collection**: a sparse, blobless clone of the sprites' directory
+  (the whole repository is about 27 GB; this clone's `.git` is about 100 MB
+  and takes about 15 s on a fast line):
+
+  ```sh
+  git clone --filter=blob:none --sparse https://github.com/PokeAPI/sprites.git <dir>
+  git -C <dir> sparse-checkout set --no-cone '/sprites/pokemon/versions/generation-v/black-white/animated/'
+  git -C <dir> checkout <commit>   # DEFAULTS' sprites_ref: the Actions route's pictures; or stay at HEAD
+  ```
+
+  `front` is then
+  `<dir>/sprites/pokemon/versions/generation-v/black-white/animated` and
+  `back` its `back/`. The names CSV is one file: `sprite_fetch.py` writes it
+  as `names.csv` beside the GIF it fetches (the local build, above), from the
+  pinned commit.
+- **`sender.json`** (The sprite sender, below): `front`, `back`, `names`, a
+  `state` file of your own (its directory is made) and `range`. `"1 ~ 649"`
+  is every number with a front view, a back view and a species row; above
+  649 some numbers have no back view, and the forms numbered past the species
+  have no row in the CSV, which names them by their number. The name is the
+  katakana one when it fits the bar, else the English one: the sender has no
+  language setting (the Actions route defaults to English).
+- **Your Prospector Dongle alone in range**: the sender connects to the
+  first device it finds that advertises the receiver's service, without
+  telling which, and writes its room, which keeps nothing of the pack it had
+  (read from the code, not tried with two): a second Prospector Dongle in
+  range, someone else's or a spare, can get your sprite instead.
+
+Then one run by hand,
+`SpriteSender.app/Contents/MacOS/sprite-sender daily --config <sender.json>`
+(`--dry-run` packs and sends nothing: the config and the collection
+checked), and the LaunchAgent,
+`~/Library/LaunchAgents/local.sprite-sender.plist`, with your paths (launchd
+runs no shell: absolute paths, no `~`):
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.sprite-sender</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/you/zmk-beacon/tools/sprite-sender/SpriteSender.app/Contents/MacOS/sprite-sender</string>
+    <string>daily</string>
+    <string>--config</string>
+    <string>/Users/you/sprite-sender/sender.json</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>6</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/you/Library/Logs/sprite-sender.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/you/Library/Logs/sprite-sender.log</string>
+</dict>
+</plist>
+```
+
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.sprite-sender.plist`
+loads it, and `launchctl bootout gui/$(id -u)/local.sprite-sender` unloads
+it. `StartCalendarInterval` runs it at six every morning, and a run the Mac
+slept through happens at the next wake; `RunAtLoad` is false so that loading
+the agent sends nothing. A morning that fails (no device in range within
+30 s, a GIF the device refuses: exit 1) is skipped, and the next morning
+takes the next number. The log's lines tell things about the sprite (The
+sprite sender, below), and `~/Library/Logs` is read by you alone: keep the
+log out of anything public. The agent ends with the swap; nothing here
+reaches the keyboard.
+
+Other pictures go the same ways: any directory of `<number>.gif` files runs
+through the sender, their back views in a directory of the same names;
+without `names` the name is the number, and a CSV without PokeAPI's columns
+is a config error (exit 2). The Actions route and `sprite_fetch.py` take
+another repository of such files with its commit (`sprites_repo`,
+`sprites_ref`, `sprites_dir`) and name the number from the default CSV
+unless `name` is given.
+
+The keyboard is the same for every route: the bar shows its battery once
+the split central broadcasts (The least, the keyboard); until then the
+screen shows a grey `HP` and `--/100`, and the default image goes dark five
+minutes after boot without a key press, where the Actions route's stays lit
+(The least, step 4).
+
 ## What it does
 
 ### The screen

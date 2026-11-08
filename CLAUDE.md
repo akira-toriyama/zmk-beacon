@@ -42,10 +42,18 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   hardware record, the last item of Invariants, is where a hardware fact and
   its date go. Two passages stay as they were until canon t-t63a replaces
   them: the colour paragraphs of "The sprite pack" and "The sprite sender",
-  which name canon's `dongle.py palette` and t-0967. The Pokémon section is
-  canon t-tw7z's, not yet written: README keeps its slot between "Using it in
-  a ZMK config" and "What it does", carries no rights lines of its own, and
-  names the keyboard step "The least, the keyboard" for it to point at.
+  which name canon's `dongle.py palette` and t-0967. "Pokémon sprites", between
+  "Using it in a ZMK config" and "What it does" (canon t-tw7z, 2026-11-08), is
+  the one place in README with the rights lines (the same words as the
+  template repository's README, "The pictures and the names": change the two
+  together), the three routes by what the reader has, and the Mac route's
+  needs, with a plain LaunchAgent plist that ends with the swap (canon t-t63a
+  adds the key LEDs' step in zmk-lantern's README, in the same shape). Its
+  numbers were measured on 2026-11-08 against `DEFAULTS`' commits: the sparse
+  clone took 2 s and its sparse-checkout 13 s, `.git` 100 MB, 1,025 front and
+  928 back GIFs, every number 1 to 649 with both and a species row (the 157
+  fronts without a row are all numbered past the 1,025 species); when
+  `DEFAULTS` moves, re-count them.
 - `tools/`: `sprite_pack.py` (the sprite pack, [docs/sprite-pack.md](docs/sprite-pack.md):
   a GIF as its distinct pictures, cut to the box they ink, for the player and
   the over-the-air swap) on
