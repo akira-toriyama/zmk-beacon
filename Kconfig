@@ -12,10 +12,9 @@ config BEACON_BACKLIGHT_BRIGHTNESS
     depends on LED_PWM
     help
       Duty cycle written to the pwm-leds backlight at boot, before LVGL and
-      ZMK's display start. The unit has no ambient light sensor, so a lit
-      screen keeps
-      this value; BEACON_SCREEN_OFF_AFTER_S turns the backlight off and back
-      on to it.
+      ZMK's display start. The shield reads no ambient light sensor (the
+      beekeeb unit has none), so a lit screen keeps this value;
+      BEACON_SCREEN_OFF_AFTER_S turns the backlight off and back on to it.
 
 config BEACON_SCREEN_OFF_AFTER_S
     int "Turn the screen off after this many seconds without a key press (0 = never)"
@@ -69,10 +68,10 @@ config BEACON_SCREEN_DUMP
     help
       When the host sets the CDC ACM port to 2400 baud, render the whole
       screen once more and send it over that port as RGB565 bands closed by
-      a CRC-32 (the format: src/screen_dump.c), which canon's
-      "scripts/dongle.py shot" turns into a PNG. The screen stands still
-      while the bands go out, and a logging image drops the log lines of
-      that time: the dump has the port to itself.
+      a CRC-32 (the format: src/screen_dump.c), for a host to turn into a
+      picture (canon's "scripts/dongle.py shot", for example, writes a PNG).
+      The screen stands still while the bands go out, and a logging image
+      drops the log lines of that time: the dump has the port to itself.
 
       It uses the 1200 baud entry's rate callback (the CDC ACM class driver
       keeps one per device), hence the dependency. The prospector shield
@@ -175,8 +174,9 @@ config BEACON_SPRITE_NAME
       repository: a local build passes it (scripts/build.sh --sprite <gif>
       --sprite-name <text>, through a Kconfig fragment so that a failed
       configure step, whose command line west prints, shows only the
-      fragment's path; canon derives it from its name dictionary or the GIF's
-      file name with its assets/sprite-name.py).
+      fragment's path; a consumer derives it as it likes: canon's
+      assets/sprite-name.py, for example, takes it from its name dictionary
+      or the GIF's file name).
 
 config BEACON_HP_BAR_NAME_ROW
     bool
@@ -190,18 +190,35 @@ config BEACON_STATUS_BROADCAST
     depends on ZMK_SPLIT_ROLE_CENTRAL && BT && SETTINGS
     select BT_EXT_ADV
     help
-      On the keyboard's split central, advertise the status payload (each
-      half's battery, the highest active layer and its name, and a count of
-      key presses; src/status_payload.h) as manufacturer data in a legacy,
-      non-connectable, non-scannable advertising set next to ZMK's own
-      connectable one, refreshed every BEACON_PAYLOAD_INTERVAL_MS
+      On the keyboard's split central (a dongle, or the half that is the
+      central), advertise the status payload (each half's battery, the
+      highest active layer and its name, a count of key presses and the
+      modifiers held; src/status_payload.h) as manufacturer data in a
+      legacy, non-connectable, non-scannable advertising set next to ZMK's
+      own connectable one, refreshed every BEACON_PAYLOAD_INTERVAL_MS
       (src/status_payload.h) and right after a key press. The Prospector
-      Dongle's observer (the prospector shield) reads it.
+      Dongle's observer (the prospector shield) reads it, and so can anyone
+      in range: the payload is plaintext, and it tells how much is typed in
+      each interval and which modifiers are held, never which keys (README,
+      "The status advertisement").
 
       The consumer's config must also set CONFIG_BT_EXT_ADV_MAX_ADV_SET=2:
       with BT_EXT_ADV the host takes ZMK's legacy advertising from the same
       pool of sets, and the build fails on a pool of 1. BT_EXT_ADV costs
       about 34 KB of flash and 11 KB of RAM on nRF52840 and switches the host
-      to the extended HCI commands.
+      to the extended HCI commands. With it the central's scan for its halves
+      is an extended scan, and ZMK's Zephyr fork lacks upstream 5ce9d0c621,
+      so a nearby AuxPtr with an invalid channel index can trip a controller
+      assert while a half is away (read from the code, never seen).
+
+      The battery bytes need CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y
+      as well: the broadcaster reads ZMK's peripheral battery events, which a
+      central raises only with it (off by ZMK's default); without it the
+      bytes stay 0 and the Prospector Dongle shows --/100. Neither selected
+      nor asserted: the key presses and the modifiers work without it, and on
+      stock ZMK the option carries an unchecked write at the disconnect of a
+      Bluetooth host (zmk#3522, its fix zmk#3556 open), which a central that
+      takes such hosts may choose to avoid. The central's own battery is
+      never sent: a central half's payload carries the other half alone.
 
 endmenu

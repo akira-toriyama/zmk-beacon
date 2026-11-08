@@ -88,8 +88,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # A ZMK build from a cold west workspace takes about ten minutes; bound it
-    # anyway (house rule).
+    # The whole run, a ZMK build from a cold west workspace included, took
+    # about four minutes (the first live run, canon t-hkc6); bound it anyway
+    # (house rule).
     timeout-minutes: 60
     # The toolchain image ZMK's own reusable workflow builds in; its Python
     # runs tools/sprite_fetch.py and the pack converter (standard library).

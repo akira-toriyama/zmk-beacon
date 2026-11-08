@@ -1,53 +1,289 @@
 # zmk-beacon
 
-A [ZMK](https://zmk.dev) module for the **Prospector Dongle**: a Seeed XIAO
-nRF52840 with a Waveshare 1.69" 240x280 LCD (the
+A [ZMK](https://zmk.dev) module for both ends of one status advertisement:
+the **Prospector Dongle**, a Seeed XIAO nRF52840 with a Waveshare 1.69"
+240x280 LCD (the
 [beekeeb pre-soldered Prospector](https://shop.beekeeb.com/products/pre-soldered-prospector-zmk-dongle))
-that sits next to a keyboard and shows its battery, received over BLE from the
-keyboard's status advertisement, under a sprite that a Mac can swap over BLE.
-It listens passively for the keyboard and advertises connectably for the
-sprite; it never pairs. Its USB-C carries power and one serial port, used to
-reflash it, to take a picture of its screen and, in a logging build, for its
-log.
+that sits next to a keyboard and shows its battery as an HP bar under a
+sprite, and the broadcaster that sends the advertisement from the keyboard's
+split central, a dongle or the half that is the central (a keyboard that is
+not a split has no central and cannot send it). The Prospector Dongle
+listens passively for the keyboard and advertises connectably for the
+sprite, which a Mac can swap over BLE; it never pairs. Its USB-C carries
+power and one serial port, used to reflash it, to take a picture of its
+screen and, in a logging build, for its log.
 
-It is built for the Cyboard Imprint through its Imprint Dongle
-([akira-toriyama/canon](https://github.com/akira-toriyama/canon)). Both ends
-of the status advertisement are in this module: the `prospector` shield with
-the display, and the broadcaster for the keyboard's split central
-(`CONFIG_BEACON_STATUS_BROADCAST`), which replaced
-[t-ogura/prospector-zmk-module](https://github.com/t-ogura/prospector-zmk-module)
-on the Imprint Dongle.
+The name: a beacon shows others where you are; a lantern lights what is at
+hand. The sibling module
+[zmk-lantern](https://github.com/akira-toriyama/zmk-lantern), the keyboard's
+per-key LEDs, is the lantern.
 
-## Status
+## Using it in a ZMK config
 
-The `prospector` shield receives the status advertisement with its own BLE
-observer and shows the keyboard's battery (on the Prospector Dongle since
-2026-09-26). The broadcaster sends that advertisement from the Imprint Dongle
-on a second advertising set next to ZMK's own (on hardware since 2026-09-27).
-A local build can embed a GIF sprite that plays above the HP bar and steps
-with the key presses on the keyboard (on hardware since 2026-09-29), and any
-build takes a new sprite over BLE into flash and plays it without a reboot
-(on hardware since 2026-10-12).
+### The least
 
-## The screen
+1. `config/west.yml`: ZMK at `main`, and the module as a project, pinned by
+   commit:
+
+   ```yaml
+   manifest:
+     remotes:
+       - name: zmkfirmware
+         url-base: https://github.com/zmkfirmware
+       - name: akira-toriyama
+         url-base: https://github.com/akira-toriyama
+     projects:
+       - name: zmk
+         remote: zmkfirmware
+         revision: main
+         import: app/west.yml
+       - name: zmk-beacon
+         remote: akira-toriyama
+         revision: <commit sha>
+         path: modules/zmk-beacon
+     self:
+       path: config
+   ```
+
+   The module needs ZMK `main` (Zephyr 4.1, LVGL 9): it is built against
+   `main` only, and ZMK's config template pins the `v0.3` release (Zephyr
+   3.5, LVGL 8), where it is untried (its sources use Zephyr 4.1 and LVGL 9
+   APIs, and the Prospector Dongle's board name exists on `main` only), so a
+   config made from the template moves `defaults: revision: v0.3` to `main`
+   as above, calls ZMK's workflow at `main` too (Building it with ZMK's CI,
+   below) and names `build.yaml`'s boards as `main` does, each with its `zmk`
+   variant: `nice_nano_v2` is `nice_nano/nrf52840/zmk` there and
+   `seeeduino_xiao_ble` is `xiao_ble/nrf52840/zmk` (ZMK's Zephyr 4.1 post,
+   https://zmk.dev/blog/2025/12/09/zephyr-4-1); `main` has no `nice_nano_v2`,
+   and its workflow stops a board built without its `zmk` variant (`Missing
+   ZMK Compat`), the template's own `nice_nano` included. `revision` is a
+   commit of this repository's `main` (a release
+   tag names one as well; v0.1.0 predates most of this page). Build both
+   ends from one commit: they share the payload's layout (The status
+   advertisement, below), and a field added without a new version byte, as
+   the key presses were, is missing from an older broadcaster while a newer
+   Prospector Dongle still accepts its payload.
+
+2. The keyboard: three lines in the split central's own conf, the central
+   half's (`config/corne_left.conf` for ZMK's Corne, whose left half is the
+   central by its shield's default) or the dongle's
+   (`config/<shield>_dongle.conf`). ZMK merges every conf whose name
+   prefixes the shield (`corne.conf` and `corne_left.conf` for
+   `corne_left`), so the central's own conf reaches the central alone; on a
+   peripheral, or on a keyboard that is not a split, the three lines drop
+   out with Kconfig warnings, since the broadcaster and the fetching exist
+   only on a split central.
+
+   ```
+   CONFIG_BEACON_STATUS_BROADCAST=y
+   CONFIG_BT_EXT_ADV_MAX_ADV_SET=2
+   CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y
+   ```
+
+   The first builds the broadcaster. The second is required with it: the
+   broadcaster selects `CONFIG_BT_EXT_ADV`, under which ZMK's own
+   connectable advertising takes one set of the same pool, whose default is
+   1 (asserted at build time). The third is the batteries: the payload's
+   battery bytes are ZMK's peripheral battery events, which a central raises
+   only with this line, off by ZMK's default; without it the build passes
+   and the Prospector Dongle shows an empty bar and `--/100` (read from the
+   code, not tried). The batteries are a choice: the broadcaster works
+   without the line (the key presses and the modifiers, which the screen and
+   the sprite follow), and the bar then stays `--/100`. ZMK's
+   `CONFIG_ZMK_BATTERY_REPORTING` stays on, its default with BLE (the
+   broadcaster subscribes to an event ZMK compiles only with it). The bar
+   shows the central's peripherals, never the central's own battery: on a
+   keyboard whose central is a half it is the other half's level, and the
+   mean of both halves needs a dongle as the central.
+
+   ZMK `main` compiles the fetching with a write it does not bounds-check
+   ([zmk#3522](https://github.com/zmkfirmware/zmk/issues/3522); the fix,
+   [zmk#3556](https://github.com/zmkfirmware/zmk/pull/3556), is open): the
+   disconnect of any Bluetooth connection that is not a half's, a host's,
+   makes the central write a 0 to index 234 of an array of one byte per
+   peripheral (a single byte on a keyboard whose central is a half), which
+   on the issue's keyboard zeroed a variable of the Bluetooth controller
+   (late radio events, then a fatal controller assert); canon carries the
+   fix as a patch, which a config repository built by ZMK's reusable
+   workflow cannot, so a central that hosts connect to over Bluetooth
+   carries the bug until the fix merges.
+
+   The broadcaster has run only on a USB-powered dongle with no Bluetooth
+   host; on a central half like the Corne's, next to a host over Bluetooth
+   and on battery, it is built, not tried. The advertisement goes out in
+   plaintext to anyone in range; what it tells, and the untried cases, are
+   in The status advertisement, below. The check build's conf is these
+   three lines, [config/corne_left.conf](config/corne_left.conf); canon's
+   [config/imprint_dongle.conf](https://github.com/akira-toriyama/canon/blob/main/config/imprint_dongle.conf)
+   carries them on a dongle, beside lines that only canon's ZMK and Zephyr
+   patches define and canon's own choices: take the three lines from it,
+   not the file.
+
+3. The Prospector Dongle: a device of its own, with its own target in
+   `build.yaml` next to the keyboard's:
+
+   ```yaml
+   include:
+     - board: xiao_ble/nrf52840/zmk
+       shield: prospector
+   ```
+
+   The hardware is the Prospector's: a Seeed XIAO nRF52840 driving the
+   Waveshare 1.69" ST7789V panel over SPI, with the backlight on D6 (P1.11);
+   the pin mapping and the panel parameters are prospector-zmk-module's (the
+   shield's `prospector.overlay`), and the beekeeb pre-soldered unit is the
+   one it has run on. The shield is a display and nothing else: its conf
+   turns ZMK's split, Bluetooth HID and USB HID off, so the device is never
+   a split central, a split peripheral or a keyboard (its one BLE peripheral
+   role is the sprite receiver's), and `prospector` is never a
+   second shield of a keyboard's build (its conf would turn the keyboard's
+   split off, and its scan and its advertising would take what a central
+   needs; read from the code). A Prospector that is today a keyboard's
+   dongle, as other Prospector modules make it, needs another split central
+   first: a dongle, or a central half. A `config/prospector.conf` in the
+   config repository overrides any line of the shield's own
+   `prospector.conf` (Then, as you want them, below); none is needed.
+
+4. Flashing. Both devices take a UF2 image. The Prospector Dongle's first
+   flash is the double-tap (the 1200 baud entry below exists once this
+   module's image runs): double-tap its reset button, and its bootloader
+   mounts as `XIAO-SENSE`; then `cp -X <image>.uf2 /Volumes/XIAO-SENSE/`
+   (ZMK's workflow names the image `prospector-xiao_ble_nrf52840_zmk-zmk.uf2`
+   in its `firmware` artifact, this repository's own build `prospector.uf2`;
+   the `cp` ends with an I/O error: that is the device rebooting into the
+   new firmware). Once this module's image runs, a program that sets its
+   serial port to 1200 baud on purpose (`stty -f <its port> 1200` on macOS,
+   the port found by its product string) reboots it into the bootloader
+   with no hands on the device, and the copy is the same (The serial port,
+   below; canon's `./scripts/flash-dongle.sh <image.uf2>` does the whole of
+   it). `XIAO-SENSE` is the factory bootloader's volume name (the XIAOs this
+   module has run beside mount so too; Adafruit's upstream build for the
+   plain XIAO nRF52840 names it `XIAO-BOOT`): put one XIAO in its bootloader
+   at a time. The keyboard's central is flashed as its board says; with the
+   1200 baud entry (Then, as you want them, below) it takes the same touch.
+
+   Until the keyboard broadcasts, the screen shows a grey `HP` and `--/100`,
+   with an empty name row and nothing above it (this image has no sprite
+   until one is sent or embedded: Then, as you want them, a sprite), and
+   five minutes after boot with no key press it goes dark
+   (`CONFIG_BEACON_SCREEN_OFF_AFTER_S`, default 300; `=0` in
+   `config/prospector.conf` keeps it lit); the first key press the keyboard
+   reports lights it. With the keyboard heard, `HP` turns from grey to gold,
+   the bar stays empty with `--/100` until a half's reading arrives (the
+   third line of the keyboard's conf, above), and then fills in colour (The
+   screen, below).
+
+### Then, as you want them
+
+- **A sprite.** A GIF the screen plays above the HP bar, stepped by the key
+  presses (The sprite, below). Three routes, none of which puts the GIF into
+  a repository: a local build with the GIF embedded,
+  `./scripts/build.sh --sprite <gif>` (Building this repository, below); a
+  GitHub Actions run that embeds it, with neither a Mac nor Docker (A sprite
+  image from GitHub Actions, below); or the default image's sprite room,
+  which the Mac sprite sender writes over BLE, the image unchanged
+  (Swapping the sprite over BLE and The sprite sender, below).
+- **No receiver: `CONFIG_BEACON_SPRITE_RECEIVE=n`** in
+  `config/prospector.conf`. With the receiver on (the default), anyone in
+  range can connect and replace the sprite (no pairing, no encryption), and
+  the status pauses while they stay connected; with it off the device only
+  listens and never transmits over BLE, the sprite sender cannot reach it,
+  and an embedded pack may take the flash the receiver would (about 150 KB
+  in place of about 80 KB).
+- **The screen-off time: `CONFIG_BEACON_SCREEN_OFF_AFTER_S`** (default 300,
+  seconds without a key press; 0 keeps the screen lit).
+- **The brightness: `CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`** (default 80,
+  percent). A lit screen has that one brightness: the shield reads no
+  ambient light sensor and no touch panel (the beekeeb unit has no sensor
+  and its panel is not wired; on a unit that has them, both go unused).
+- **The panel's clock.** The panel's SPI runs at 32 MHz, above the ST7789V
+  data sheet's write cycle, as is the 20 MHz fallback (16 MHz effective).
+  Should the panel show noise, a `config/prospector.overlay`, which ZMK
+  applies over the shield's, sets `mipi-max-frequency` to 20 MHz (read from
+  the code, not tried):
+
+  ```dts
+  &st7789v {
+      mipi-max-frequency = <20000000>;
+  };
+  ```
+
+- **The keyboard's reflash from the host:
+  `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y`** in the central's conf. The
+  central then reboots into its UF2 bootloader when a host sets its USB
+  serial port to 1200 baud, as the Prospector Dongle does by default (The
+  serial port, below). It needs a USB CDC ACM port and the board's retained
+  boot mode: the XIAO BLE's devicetree carries both, so a central on it
+  needs nothing more; the nice!nano has the boot mode and no port, so a
+  central on it adds the port in its overlay (ZMK reads one config overlay
+  a build and tries the shield's shared name first, `corne.overlay` before
+  `corne_left.overlay`, so with a shared overlay the central gets one of its
+  own over a dtsi both include, as zmk-lantern's README says in item 2 of
+  The least) and gives `CONFIG_USB_CDC_ACM` the `CONFIG_SERIAL` it depends
+  on, as the same README shows under "The host"
+  ([zmk-config-lantern-check](https://github.com/akira-toriyama/zmk-config-lantern-check)'s
+  central half does so, Building it with ZMK's CI, below; built, not tried
+  on hardware). Without a port the line drops out with a warning. Any
+  program that sets the rate reboots the keyboard, a serial monitor
+  included.
+
+### Building it with ZMK's CI
+
+A config repository made from
+[ZMK's template](https://github.com/zmkfirmware/unified-zmk-config-template)
+builds with ZMK's reusable workflow, the module included, once its
+`config/west.yml` is the one above, its `.github/workflows/build.yml` calls
+the workflow at `main`, as the manifest tracks ZMK `main`, and its
+`build.yaml` names the boards as `main` does (step 1 of The least):
+
+```yaml
+jobs:
+  build:
+    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@main
+```
+
+`build.yaml` lists the keyboard's targets (`board: nice_nano/nrf52840/zmk`
+with `shield: corne_left` and `corne_right`, say) and the Prospector
+Dongle's (`xiao_ble/nrf52840/zmk` with `prospector`). West fetches the
+module as a project of the manifest and Zephyr finds it by its
+`zephyr/module.yml`; nothing of ZMK is patched.
+[zmk-config-lantern-check](https://github.com/akira-toriyama/zmk-config-lantern-check)
+is that repository for the keyboard's side: the Corne on the nice!nano, the
+left half the central with the three lines, the 1200 baud entry and
+zmk-lantern, built green by ZMK's workflow
+([the run](https://github.com/akira-toriyama/zmk-config-lantern-check/actions/runs/42452649801)):
+the central half's `.config` lists the broadcaster's lines, the right
+half's none of them. This repository's own check is the stock Corne left
+half with the three lines alone
+([config/corne_left.conf](config/corne_left.conf); no port, no 1200 baud
+entry, no zmk-lantern), built with the Prospector Dongle by its own
+reusable workflow, which runs the same west build as ZMK's (Building this
+repository, below).
+
+## What it does
+
+### The screen
 
 One battle-screen HP bar in a dark box along the bottom: `HP` and a bar with
-its value on it (`65/100`). Its length is the keyboard's battery: the mean of
-both halves' readings, or the one half that has a reading. The bar is green,
-yellow under 50 % and red under 20 %. A build with a sprite name
-(`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`) shows the name on the box's
-first row, centred, above `HP` and the bar: an ASCII name in unscii 16, like `HP`, a katakana one in the
-letters of the first Game Boy games (PKMN Strict from
-[pkmn](https://github.com/nue-of-k/pkmn), two pixels a dot and a pixel
-bolder, the dakuten above the cell; Credits below). A name is at most 15 bytes of UTF-8, all printable
-ASCII or all katakana: 15 ASCII characters, or 5 katakana
-(`tools/sprite_pack.py` says which characters).
+its value on it (`65/100`). Its length is the battery of the central's
+peripherals: on a dongle the mean of both halves' readings, or the one half
+that has a reading; on a central half the other half's level alone (the
+central's own is never sent). The bar is green, yellow under 50 % and red
+under 20 %. A build that plays a named sprite (a received pack's name, or
+`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`, for the embedded one) shows
+its name on the box's first row, centred, above `HP` and the bar: an ASCII
+name in unscii 16, like
+`HP`, a katakana one in the letters of the first Game Boy games (PKMN Strict
+from [pkmn](https://github.com/nue-of-k/pkmn), two pixels a dot and a pixel
+bolder, the dakuten above the cell; Credits below). A name is at most 15
+bytes of UTF-8, all printable ASCII or all katakana: 15 ASCII characters, or
+5 katakana (`tools/sprite_pack.py` says which characters).
 
 | Shows | Meaning |
 | --- | --- |
 | A coloured bar and `65/100` | The keyboard's battery, from a status advertisement received in the last minute. |
-| An empty bar and `--/100` | The keyboard is heard, but neither half has a reading: both are off or out of range, or have not reported since they connected. |
-| Grey `HP` and `--/100` | No status advertisement in the last minute, or none since the Prospector Dongle started. |
+| An empty bar and `--/100` | The keyboard is heard, but no peripheral has a reading (on a central half, the other half): off or out of range, not reported since it connected, or the central does not fetch the batteries (the third line of The least, the keyboard). |
+| Grey `HP` and `--/100` | No status advertisement in the last minute, or none since the Prospector Dongle started; a broadcaster of another payload version counts as none. |
 | Nothing: the screen is dark | No key press on the keyboard for five minutes. |
 
 The screen turns off when the keyboard has not been typed on for five minutes
@@ -59,22 +295,102 @@ the Prospector Dongle started when no key press has reached it by then.
 
 The name row shows the name of the sprite playing: the one a received pack
 carries, or the embedded sprite's (`CONFIG_BEACON_SPRITE_NAME`). The row
-exists in every build that can receive a sprite, empty until one plays, and
-in a build with a named embedded sprite.
+exists in every build that can receive a sprite, empty until a named sprite
+plays (an embedded sprite built without a name leaves it empty), and in a
+build with a named embedded sprite.
+
+### The status advertisement
+
+What the keyboard's split central sends and the Prospector Dongle reads: 26
+bytes of manufacturer data in a legacy, non-connectable, non-scannable
+advertisement on a second advertising set next to ZMK's own, every 200 ms
+for as long as the central runs. A key press, a confirmed modifier and its
+release refresh the payload, which goes on air at the next advertising
+event (at most about 210 ms later) and adds no advertisement. The layout is
+[src/status_payload.h](src/status_payload.h), prospector-zmk-module v2.2.3's
+offsets under the same prefix and version byte. The fields written: each
+peripheral's battery (ZMK's peripheral slots 0 and 1, in the order the
+central first heard them: a dongle's two halves; a central half's one, the
+other half, in slot 0, and its own never; 0 for no reading), the highest
+active layer's index and the first four bytes of its name, a count of key
+presses (every key of either half, modulo 256) and the modifiers held, once
+a hold is confirmed (pressed for 0.2 s, or a non-modifier key pressed under
+it; a layer key or another modifier confirms nothing), each kept on air
+until 0.25 s after its confirmation even when released sooner. Nothing
+pauses it for idle; ZMK's deep sleep (`CONFIG_ZMK_SLEEP`, off by default)
+powers the central off and stops it with the rest, and the wake is a boot,
+which starts the count over.
+
+It goes out in plaintext, with no pairing: anyone with a Bluetooth scanner in
+range reads the batteries, the layer and its name, how many keys were pressed
+in each 200 ms and which modifiers are held, never which keys; and the
+keyboard's address stays the same for a whole boot, so a session can be
+followed. The Prospector Dongle takes the payload of any keyboard in range,
+with no filter: two broadcasting keyboards in one room mix on its screen, the
+battery following whichever it heard last and the presses miscounted, and a
+keyboard running t-ogura's prospector-zmk-module v2.2.x, which sends the same
+prefix and version, shows too, its fields read as this layout's (read from
+the code, not tried).
+
+The cost on the central: `CONFIG_BT_EXT_ADV`, about 34 KB of flash and 11 KB
+of RAM on an nRF52840, and the host on the extended HCI commands; no
+Bluetooth connection, and no set of ZMK's. With it the central's scan for
+its halves is an extended scan that follows nearby AuxPtr fields, and ZMK's
+Zephyr fork lacks upstream 5ce9d0c621, so an invalid AuxPtr channel index
+can trip a controller assert while a half is away (read from the code,
+never seen). The one central it has run on is
+a USB-powered dongle with no Bluetooth host: on a central half, next to a
+host connected over Bluetooth, and on battery, it is built and untried, and
+its draw on a battery is unmeasured.
+
+### The serial port
+
+On USB the Prospector Dongle is one CDC ACM serial port, product string
+`Prospector Dongle`, and no keyboard: no HID device at all, under ZMK's
+default USB IDs, which most ZMK devices keep (canon's Imprint Dongle does).
+Find its port by that product string (canon's
+`python3 scripts/dongle.py port prospector`, for example),
+never by a `/dev/cu.usbmodem*` name, which follows the USB socket it is
+plugged into, nor by its USB IDs. The port's rate is a command:
+
+- 1200 baud reboots the device into its UF2 bootloader, which mounts as
+  `XIAO-SENSE` (`CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`, on by default for
+  the shield): a host flashes it with no hands on the device by setting the
+  rate, waiting for the volume, copying the image onto it and waiting for
+  the device to come back (canon's `./scripts/flash-dongle.sh <image.uf2>`
+  does this, and checks that the volume belongs to this device). A
+  keyboard's central with the option takes the same touch.
+- 2400 baud makes the device render its screen once more and send it over
+  the port, band by band and closed by a CRC-32 (`CONFIG_BEACON_SCREEN_DUMP`,
+  on by default for the shield; the format is the header of
+  [src/screen_dump.c](src/screen_dump.c)). canon's
+  `python3 scripts/dongle.py shot` sets 2400, writes the bands into a PNG,
+  prints its path and sets 115200 again. The screen stands still while the
+  picture goes out, and a logging build leaves out the log lines of that
+  moment. The picture is what the device draws, not what the backlight
+  shows: a dark screen gives the picture it would show when lit. It shows
+  whatever sprite plays, the sprite room's included (the default image
+  plays the room's pack), and its name: keep any picture of a device that
+  plays a sprite out of repositories, like the GIF.
+
+So never set the port to either rate by accident: any program that sets it,
+a serial monitor or `stty` included, does the same. A logging build
+(`--logging`, Building this repository) writes its log on the port at
+115200; a plain build keeps the port silent.
 
 ## The sprite
 
-The screen plays a sprite pack (below) above the HP bar: centred, standing on
-the bar, and scaled to the largest size of its own proportions that fits the
-space above it, 2 px in from the panel's top and sides (a 90x90 px GIF shows
-at 198x198, or 170x170 above a bar with a name row). A transparent margin in
-the GIF is cut off when the pack is made, so the drawing is the pixels the
-GIF inks, at whichever size the GIF padded them to. The pack comes from one
-of two places: the sprite room in flash, where a Mac put it over BLE (next
-section), or the image, when `CONFIG_BEACON_SPRITE_GIF="<absolute path>"`
-made the build convert a GIF and embed the pack. At boot the room's pack
-plays when it is whole, else the embedded one, else nothing until a pack
-arrives.
+The screen plays a sprite pack (The sprite pack, below) above the HP bar:
+centred, standing on the bar, and scaled to the largest size of its own
+proportions that fits the space above it, 2 px in from the panel's top and
+sides (a 90x90 px GIF shows at 198x198, or 170x170 above a bar with a name
+row). A transparent margin in the GIF is cut off when the pack is made, so
+the drawing is the pixels the GIF inks, at whichever size the GIF padded them
+to. The pack comes from one of two places: the sprite room in flash, where a
+Mac put it over BLE (Swapping the sprite over BLE, below), or the image, when
+`CONFIG_BEACON_SPRITE_GIF="<absolute path>"` made the build convert a GIF and
+embed the pack. At boot the room's pack plays when it is whole, else the
+embedded one, else nothing until a pack arrives.
 
 While nobody types it plays at three quarters of the GIF's own tempo and stops
 only while the screen is off. While the keyboard is typed on it runs on the key
@@ -90,25 +406,26 @@ press, whether or not a hold-tap or a combo later holds it back or consumes it.
 
 A pack with a back view (the pack section) shows it while a modifier is held
 on the keyboard and the front view otherwise. The keyboard reports a
-modifier once it is a hold: pressed for the tapping term (0.2 s), or
-another key pressed while it is down, so a tap on a mod-tap thumb never
-flips the sprite, a lone modifier flips it 0.2 s late, and a quick
-Shift+letter flips it for about half a second; a release flips it back
-within an advertising interval or two. Each switch starts the other view
-from its first frame. Both views are drawn at one scale, the one at which
-the larger fills the space, so the switch changes the drawing's size but
-not its pixels'. A keyboard that falls silent for a second leaves the front
-view.
+modifier once it is a hold: a modifier keycode held 0.2 s (the broadcaster's
+fixed confirm time), or a non-modifier key pressed while it is down, so a
+lone modifier key flips the sprite 0.2 s late, a mod-tap held alone 0.2 s
+after ZMK decides the hold, a quick Shift+letter for about half a second,
+and a tap shorter than 0.2 s never; a release flips it back within an
+advertising interval or two. Each switch
+starts the other view from its first frame. Both views are drawn at one
+scale, the one at which the larger fills the space, so the switch changes
+the drawing's size but not its pixels'. A keyboard that falls silent for a
+second leaves the front view.
 
 The sprite draws itself: the player inflates the frame's picture into a
 packed canvas and scales it straight into the display buffer by nearest
 neighbour (`src/sprite.c`), and the panel's SPI runs at 32 MHz. Redrawing a
 sprite shown at about 2x takes 27-51 ms, flush included, and inflating a
-153x94 picture 6-9 ms (hardware 2026-10-06); a frame whose picture is already
-on the canvas costs nothing, and catching up after a slow render moves the
-frame index without decoding. 32 MHz is above the ST7789V data sheet's write
-cycle, as 16 MHz already was; should the panel show noise, set
-`mipi-max-frequency` in the shield overlay back to 20 MHz (16 MHz effective).
+picture of about a fifth of the panel's pixels 6-9 ms; a frame whose picture
+is already on the canvas costs nothing, and catching up after a slow render
+moves the frame index without decoding. 32 MHz is above the ST7789V data
+sheet's write cycle; should the panel show noise, the fallback is 20 MHz
+(16 MHz effective; Then, as you want them: the panel's clock).
 
 Limits:
 
@@ -129,10 +446,9 @@ Limits:
   writes them so).
 - An embedded pack must fit the image's flash next to the code: about 150 KB
   with the receiver off (`CONFIG_BEACON_SPRITE_RECEIVE=n`), about 80 KB with
-  it (a 364,544 byte code partition, of which the code took 213,928 bytes
-  without the receiver and 283,992 with it, zmk main of 2026-11; `sprite_pack.py
-  pack` prints a pack's bytes). One too large fails at the link, with
-  ``region `FLASH' overflowed by N bytes``, not in CMake.
+  it (the code partition is 356 KiB, the sprite room cut from it;
+  `sprite_pack.py pack` prints a pack's bytes). One too large fails at the
+  link, with ``region `FLASH' overflowed by N bytes``, not in CMake.
 - The GIF is a personal file and never enters a repository: build locally with
   `./scripts/build.sh --sprite <gif>` (`firmware/prospector-sprite.uf2`), or in
   your own GitHub Actions run (A sprite image from GitHub Actions, below).
@@ -151,8 +467,8 @@ With `CONFIG_BEACON_SPRITE_RECEIVE` (on by default for the shield; `=n` in a
 consumer's `prospector.conf` turns it off) the device advertises connectably
 as `Prospector Dongle` about once a second and offers one GATT service through
 which a central writes a sprite pack into the sprite room, a 384 KiB flash
-partition the shield overlay cuts from the code partition; every pack of the
-user's collection fits (the largest is 319 KB). The new sprite plays as soon
+partition the shield overlay cuts from the code partition; any pack up to
+that size goes in. The new sprite plays as soon
 as the transfer ends, named as the pack says, and plays again after a reboot
 or a reflash (the UF2 bootloader leaves the room alone). During the transfer
 the last picture stays on the screen; a transfer that fails, or a pack that
@@ -161,9 +477,9 @@ sprite. The keyboard's status is not received while a central is connected,
 and the screen greys only after a minute without it.
 
 There is no pairing and no encryption: anyone in range can connect and write
-the room, and nothing else. Timings on hardware (2026-10-12): a 206 KB pack
-took 20 s from the first command to the picture, 11 s of it erasing flash and
-9 s transferring at 24 kB/s; a 7 KB pack took 0.8 s.
+the room, and nothing else. A pack takes about a tenth of a second a KB from
+the first command to the picture, about half of it erasing flash and the
+rest transferring at 24 kB/s; a small pack shows within a second.
 
 The protocol, for a sender (the sprite sender below is one), is the header
 of `src/ble_receiver.c`: a control
@@ -218,7 +534,7 @@ next GIF of a collection, packs it (with its back view when the collection has
 one) through `sprite_pack.py`, and writes the pack into the sprite room over
 BLE. The collection is a directory of `<number>.gif` files; it goes through
 them in number order, or through a range of the numbers only, one GIF a run,
-around and around, and a LaunchAgent runs it once a day (the user's dotfiles).
+around and around, once a day from a LaunchAgent, say.
 The collection stays off every repository, and so does the state file, whose
 number names the GIF:
 
@@ -243,6 +559,7 @@ without one every number is in the rotation, and in a directory of National
 Pokédex GIFs not every number is a species. A state outside the range continues
 at the next number in it, wrapping to the first. A config with the `order` key
 of the sender before the numbered collection is a config error (exit 2).
+
 The sprite name comes from `names`, PokeAPI's
 `pokemon_species_names.csv`, with the GIF's number as the species' National
 Pokédex number: each run, `tools/name_dictionary.py <csv> --number <n>` prints
@@ -253,34 +570,42 @@ ASCII, whole, else nothing; an English name is first folded where the
 collection's names need it and nowhere else (a gender sign at its end to a
 space and `F` or `M`, a typographic apostrophe to `'`), and `--lang en` gives
 the English name alone (the Actions route's default, below). With nothing, and
-without the key, the name is the GIF's number. The log says which alphabet (`name: katakana from the name
-dictionary` or `name: ASCII`), never the name, its length or whether an ASCII
-name is the number; a CSV the config names but that cannot be read or does
-not have the columns is a config error (exit 2). The state file holds the
-number of the GIF tried last, written before the transfer, so a GIF the device
-refuses costs one day; its directory is made when missing, and a state that is
-no number starts the rotation over. Exit 0 when the device shows the pack, 1
-when it does not (no device in range, a config or collection that cannot be
-read, a refused pack: the next day tries the next GIF), 2 for bad usage or
-config. `colours` prints the colours of the GIF the state names, the sprite on
+without the key, the name is the GIF's number. The log says which alphabet
+(`name: katakana from the name dictionary` or `name: ASCII`), never the name,
+its length or whether an ASCII name is the number; a CSV the config names but
+that cannot be read or does not have the columns is a config error (exit 2).
+
+The state file holds the number of the GIF tried last, written before the
+transfer, so a GIF the device refuses costs one day; its directory is made
+when missing, and a state that is no number starts the rotation over. Exit 0
+when the device shows the pack, 1 when it does not (no device in range, a
+config or collection that cannot be read, a refused pack: the next day tries
+the next GIF), 2 for bad usage or config.
+
+`colours` prints the colours of the GIF the state names, the sprite on
 the device after a `daily` that succeeded, and of its back view when the
 collection has one, weighed as `sprite_colours.py` (above) says, and sends
 nothing; it exits 1 with no state, no readable front GIF, a config it cannot
 read or the colour tool failing, 2 for bad usage or config. The user's
 LaunchAgent runs it after each successful swap and hands the line to the
-keyboard (canon t-0967, daily since 2026-10-21). No line the sender logs names
-a GIF, the sprite, the name's length or a GIF's number: a number, or a rare
-length matched against the public list of names, names the subject. Lines still
-tell something of the GIF: the name's alphabet (the `name:` line, the device's
-report's `name=`) says whether the katakana name fit the HP bar, which holds
-five katakana, so with a complete CSV `ASCII` is a name of six or more, a
-length, and a run of such days can place the GIF; the pack's size (the `pack:`,
-`start` and `end answered:` lines, the erase time of `begin answered`, the
-report's `expected` and `received`) can name the GIF to someone who makes packs
-from the same collection. So keep the sender's lines out of anything public.
-macOS asks once for Bluetooth; the app is signed with a persistent identity so
-that the answer survives a rebuild. A pack showed about a tenth of a second a
-KB after BEGIN (hardware 2026-10-13).
+keyboard (canon t-0967, daily since 2026-10-21).
+
+No line the sender logs names a GIF, the sprite, the name's length or a GIF's
+number: a number, or a rare length matched against the public list of names,
+names the subject. Lines still tell something of the GIF: the name's alphabet
+(the `name:` line, the device's report's `name=`) says whether the katakana
+name fit the HP bar, which holds five katakana, so with a complete CSV `ASCII`
+is a name of six or more, a length, and a run of such days can place the GIF;
+the pack's size (the `pack:`, `start` and `end answered:` lines, the erase
+time of `begin answered`, the report's `expected` and `received`) can name the
+GIF to someone who makes packs from the same collection. So keep the sender's
+lines out of anything public.
+
+macOS asks once for Bluetooth; `package.sh` signs the app with a persistent
+self-signed identity when the login keychain has one (`chord-dev` by
+default, `SIGN_IDENTITY=<name>` for another; its header), so that the answer
+survives a rebuild, and without one it signs ad hoc, and macOS asks again
+after every build. A pack shows about a tenth of a second a KB after BEGIN.
 
 ### A sprite image from GitHub Actions
 
@@ -296,11 +621,10 @@ from the template repository
    artifact of a public repository's run can be downloaded by anyone, and it
    holds the picture.
 2. Run its `prospector-sprite` workflow (Actions, "Run workflow") with the
-   sprite's number, and `en` or `ja` for the name. About four minutes (the
-   first live run, 2026-11-08).
+   sprite's number, and `en` or `ja` for the name. About four minutes.
 3. Download the run's artifact `prospector-sprite` and flash the
-   `prospector-sprite.uf2` in it (Flashing, below). Another sprite is another
-   run; the artifact stays for GitHub's 90 days.
+   `prospector-sprite.uf2` in it (The least, above, step 4). Another sprite
+   is another run; the artifact stays for GitHub's 90 days.
 
 The inputs and their defaults are `tools/sprite_fetch.py`'s docstring. The
 number is the file `<number>.gif` of a directory of the sprites repository at a
@@ -319,17 +643,19 @@ The image is for a device that gets its sprites this way. It has no receiver
 (`CONFIG_BEACON_SPRITE_RECEIVE=n`): it neither advertises nor connects, so the
 sprite sender cannot reach it, the sprite room's pack is left alone and the
 embedded one plays, and the pack may take the flash the receiver would
-(Limits: about 150 KB). Its screen stays lit while no keyboard is heard
-(`CONFIG_BEACON_SCREEN_OFF_AFTER_S=0`), so the sprite shows before the
-broadcaster is set up on the keyboard (Using the module, below). The
+(Limits, above: about 150 KB). Its screen never turns off
+(`CONFIG_BEACON_SCREEN_OFF_AFTER_S=0`), keyboard heard or not, so the sprite
+shows before the broadcaster is set up on the keyboard (The least, above). The
 `extra_conf` input appends Kconfig lines to its `prospector.conf`
 (`CONFIG_BEACON_SCREEN_OFF_AFTER_S=300` for the five minutes, say). The
 firmware is built from ZMK `main` and `zmkfirmware/zmk-build-arm:stable` as
 they are at the time of the run: the picture and its name are pinned by the
 inputs' commits, the rest moves with ZMK.
 
-A config repository of your own calls the same workflow from a job of its
-own, the workflow pinned by a commit of this repository:
+A private config repository of your own calls the same workflow from a job
+of its own, the workflow pinned by a commit of this repository (in a public
+one anyone can download the run's artifact, which holds the picture: step
+1 above):
 
 ```yaml
 on:
@@ -363,132 +689,60 @@ taller) or the linker (``region `FLASH' overflowed``; Limits, above).
 | `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
 | `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery, the key press count and the modifiers held from the status payload. The scan pauses while the sprite receiver has a central connected. |
 | `src/ble_receiver.c` | `CONFIG_BEACON_SPRITE_RECEIVE`: advertises connectably, takes a sprite pack over one GATT service into the sprite room (the shield overlay's `sprite_partition`, 384 KiB), shows it, and gives it back at boot. The protocol is its header. |
-| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press, a modifier confirmed as held (the tapping term over, or another key pressed under it) and its release refresh the payload for the next advertising event. |
+| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press, a modifier confirmed as held (held 0.2 s, the broadcaster's fixed confirm time, or a non-modifier key pressed under it) and its release refresh the payload for the next advertising event. |
 | `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name, the key press counter and the modifier byte are used. |
 | `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that an embedded GIF fits. |
 | `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on the row above; and the mapping of both halves' batteries to its one level. |
 | `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, the back view while a modifier is held, and its own nearest-neighbour draw into the display buffer; it plays the room's pack, the embedded one or a received one, and names the HP bar. The pack's reader and inflater are plain C that also compiles on the host. |
-| `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; canon turns it on for the Imprint Dongle too. |
+| `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; a keyboard's central turns it on in its conf (Then, as you want them). |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
 | `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite stands still. |
 | `src/backlight.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) at boot, before LVGL and ZMK's display start, and sets it for `src/screen_off.c`. |
 | `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SCREEN_OFF_AFTER_S`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_SPRITE_RECEIVE`, `BEACON_STATUS_BROADCAST`. |
 
-## Flashing
-
-The device enumerates on USB as `Prospector Dongle` (one serial port, no
-keyboard). Find its port by that product string, for example with canon's
-`python3 scripts/dongle.py port prospector`: never by a `/dev/cu.usbmodem*`
-name, which follows the USB socket it is plugged into, nor by its USB IDs,
-which the Imprint Dongle shares. Two ways into the UF2 bootloader, which
-mounts as `XIAO-SENSE`:
-
-- From the host, no hands on the device: canon's
-  `./scripts/flash-dongle.sh <image.uf2>` sets the port to 1200 baud, waits for
-  `XIAO-SENSE`, checks that the volume belongs to this device, copies the image
-  and waits for the device to come back. The image can be any path, e.g.
-  `../zmk-beacon/firmware/prospector.uf2`.
-- Double-tap the reset button, then `cp -X <image>.uf2 /Volumes/XIAO-SENSE/`.
-  The `cp` ends with an I/O error: that is the device rebooting into the new
-  firmware.
-
-The Imprint Dongle mounts as the same `XIAO-SENSE` volume, and canon gives it
-the same 1200 baud entry. Never have both in the bootloader at once, and keep
-canon's `flash-watch.sh` / `flash-reset.sh` stopped while flashing this
-device: they copy `imprint_dongle.uf2` onto any `XIAO-SENSE` mount.
-
-## A picture of the screen
-
-canon's `python3 scripts/dongle.py shot` writes a PNG of what the screen shows
-and prints its path. It sets the serial port to 2400 baud, on which the device
-renders the screen once more and sends it; then it sets 115200 again. The
-screen stands still while the picture goes out, and a logging build leaves out
-the log lines of that moment. The picture is what the device draws, not what
-the backlight shows: a dark screen gives the picture it would show when lit. A
-picture of a sprite build shows the sprite: keep it out of repositories like
-the GIF.
-
-## Using the module in a ZMK config
-
-`config/west.yml`:
-
-```yaml
-manifest:
-  remotes:
-    - name: akira-toriyama
-      url-base: https://github.com/akira-toriyama
-  projects:
-    - name: zmk-beacon
-      remote: akira-toriyama
-      revision: main # or a release tag
-      path: modules/zmk-beacon
-```
-
-`build.yaml`:
-
-```yaml
-include:
-  - board: xiao_ble/nrf52840/zmk
-    shield: prospector
-```
-
-`config/prospector.conf` in the consuming repository overrides any line of the
-shield's own `prospector.conf`; `CONFIG_BEACON_SPRITE_RECEIVE=n` there builds
-the observer-only device that neither advertises nor connects.
-
-On the keyboard side, the split central's config (canon:
-`config/imprint_dongle.conf`) turns the broadcaster on:
-
-```
-CONFIG_BEACON_STATUS_BROADCAST=y
-CONFIG_BT_EXT_ADV_MAX_ADV_SET=2
-# Optional: reflash from the host without a double-tap (needs a CDC ACM port)
-CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y
-```
-
-The second line is required: the broadcaster selects `CONFIG_BT_EXT_ADV`,
-under which ZMK's own advertising takes one of the sets. Peripheral builds
-compile the broadcaster out.
-
-## Building
+## Building this repository
 
 ```sh
-./scripts/build.sh              # every target in build.yaml -> firmware/prospector.uf2
+./scripts/build.sh              # every target in build.yaml: firmware/prospector.uf2 and firmware/corne_left.uf2
+./scripts/build.sh prospector   # one
 ./scripts/build.sh --logging    # firmware/prospector-logging.uf2: the log on the serial port
 ./scripts/build.sh --sprite ~/a.gif --sprite-name "A"  # firmware/prospector-sprite.uf2 (local only)
-./scripts/build.sh --kconfig CONFIG_LV_USE_SYSMON=y --kconfig CONFIG_LV_USE_PERF_MONITOR=y --tag perf  # firmware/prospector-kconfig-perf.uf2
+./scripts/build.sh prospector --kconfig CONFIG_LV_USE_SYSMON=y --kconfig CONFIG_LV_USE_PERF_MONITOR=y --tag perf  # firmware/prospector-kconfig-perf.uf2
 ./scripts/build.sh --update     # refresh zmk@main and its modules first
+./scripts/build.sh --help       # every option
 ```
 
 Docker is required (`zmkfirmware/zmk-build-arm:stable`). The west workspace
 lives in `~/.cache/zmk-beacon`; the first run downloads ZMK and its modules.
 Each run ends with the images' sha256, flash and RAM use, and the revisions
-they were built from.
+they were built from. `--logging` and `--sprite` build the `prospector`
+shield only: without a target the run takes build.yaml's `prospector`, and a
+run that names another target stops.
 
-The dongles run canon's images, built against the revision canon pins. To try
-a change first, canon builds both against a local checkout of this repository,
-`./scripts/build-zmk.sh prospector imprint_dongle --module <path to zmk-beacon>`
-(the only build of the broadcaster; the images carry `-beacon`), and flashes them with
-`./scripts/flash-dongle.sh <image>`.
+The images are build checks as much as firmware: `prospector.uf2`, the
+Prospector Dongle's image and the one the release attaches, and
+`corne_left.uf2`, the broadcaster on ZMK's stock split central, the Corne's
+left half on the nice!nano, with the three lines of The least
+([config/corne_left.conf](config/corne_left.conf)): built so that a change
+which breaks the broadcaster on stock ZMK fails here (CI also checks that
+every `CONFIG_` line of the shield's conf took, since Zephyr only warns about
+one that does not), never attached to a release, never run on hardware. CI
+builds every `build.yaml` target on pull requests and on `main`, and once a
+week against the current ZMK `main`, nothing patched. Every push to `main`
+refreshes one rolling draft release with `prospector.uf2` attached, and it
+alone; publishing the draft by hand creates the tag.
 
-CI builds every `build.yaml` target on pull requests and on `main`, and once a
-week against the current ZMK `main`. Every push to `main` refreshes one rolling
-draft release with `prospector.uf2` attached; publishing the draft by hand
-creates the tag.
-
-## Hardware notes
-
-- The beekeeb pre-soldered unit has no APDS9960 ambient light sensor and its
-  touch panel is not wired, so a lit screen has one brightness
-  (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`, default 80) and there is no touch
-  input.
-- Pin mapping and panel parameters are the Prospector's, taken from
-  prospector-zmk-module (see `prospector.overlay`).
+The one keyboard this module has run on is the Cyboard Imprint of
+[akira-toriyama/canon](https://github.com/akira-toriyama/canon), through its
+Imprint Dongle, the split central whose config carries the real conf and pins
+this module by commit; what was seen on its hardware, and when, is in
+[CLAUDE.md](CLAUDE.md).
 
 ## Credits and license
 
-MIT. The overlay, the panel parameters and the backlight initialization derive
-from [t-ogura/prospector-zmk-module](https://github.com/t-ogura/prospector-zmk-module)
+MIT ([LICENSE](LICENSE)). The overlay, the panel parameters and the backlight
+initialization derive from
+[t-ogura/prospector-zmk-module](https://github.com/t-ogura/prospector-zmk-module)
 (MIT), itself derived from
 [carrefinho's Prospector](https://github.com/carrefinho/prospector-zmk-module).
 The katakana font (`src/font_pkmn.c`, generated by `tools/pkmn_font.py`) is

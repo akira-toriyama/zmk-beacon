@@ -32,8 +32,11 @@
 #define BEACON_PAYLOAD_VERSION 0x22
 
 /* Battery of each half in percent, 0 = no reading. Left = ZMK split slot 0,
- * right = slot 1: the slot is the half's first-pairing order (canon CLAUDE.md,
- * "slot index"; left/right measured 2026-09-27 by powering each half off). */
+ * right = slot 1: a slot is the order the central first heard each half in,
+ * before pairing, kept in its settings (ZMK's zmk_ble_put_peripheral_addr();
+ * canon CLAUDE.md, "slot index"; on canon's dongle left/right measured
+ * 2026-09-27 by powering each half off). A central half has one peripheral,
+ * in slot 0 whichever half it is. */
 #define BEACON_PAYLOAD_OFFSET_LEFT 5
 #define BEACON_PAYLOAD_OFFSET_RIGHT 12
 
