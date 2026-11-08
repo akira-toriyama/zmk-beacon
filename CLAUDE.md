@@ -44,16 +44,24 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   them: the colour paragraphs of "The sprite pack" and "The sprite sender",
   which name canon's `dongle.py palette` and t-0967. "Pokémon sprites", between
   "Using it in a ZMK config" and "What it does" (canon t-tw7z, 2026-11-08), is
-  the one place in README with the rights lines (the same words as the
-  template repository's README, "The pictures and the names": change the two
-  together), the three routes by what the reader has, and the Mac route's
-  needs, with a plain LaunchAgent plist that ends with the swap (canon t-t63a
-  adds the key LEDs' step in zmk-lantern's README, in the same shape). Its
+  the one place in README with the rights lines (the template repository's
+  README, "The pictures and the names", says the same in its own words:
+  change the two together), the three routes by what the reader has, and the
+  Mac route's needs, with a plain LaunchAgent plist that ends with the swap
+  (canon t-t63a adds the key LEDs' step in zmk-lantern's README, in the same
+  shape). Its Bluetooth step sends the first run through launchd
+  (`launchctl kickstart`) because TCC keys the answer to the responsible
+  process: under a LaunchAgent the app asks for itself and the answer survives
+  a rebuild under the same identity (canon t-3cf6, 2026-10-05, the TCC log's
+  `Resp:`), and from a terminal the terminal asks (the test rule above). Its
   numbers were measured on 2026-11-08 against `DEFAULTS`' commits: the sparse
   clone took 2 s and its sparse-checkout 13 s, `.git` 100 MB, 1,025 front and
-  928 back GIFs, every number 1 to 649 with both and a species row (the 157
-  fronts without a row are all numbered past the 1,025 species); when
-  `DEFAULTS` moves, re-count them.
+  928 back GIFs, every number 1 to 649 with both and a species row and 649
+  the largest such prefix (the 157 fronts without a row are all form ids from
+  10001 up); when `DEFAULTS` moves, re-count them. chord's
+  `setup-signing-cert.sh`, which made the `chord-dev` identity, stops without
+  a message under macOS's LibreSSL (`openssl pkcs12 -legacy` is unknown to
+  it, measured 2026-11-08): README says OpenSSL 3.
 - `tools/`: `sprite_pack.py` (the sprite pack, [docs/sprite-pack.md](docs/sprite-pack.md):
   a GIF as its distinct pictures, cut to the box they ink, for the player and
   the over-the-air swap) on
