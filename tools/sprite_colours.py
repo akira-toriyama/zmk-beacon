@@ -4,7 +4,7 @@
   sprite_colours.py [--count N] <front.gif> [<back.gif>]
 
 Prints one line of COUNT (or N) words, RRGGBB each, the colour to light the
-keys with first: zmk-lantern's `tools/lantern_port.py palette` takes the
+keys with first: zmk-vfx-lantern's `tools/lantern_port.py palette` takes the
 line's words as slots 0.. (and canon's `dongle.py palette`, its t-0967).
 Nothing it prints names a GIF. Standard library
 only, Python 3.9. Exit 0; 2 for bad usage (more than two GIFs among it), a
@@ -25,7 +25,7 @@ back's main colour on a sprite whose screen showed another most, canon
 t-skdt; a view that shows nothing adds nothing). A
 transparent pixel counts for nothing, and neither does a dark one, value
 (HSV) under DARK (a fifth): the key LEDs cannot show dark, each slot is
-scaled so that its brightest channel is the LEDs' level (zmk-lantern's
+scaled so that its brightest channel is the LEDs' level (zmk-vfx-lantern's
 rule), so a dark slot lit a band of keys white, and the outline of a
 pixel-art sprite put one among its colours on nearly every one (seen on
 hardware 2026-10-20; the user's call to leave dark out, which replaced

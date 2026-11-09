@@ -54,7 +54,7 @@
 # prints an argument that could be the GIF's path or the sprite's name. The run ends with one line per image
 # (sha256, FLASH and RAM use) and the revisions it built from.
 #
-# Workspace under $ZMK_WS (default ~/.cache/zmk-beacon), kept between runs so
+# Workspace under $ZMK_WS (default ~/.cache/zmk-vfx-beacon), kept between runs so
 # that west update runs once:
 #   ws/       west topdir: ws/config (a copy of this repository's config/),
 #             .west/, zmk/, zephyr/, modules/, and build/<image name>/ with
@@ -75,7 +75,7 @@ CALLER_DIR="$PWD"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
-WS="${ZMK_WS:-$HOME/.cache/zmk-beacon}"
+WS="${ZMK_WS:-$HOME/.cache/zmk-vfx-beacon}"
 IMAGE="${ZMK_IMAGE:-zmkfirmware/zmk-build-arm:stable}"
 TOP="$WS/ws"
 MOD="$WS/module"
@@ -362,4 +362,4 @@ for row in "${TARGETS[@]}"; do
   echo "  firmware/$name.uf2  $sha  $mem"
 done
 zmk_rev="$(git -C "$TOP/zmk" log -1 --format='%h %cs' 2>/dev/null || true)"
-echo "revisions: zmk ${zmk_rev:-?}, zmk-beacon ${beacon_rev:-?}"
+echo "revisions: zmk ${zmk_rev:-?}, zmk-vfx-beacon ${beacon_rev:-?}"

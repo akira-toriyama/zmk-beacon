@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>sprite-sender</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.zmk-beacon.sprite-sender</string>
+	<string>com.zmk-vfx-beacon.sprite-sender</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

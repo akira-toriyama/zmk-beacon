@@ -101,7 +101,7 @@ def raw_url(repo, ref, path):
 def fetch(url, token):
     """The body at url, FetchError otherwise (its text names the URL and the
     reason, never the body)."""
-    headers = {"User-Agent": "zmk-beacon sprite_fetch"}
+    headers = {"User-Agent": "zmk-vfx-beacon sprite_fetch"}
     if token:
         headers["Authorization"] = "Bearer " + token
     try:

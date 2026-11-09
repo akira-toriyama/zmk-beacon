@@ -17,7 +17,7 @@ after its number.
 
 The rule lives here so that every route to a sprite shares it: the sender has
 none of its own. canon's assets/sprite-name.py copies it for a local build
-(it runs before zmk-beacon's pin is checked out): change the two together.
+(it runs before zmk-vfx-beacon's pin is checked out): change the two together.
 
 The output names a species, which the user's collection is made of: it is for
 the sender's pipe, never for a log, a commit or a doc. No message carries a

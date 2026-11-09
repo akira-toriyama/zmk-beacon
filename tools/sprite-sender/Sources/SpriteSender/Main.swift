@@ -20,7 +20,7 @@ import SpriteSenderCore
 ///       collection has one: one line on stdout,
 ///       RRGGBB each, the one to light the keys with first
 ///       (tools/sprite_colours.py says how they are picked).
-///       zmk-lantern's tools/lantern_port.py palette takes the line as
+///       zmk-vfx-lantern's tools/lantern_port.py palette takes the line as
 ///       slots 0.. (and canon's dongle.py palette, its t-0967). Nothing is
 ///       sent.
 ///
