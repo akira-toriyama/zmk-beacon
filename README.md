@@ -1,4 +1,4 @@
-# zmk-beacon
+# zmk-vfx-beacon
 
 A [ZMK](https://zmk.dev) module for both ends of one status advertisement:
 the **Prospector Dongle**, a Seeed XIAO nRF52840 with a Waveshare 1.69"
@@ -15,7 +15,7 @@ screen and, in a logging build, for its log.
 
 The name: a beacon shows others where you are; a lantern lights what is at
 hand. The sibling module
-[zmk-lantern](https://github.com/akira-toriyama/zmk-lantern), the keyboard's
+[zmk-vfx-lantern](https://github.com/akira-toriyama/zmk-vfx-lantern), the keyboard's
 per-key LEDs, is the lantern.
 
 ## Using it in a ZMK config
@@ -37,10 +37,10 @@ per-key LEDs, is the lantern.
          remote: zmkfirmware
          revision: main
          import: app/west.yml
-       - name: zmk-beacon
+       - name: zmk-vfx-beacon
          remote: akira-toriyama
          revision: <commit sha>
-         path: modules/zmk-beacon
+         path: modules/zmk-vfx-beacon
      self:
        path: config
    ```
@@ -243,7 +243,7 @@ per-key LEDs, is the lantern.
   central on it adds the port in its overlay (ZMK reads one config overlay
   a build and tries the shield's shared name first, `corne.overlay` before
   `corne_left.overlay`, so with a shared overlay the central gets one of its
-  own over a dtsi both include, as zmk-lantern's README says in item 2 of
+  own over a dtsi both include, as zmk-vfx-lantern's README says in item 2 of
   The least) and gives `CONFIG_USB_CDC_ACM` the `CONFIG_SERIAL` it depends
   on, as the same README shows under "The host"
   ([zmk-config-lantern-check](https://github.com/akira-toriyama/zmk-config-lantern-check)'s
@@ -275,13 +275,13 @@ module as a project of the manifest and Zephyr finds it by its
 [zmk-config-lantern-check](https://github.com/akira-toriyama/zmk-config-lantern-check)
 is that repository for the keyboard's side: the Corne on the nice!nano, the
 left half the central with the three lines, the 1200 baud entry and
-zmk-lantern, built green by ZMK's workflow
+zmk-vfx-lantern, built green by ZMK's workflow
 ([the run](https://github.com/akira-toriyama/zmk-config-lantern-check/actions/runs/42452649801)):
 the central half's `.config` lists the broadcaster's lines, the right
 half's none of them. This repository's own checks are the stock Corne left
 half with the three lines alone
 ([config/corne_left.conf](config/corne_left.conf); no port, no 1200 baud
-entry, no zmk-lantern) and the stock Reviung41 with the first two
+entry, no zmk-vfx-lantern) and the stock Reviung41 with the first two
 ([config/reviung41.conf](config/reviung41.conf)), built with the Prospector
 Dongle by its own reusable workflow, which runs the same west build as
 ZMK's (Building this repository, below).
@@ -405,7 +405,7 @@ runs no shell: absolute paths, no `~`):
   <string>local.sprite-sender</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/you/zmk-beacon/tools/sprite-sender/SpriteSender.app/Contents/MacOS/sprite-sender</string>
+    <string>/Users/you/zmk-vfx-beacon/tools/sprite-sender/SpriteSender.app/Contents/MacOS/sprite-sender</string>
     <string>daily</string>
     <string>--config</string>
     <string>/Users/you/sprite-sender/sender.json</string>
@@ -439,8 +439,8 @@ the agent sends nothing. A morning that fails (no device in range within
 takes the next number. The log's lines tell things about the sprite (The
 sprite sender, below), and `~/Library/Logs` is read by you alone: keep the
 log out of anything public. The agent ends with the swap; for the keys of
-a keyboard running zmk-lantern to take the sprite's colours, the agent runs
-a script in the sender's place, the swap first (zmk-lantern's README, The
+a keyboard running zmk-vfx-lantern to take the sprite's colours, the agent runs
+a script in the sender's place, the swap first (zmk-vfx-lantern's README, The
 host: every morning).
 
 Other pictures go the same ways: any directory of `<number>.gif` files runs
@@ -733,9 +733,9 @@ shades within a distance of a heavier colour merged into it, the heaviest
 lively one (saturation and value at least a quarter) first and the rest
 heaviest after it, cycling through them when the sprite shows fewer. The
 key LEDs of a keyboard running
-[zmk-lantern](https://github.com/akira-toriyama/zmk-lantern) take the line
+[zmk-vfx-lantern](https://github.com/akira-toriyama/zmk-vfx-lantern) take the line
 as their palette, slot 0 first: its `tools/lantern_port.py palette` writes it
-on the keyboard's port (zmk-lantern's README, The host); the docstring has
+on the keyboard's port (zmk-vfx-lantern's README, The host); the docstring has
 the numbers and why.
 
 ### The sprite sender
@@ -798,7 +798,7 @@ collection has one, weighed as `sprite_colours.py` (above) says, and sends
 nothing; it exits 1 with no state, no readable front GIF, a config it cannot
 read or the colour tool failing, 2 for bad usage or config. A LaunchAgent
 that runs it after each successful swap and hands the line to the keyboard
-is in zmk-lantern's README (The host: every morning).
+is in zmk-vfx-lantern's README (The host: every morning).
 
 No line the sender logs names a GIF, the sprite, the name's length or a GIF's
 number: a number, or a rare length matched against the public list of names,
@@ -876,7 +876,7 @@ on:
         required: true
 jobs:
   sprite:
-    uses: akira-toriyama/zmk-beacon/.github/workflows/prospector-sprite.yml@<commit sha>
+    uses: akira-toriyama/zmk-vfx-beacon/.github/workflows/prospector-sprite.yml@<commit sha>
     with:
       number: ${{ inputs.number }}
 ```
@@ -923,7 +923,7 @@ taller) or the linker (``region `FLASH' overflowed``; Limits, above).
 ```
 
 Docker is required (`zmkfirmware/zmk-build-arm:stable`). The west workspace
-lives in `~/.cache/zmk-beacon`; the first run downloads ZMK and its modules.
+lives in `~/.cache/zmk-vfx-beacon`; the first run downloads ZMK and its modules.
 Each run ends with the images' sha256, flash and RAM use, and the revisions
 they were built from. `--logging` and `--sprite` build the `prospector`
 shield only: without a target the run takes build.yaml's `prospector`, and a

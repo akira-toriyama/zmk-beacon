@@ -2,7 +2,7 @@ import CoreBluetooth
 import Foundation
 import SpriteSenderCore
 
-/// One connection to the Prospector Dongle's sprite receiver (zmk-beacon
+/// One connection to the Prospector Dongle's sprite receiver (zmk-vfx-beacon
 /// src/ble_receiver.c, the protocol in its header): find it by its service
 /// UUID, read the report, wait for the 15 ms interval the device asks for,
 /// BEGIN / pages with COMMIT / END, read the report, disconnect. Runs on the

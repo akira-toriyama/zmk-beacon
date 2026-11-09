@@ -40,12 +40,12 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   reusable `prospector-sprite.yml` (Build).
 - README is written for a consumer, in the order a consumer reads it (the
   least, then the options, then what it does, then the sprite), as
-  zmk-lantern's: no canon task ids, dates or history there (canon t-4hw7,
+  zmk-vfx-lantern's: no canon task ids, dates or history there (canon t-4hw7,
   2026-11-08); they live here. canon appears there as an example (its scripts,
   its dongle's conf) or as the one keyboard the module has run on. The
   hardware record, the last item of Invariants, is where a hardware fact and
   its date go. The colour paragraphs of "The sprite pack" and "The sprite
-  sender" name zmk-lantern's `tools/lantern_port.py` and its README's The
+  sender" name zmk-vfx-lantern's `tools/lantern_port.py` and its README's The
   host for the keyboard's side (canon t-t63a, 2026-11-08; up to then canon's
   `dongle.py palette` and t-0967, which `tools/sprite_colours.py`'s docstring
   and the sender's `Main.swift` still name beside it). "Pokémon sprites", between
@@ -54,7 +54,7 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   README, "The pictures and the names", says the same in its own words:
   change the two together), the three routes by what the reader has, and the
   Mac route's needs, with a plain LaunchAgent plist that ends with the swap
-  (zmk-lantern's README, The host: every morning, adds the key LEDs' step as
+  (zmk-vfx-lantern's README, The host: every morning, adds the key LEDs' step as
   a script the agent runs in the sender's place, canon t-t63a). Its Bluetooth
   step sends the first run through launchd
   (`launchctl kickstart`) because TCC keys the answer to the responsible
@@ -122,6 +122,14 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   assuming its runs stopped before the send, one with a stub patch that failed
   without stopping the script). For the path past `--dry-run`, stub `Sender` in
   a copy and check that the stub took. `report` only reads.
+- The name is ZMK's module rule `zmk-<type>-<description>` (ZMK docs, Module
+  Creation) with type `vfx`, visual effects: `zephyr/module.yml`'s name, the
+  repository and a consumer's west project and path are all `zmk-vfx-beacon`,
+  never the old `zmk-beacon` (canon t-g1p7, 2026-11-09; a rename moves all
+  four together, canon's `build-zmk.sh --module` matches the module.yml name
+  against its west project). The sprite sender's bundle id followed
+  (`com.zmk-vfx-beacon.sprite-sender`), so the Mac asked for Bluetooth again
+  once.
 - Tasks: on canon's board for now (`furrow list -r canon`; epic e-exg9, the
   module made general for other keyboards, 2026-11-09; before it e-3sm7; the
   2026-09-29 refactor: epic e-vgt5).
@@ -130,7 +138,7 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
 
 - `./scripts/build.sh [shield | board:shield] [--logging] [--sprite <gif>
   [--sprite-name <text>]] [--kconfig CONFIG_X=V]... [--tag <name>] [--update]`
-  (flags: its header). Docker, workspace `$ZMK_WS` (default `~/.cache/zmk-beacon`),
+  (flags: its header). Docker, workspace `$ZMK_WS` (default `~/.cache/zmk-vfx-beacon`),
   images `firmware/<shield>[-sprite][-logging][-kconfig][-<tag>].uf2`, then a
   summary (sha256 prefix, FLASH, RAM, revisions). `--update` moves zmk@main.
   With no target it builds every build.yaml image, `prospector.uf2`,
@@ -190,13 +198,13 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   2026-11-09).
 - The consumer's shape under ZMK's own CI is
   [zmk-config-lantern-check](https://github.com/akira-toriyama/zmk-config-lantern-check),
-  zmk-lantern's check repository, a fork of ZMK's `unified-zmk-config-template`
-  (zmk-lantern's CLAUDE.md says why a fork), which carries this module too
+  zmk-vfx-lantern's check repository, a fork of ZMK's `unified-zmk-config-template`
+  (zmk-vfx-lantern's CLAUDE.md says why a fork), which carries this module too
   since canon t-4hw7 (2026-11-08): README's manifest with both modules pinned
   by commit
-  (zmk-beacon at e69d831), the Corne on the nice!nano, its left half the
+  (zmk-vfx-beacon at e69d831), the Corne on the nice!nano, its left half the
   central with README's three lines and `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y`
-  on the CDC ACM port its overlay adds for zmk-lantern, and the template's
+  on the CDC ACM port its overlay adds for zmk-vfx-lantern, and the template's
   `build.yml` pointed at `build-user-config.yml@main`. The run of its commit
   b52ce3c (https://github.com/akira-toriyama/zmk-config-lantern-check/actions/runs/42452649801,
   green in about three minutes, nothing patched): corne_left's Kconfig step
@@ -215,7 +223,7 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   fix zmk#3556 is open: true on 2026-11-08; when it merges, the caveat goes
   from README, the `BEACON_STATUS_BROADCAST` help, the header of
   `src/status_broadcaster.c` and the invariant on building canon's
-  `imprint_dongle` below, and from zmk-lantern's README, and canon's patch
+  `imprint_dongle` below, and from zmk-vfx-lantern's README, and canon's patch
   with it (canon's `patches/zmk/README.md`).
 - `prospector-sprite.yml` is a reusable for other people's runs (README "A
   sprite image from GitHub Actions"; the template repository
@@ -242,10 +250,10 @@ dongle's serial port is silent unless it runs a `--logging` image.
 
 | Goal | Command | Healthy result |
 | --- | --- | --- |
-| Prospector image from this tree | `./scripts/build.sh --logging` (the `prospector` shield alone: `--logging` and `--sprite` never take corne_left or reviung41) | `images:` line with FLASH/RAM, `revisions: ... zmk-beacon <describe>` |
+| Prospector image from this tree | `./scripts/build.sh --logging` (the `prospector` shield alone: `--logging` and `--sprite` never take corne_left or reviung41) | `images:` line with FLASH/RAM, `revisions: ... zmk-vfx-beacon <describe>` |
 | The broadcaster's check build from this tree: a stock split central, unpatched ZMK main, never flashed | `./scripts/build.sh corne_left` | `firmware/corne_left.uf2`; `build/corne_left/zephyr/.config` has `CONFIG_BEACON_STATUS_BROADCAST=y`, `CONFIG_BEACON_OWN_BATTERY_LEFT=y`, `CONFIG_BT_EXT_ADV=y`, `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`, `CONFIG_BT_CTLR_ADV_SET=2`, `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y`, `CONFIG_ZMK_BATTERY_REPORTING=y`, `CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=1`; `status_broadcaster.c.obj` linked, first in `.event_subscription` of its zmk.map, which lists `zmk_event_sub_beacon_broadcasterzmk_battery_state_changed` among its four; no warning beyond `Deprecated symbol KSCAN is enabled` (below; 2026-11-08, the own battery 2026-11-09) |
 | The broadcaster's check build on a keyboard that is not a split: unpatched ZMK main, never flashed | `./scripts/build.sh reviung41` | `firmware/reviung41.uf2`; `build/reviung41/zephyr/.config` has `# CONFIG_ZMK_SPLIT is not set`, `CONFIG_BEACON_STATUS_BROADCAST=y`, `CONFIG_BEACON_OWN_BATTERY_LEFT=y`, `CONFIG_BT_EXT_ADV=y`, `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`, `CONFIG_BT_CTLR_ADV_SET=2`, `CONFIG_ZMK_BATTERY_REPORTING=y`; `status_broadcaster.c.obj` first in `.event_subscription`, with the same four subscriptions; no warning beyond KSCAN's (2026-11-09) |
-| Both dongles' images against canon's exact tree (ZMK main at canon's cached commit, its patches, two peripherals): the broadcaster as it runs on hardware | canon: `./scripts/build-zmk.sh prospector imprint_dongle --module <this checkout> --logging` (`--beacon` until canon #267) | `revisions:` has `zmk-beacon <dir> @ <describe> (--module)`; the images carry `-beacon` |
+| Both dongles' images against canon's exact tree (ZMK main at canon's cached commit, its patches, two peripherals): the broadcaster as it runs on hardware | canon: `./scripts/build-zmk.sh prospector imprint_dongle --module <this checkout> --logging` (`--beacon` until canon #267) | `revisions:` has `zmk-vfx-beacon <dir> @ <describe> (--module)`; the images carry `-beacon` |
 | Flash either dongle, no double-tap | canon: `./scripts/flash-dongle.sh <image.uf2>` (any directory; named `<device>.uf2` or `<device>-*.uf2`; `--dry-run` checks only) | last line `DONE <device> ... sha256=<the build summary's 12 hex>`, exit 0 |
 | Find the dongles | canon: `python3 scripts/dongle.py list` | each dongle with its `/dev/cu.*` port and `port free` |
 | Read the logs | canon: `python3 scripts/dongle.py log prospector imprint_dongle --seconds 130 [--grep RE] [--out FILE]` | the lines below, each after a timestamp and the device |
@@ -361,7 +369,7 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   peripherals' battery bytes stay 0 (the byte `BEACON_OWN_BATTERY` names
   still carries the central's own level), on purpose (the file's header: the
   key presses and the modifiers work without it, and a central that takes
-  Bluetooth hosts may leave it off for zmk#3522), where zmk-lantern asserts
+  Bluetooth hosts may leave it off for zmk#3522), where zmk-vfx-lantern asserts
   it.
 - Keep the broadcaster's listener ahead of ZMK's: it counts a press before a
   hold-tap or a combo captures it because ZMK calls listeners in link order and
@@ -539,7 +547,7 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   would still leave it.
 - `CONFIG_BEACON_SPRITE_GIF` takes an absolute path. `build.sh --sprite` copies
   the GIF to `$ZMK_WS/sprite/sprite.gif`, and the build embeds it as
-  `build/<image name>/modules/zmk-beacon/beacon_sprite_pack.inc` (build tree only).
+  `build/<image name>/modules/zmk-vfx-beacon/beacon_sprite_pack.inc` (build tree only).
 - The name (`CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`) goes with the GIF's
   path into the fragment `$ZMK_WS/sprite/sprite.conf`, never into `-DCONFIG_...`:
   west prints the whole cmake command line when the configure step fails

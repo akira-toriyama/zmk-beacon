@@ -1,6 +1,6 @@
 import Foundation
 
-/// `struct report` of zmk-beacon's src/ble_receiver.c, REPORT_VERSION 1: the
+/// `struct report` of zmk-vfx-beacon's src/ble_receiver.c, REPORT_VERSION 1: the
 /// control characteristic's read. Little-endian, packed, 44 bytes.
 public struct Report: Equatable, Sendable {
     public static let version: UInt8 = 1

@@ -106,7 +106,7 @@ jobs:
       # and picture-ban reusables use, waived in .github/actionlint.yaml
       # (actionlint's `job` schema predates the properties). The caller's own
       # tree is never checked out.
-      - name: Fetch zmk-beacon at this workflow's own commit
+      - name: Fetch zmk-vfx-beacon at this workflow's own commit
         uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
