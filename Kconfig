@@ -5,33 +5,54 @@
 
 menu "Beacon"
 
+config BEACON_SCREEN
+    bool "Show the keyboard's status advertisement on this device's display"
+    depends on ZMK_DISPLAY_STATUS_SCREEN_CUSTOM && BT
+    select BT_OBSERVER
+    help
+      ZMK's custom status screen (src/prospector_screen.c): the keyboard's
+      battery as an HP bar along the bottom, under the sprite with
+      BEACON_SPRITE, from the status advertisement (BEACON_STATUS_BROADCAST)
+      that the observer (src/status_observer.c) scans for passively. The
+      observer brings Bluetooth up itself, for a display device whose
+      ZMK_BLE is off, never a keyboard. The screen's options follow it: the
+      backlight (BEACON_BACKLIGHT_BRIGHTNESS) and the screen-off time
+      (BEACON_SCREEN_OFF_AFTER_S) with a pwm-leds node, whose LED 0 is the
+      backlight; the sprite (BEACON_SPRITE_GIF); the sprite room
+      (BEACON_SPRITE_RECEIVE) with a sprite_partition in the devicetree. It
+      also needs LVGL's label and bar widgets (CONFIG_LV_USE_LABEL,
+      CONFIG_LV_USE_BAR) and unscii 16 as LVGL's default font. The
+      prospector shield turns it on and sets all of that; no other display
+      has run it.
+
 config BEACON_BACKLIGHT_BRIGHTNESS
     int "Backlight brightness of the lit screen (percent)"
     range 0 100
     default 80
-    depends on LED_PWM
+    depends on BEACON_SCREEN && LED_PWM
     help
-      Duty cycle written to the pwm-leds backlight at boot, before LVGL and
-      ZMK's display start. The shield reads no ambient light sensor (the
-      beekeeb unit has none), so a lit screen keeps this value;
-      BEACON_SCREEN_OFF_AFTER_S turns the backlight off and back on to it.
+      Duty cycle written to the backlight, LED 0 of the devicetree's
+      pwm-leds node, at boot, before LVGL and ZMK's display start. No
+      ambient light sensor is read (the prospector shield's beekeeb unit has
+      none), so a lit screen keeps this value; BEACON_SCREEN_OFF_AFTER_S
+      turns the backlight off and back on to it.
 
 config BEACON_SCREEN_OFF_AFTER_S
     int "Turn the screen off after this many seconds without a key press (0 = never)"
     range 0 86400
     default 300
-    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM && LED_PWM
+    depends on BEACON_SCREEN && LED_PWM
     help
       Once the keyboard's status payload has counted no key press for this
       long, the backlight fades out within a second and the panel is
       blanked; the next key press lights the screen again (src/screen_off.c).
       ZMK's own CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE must stay off
       (src/prospector_screen.c).
-      Only the keyboard's key presses count, any key of either half: the
-      device hears nothing else, so a pointing device does not keep the
-      screen lit. Until the first key press the time since boot counts, so
-      the screen also goes dark when no keyboard is heard. 0: the screen
-      stays lit.
+      Only the keyboard's key presses count, any key, either half's on a
+      split: the device hears nothing else, so a pointing device does not
+      keep the screen lit. Until the first key press the time since boot
+      counts, so the screen also goes dark when no keyboard is heard. 0: the
+      screen stays lit.
 
 config BEACON_SCREEN_OFF
     bool
@@ -80,7 +101,7 @@ config BEACON_SCREEN_DUMP
 config BEACON_SPRITE_GIF
     string "GIF sprite embedded in the image (absolute path, empty = none)"
     default ""
-    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM
+    depends on BEACON_SCREEN
     help
       Absolute path of a GIF (any that a browser plays, up to 255 colours in
       all). The build converts it into a sprite pack (tools/sprite_pack.py,
@@ -110,19 +131,20 @@ config BEACON_SPRITE_EMBEDDED
 
 config BEACON_SPRITE_RECEIVE
     bool "Receive a sprite pack over BLE into flash and play it"
-    depends on SHIELD_PROSPECTOR && ZMK_DISPLAY_STATUS_SCREEN_CUSTOM && BT
+    depends on BEACON_SCREEN && $(dt_nodelabel_enabled,sprite_partition)
     select BT_PERIPHERAL
     select FLASH
     select FLASH_MAP
     select SOC_FLASH_NRF_PARTIAL_ERASE if HAS_HW_NRF_NVMC_PE
     help
-      The Prospector Dongle advertises connectably under BT_DEVICE_NAME and
-      offers one GATT service through which a central writes a sprite pack
-      (tools/sprite_pack.py) into the sprite room, a 384 KiB flash
-      partition the shield overlay cuts from the code partition; the screen
-      then plays that pack, named as the pack says, without a reboot, and at
-      the next boot plays it again when it is whole (src/ble_receiver.c, its
-      header is the protocol). No pairing and no encryption: anyone in range
+      The device advertises connectably under BT_DEVICE_NAME and offers one
+      GATT service through which a central writes a sprite pack
+      (tools/sprite_pack.py) into the sprite room, the devicetree's flash
+      partition labelled sprite_partition (the prospector shield's overlay
+      cuts 384 KiB of it from the code partition); the screen then plays
+      that pack, named as the pack says, without a reboot, and at the next
+      boot plays it again when it is whole (src/ble_receiver.c, its header
+      is the protocol). No pairing and no encryption: anyone in range
       can connect, write the room and read the report, which gives the name
       of the sprite playing, where it came from, and the last transfer since
       boot with the pack's size; nothing else. On by default for the
@@ -189,39 +211,72 @@ config BEACON_HP_BAR_NAME_ROW
 
 config BEACON_STATUS_BROADCAST
     bool "Broadcast the keyboard's status on a second advertising set"
-    depends on ZMK_SPLIT_ROLE_CENTRAL && BT && SETTINGS
+    depends on (!ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL) && BT && SETTINGS
     select BT_EXT_ADV
     help
-      On the keyboard's split central (a dongle, or the half that is the
-      central), advertise the status payload (the batteries of the first two
-      peripherals, ZMK's slots 0 and 1, the
-      highest active layer and its name, a count of key presses and the
-      modifiers held; src/status_payload.h) as manufacturer data in a
-      legacy, non-connectable, non-scannable advertising set next to ZMK's
-      own connectable one, refreshed every BEACON_PAYLOAD_INTERVAL_MS
-      (src/status_payload.h) and right after a key press. The Prospector
-      Dongle's observer (the prospector shield) reads it, and so can anyone
-      in range: the payload is plaintext, and it tells how much is typed in
-      each interval and which modifiers are held, never which keys (README,
-      "The status advertisement").
+      On the device that runs the keyboard's keymap (a keyboard that is not
+      a split, or a split's central: a dongle, or the half that is the
+      central), advertise the status payload (the batteries,
+      BEACON_OWN_BATTERY, the highest active layer and its name, a count of
+      key presses and the modifiers held; src/status_payload.h) as
+      manufacturer data in a legacy, non-connectable, non-scannable
+      advertising set next to ZMK's own connectable one, refreshed every
+      BEACON_PAYLOAD_INTERVAL_MS (src/status_payload.h) and right after a
+      key press. The Prospector Dongle's observer (BEACON_SCREEN) reads it,
+      and so can anyone in range: the payload is plaintext, and it tells how
+      much is typed in each interval and which modifiers are held, never
+      which keys (README, "The status advertisement").
 
       The consumer's config must also set CONFIG_BT_EXT_ADV_MAX_ADV_SET=2:
       with BT_EXT_ADV the host takes ZMK's legacy advertising from the same
       pool of sets, and the build fails on a pool of 1. BT_EXT_ADV costs
       about 34 KB of flash and 11 KB of RAM on nRF52840 and switches the host
-      to the extended HCI commands. With it the central's scan for its halves
-      is an extended scan, and ZMK's Zephyr fork lacks upstream 5ce9d0c621,
-      so a nearby AuxPtr with an invalid channel index can trip a controller
-      assert while a half is away (read from the code, never seen).
+      to the extended HCI commands. With it a split central's scan for its
+      halves is an extended scan, and ZMK's Zephyr fork lacks upstream
+      5ce9d0c621, so a nearby AuxPtr with an invalid channel index can trip a
+      controller assert while a half is away (read from the code, never
+      seen).
 
-      The battery bytes need CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y
-      as well: the broadcaster reads ZMK's peripheral battery events, which a
-      central raises only with it (off by ZMK's default); without it the
-      bytes stay 0 and the Prospector Dongle shows --/100. Neither selected
-      nor asserted: the key presses and the modifiers work without it, and on
-      stock ZMK the option carries an unchecked write at the disconnect of a
-      Bluetooth host (zmk#3522, its fix zmk#3556 open), which a central that
-      takes such hosts may choose to avoid. The central's own battery is
-      never sent: a central half's payload carries the other half alone.
+      The batteries need ZMK's CONFIG_ZMK_BATTERY_REPORTING, on by default
+      with Bluetooth: without it the broadcaster builds and every battery
+      byte stays 0. A split central's peripherals need
+      CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y as well: the
+      broadcaster reads ZMK's peripheral battery events, which a central
+      raises only with it (off by ZMK's default); without it their bytes
+      stay 0, and a dongle's Prospector Dongle shows --/100. Neither
+      selected nor asserted: the key presses and the modifiers work without
+      it, and on stock ZMK the option carries an unchecked write at the
+      disconnect of a Bluetooth host (zmk#3522, its fix zmk#3556 open), which
+      a central that takes such hosts may choose to avoid.
+
+choice BEACON_OWN_BATTERY
+    prompt "The battery byte that carries this device's own battery"
+    depends on BEACON_STATUS_BROADCAST
+    default BEACON_OWN_BATTERY_NONE if ZMK_SPLIT_ROLE_CENTRAL && ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS > 1
+    default BEACON_OWN_BATTERY_LEFT
+    help
+      The payload has two battery bytes, the left half's and the right
+      half's, 0 for no reading (src/status_payload.h). The battery of the
+      device that runs the broadcaster, ZMK's battery level, goes into the
+      byte named here, and a split central's peripherals fill the others in
+      ZMK's slot order, slot 0 first: a slot is the order the central first
+      heard each peripheral in, kept in its settings. The defaults: a
+      keyboard that is not a split, and a split central with one
+      peripheral, a central half, send their own in the left byte (a
+      keyboard whose central is its right half picks RIGHT, and its left
+      half then fills the left byte); a split central with more
+      peripherals, a dongle, sends none, its first two peripherals filling
+      both bytes. A dongle with one peripheral picks NONE too.
+
+config BEACON_OWN_BATTERY_LEFT
+    bool "The left byte"
+
+config BEACON_OWN_BATTERY_RIGHT
+    bool "The right byte"
+
+config BEACON_OWN_BATTERY_NONE
+    bool "Neither: the peripherals fill both (a dongle)"
+
+endchoice
 
 endmenu

@@ -12,7 +12,9 @@
  * and leaves the panel blanked until ZMK unblanks it. Derived from
  * prospector-zmk-module v2.2.3
  * boards/shields/prospector_scanner/src/backlight_init.c; the brightness comes
- * from Kconfig instead of a constant.
+ * from Kconfig instead of a constant. Built with BEACON_SCREEN and LED_PWM
+ * (CMakeLists.txt), whose driver needs an okay pwm-leds node: LED 0 of one of
+ * them is the backlight.
  */
 
 #include <zephyr/device.h>
@@ -24,8 +26,6 @@
 #include "backlight.h"
 
 LOG_MODULE_REGISTER(beacon_backlight, LOG_LEVEL_INF);
-
-#if DT_HAS_COMPAT_STATUS_OKAY(pwm_leds)
 
 static const struct device *const backlight = DEVICE_DT_GET(DT_COMPAT_GET_ANY_STATUS_OKAY(pwm_leds));
 
@@ -49,7 +49,3 @@ static int backlight_init(void) {
 }
 
 SYS_INIT(backlight_init, APPLICATION, 50);
-
-#else
-#error "The prospector shield needs a pwm-leds node for its backlight"
-#endif

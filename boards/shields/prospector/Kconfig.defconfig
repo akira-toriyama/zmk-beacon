@@ -43,6 +43,10 @@ config LV_Z_MEM_POOL_SIZE
     default 65536 if BEACON_SPRITE
     default 49152
 
+# The device is the status screen: its sources and options hang off this.
+config BEACON_SCREEN
+    default y
+
 config BEACON_BOOTLOADER_ON_1200_BAUD
     default y
 

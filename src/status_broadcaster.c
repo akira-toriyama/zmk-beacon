@@ -3,13 +3,14 @@
  *
  * SPDX-License-Identifier: MIT
  *
- * Status broadcaster for a keyboard's split central, a dongle or a central
- * half (canon's Imprint Dongle is the one on hardware; build.yaml's corne_left
- * is the stock central CI builds): the payload of status_payload.h on a
- * second advertising set next to ZMK's own connectable one. Legacy PDU, non-connectable, non-scannable
- * (ADV_NONCONN_IND) with the payload in its AD, so the Prospector Dongle's
- * observer receives it with a passive scan; refreshed every
- * BEACON_PAYLOAD_INTERVAL_MS.
+ * Status broadcaster for the device that runs a keyboard's keymap: a keyboard
+ * that is not a split, or a split's central, a dongle or a central half
+ * (canon's Imprint Dongle is the one on hardware; build.yaml's corne_left and
+ * reviung41 are the stock ones CI builds): the payload of status_payload.h on
+ * a second advertising set next to ZMK's own connectable one. Legacy PDU,
+ * non-connectable, non-scannable (ADV_NONCONN_IND) with the payload in its
+ * AD, so the Prospector Dongle's observer receives it with a passive scan;
+ * refreshed every BEACON_PAYLOAD_INTERVAL_MS.
  *
  * - CONFIG_BT_EXT_ADV: the host then shares one pool of
  *   CONFIG_BT_EXT_ADV_MAX_ADV_SET sets between ZMK's legacy bt_le_adv_start()
@@ -34,25 +35,37 @@
  *   never updates a set that never advertised. Once up, only set_data runs.
  *   An update that arrives before the previous one went on air replaces it
  *   (CONFIG_BT_CTLR_ADV_DATA_BUF_MAX=1); that is expected.
- * - The payload goes out from the first start, with 0 for a half that has not
- *   reported yet (the observer shows "--" for 0). ZMK raises the battery event
- *   only with CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING: a read
- *   after every (re)connect, each Battery Level notification of the half, and
- *   0 on disconnect; without it both bytes stay 0. Not asserted: the key presses and the modifiers work without
- *   it, and a central that takes a Bluetooth host may leave it off for
- *   zmk#3522, the option's unchecked write at the host's disconnect (README).
- * - Keystrokes: every key press on either half counts once, at the press
- *   (zmk_position_state_changed, which the split central raises for the
- *   halves' keys), and kicks the tick, so the new count is on air at the next
- *   advertising event, at most one interval (plus the controller's random
- *   delay of up to 10 ms) after the press instead of up to two. This
+ * - Batteries: two bytes, left and right (status_payload.h). The device's own
+ *   level goes into the one BEACON_OWN_BATTERY names (OWN_BYTE), from
+ *   zmk_battery_state_changed, which ZMK raises from its low-priority work
+ *   queue at the first sample after boot and at every later one that changes
+ *   the level (sampling pauses while the device is idle). A split central's
+ *   peripherals fill the other bytes in slot order, slot 0 first
+ *   (peripheral_byte()), from zmk_peripheral_battery_state_changed, which ZMK
+ *   raises only with CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING: a
+ *   read after every (re)connect, each Battery Level notification of the
+ *   half, and 0 on disconnect. ZMK defines both events only with
+ *   CONFIG_ZMK_BATTERY_REPORTING (its battery_state_changed.c), so without
+ *   it the listener takes neither and every byte stays 0. The payload goes
+ *   out from the first start, with 0 for a level not reported yet (the
+ *   observer shows "--" for 0). The fetching is not asserted: the key presses
+ *   and the modifiers work without it, and a central that takes a Bluetooth
+ *   host may leave it off for zmk#3522, the option's unchecked write at the
+ *   host's disconnect (README).
+ * - Keystrokes: every key press counts once, either half's on a split, at
+ *   the press (zmk_position_state_changed, which a split central raises for
+ *   its halves' keys as for its own), and kicks the tick, so the new count is
+ *   on air at the next advertising event, at most one interval (plus the
+ *   controller's random delay of up to 10 ms) after the press instead of up
+ *   to two. This
  *   listener is linked before ZMK's own (a module's sources precede
  *   app/ in zmk.map, checked 2026-09-29), so it sees a press before a hold-tap
  *   or a combo captures or consumes it; combo.c release_pressed_keys()
  *   re-raises the second and later captured presses from the first listener
  *   (ZMK_EVENT_RAISE), which the (position, timestamp) memory below skips
- *   (the timestamp is stamped once in split/central.c and copied on every
- *   re-raise). A press during the tick's own set_data queues one more run (a
+ *   (the timestamp is stamped once where the press arises, physical_layouts.c
+ *   for the device's own keys and split/central.c for a half's, and copied
+ *   on every re-raise). A press during the tick's own set_data queues one more run (a
  *   running work item may be resubmitted, zephyr kernel/work.c
  *   submit_to_queue_locked()). Until the set advertises the kick is skipped:
  *   creating the set must not overlap ZMK's first bt_le_adv_start() (above),
@@ -109,7 +122,13 @@ BUILD_ASSERT(CONFIG_BT_EXT_ADV_MAX_ADV_SET >= 2,
 #define RETRY_MS 500
 #define LOG_PERIOD_MS 60000
 #define STACK_SIZE 1536
-#define SLOT_COUNT 2
+/* The payload's battery bytes: [0] the left, [1] the right (header). */
+#define BATTERY_BYTES 2
+#if IS_ENABLED(CONFIG_BEACON_OWN_BATTERY_LEFT)
+#define OWN_BYTE 0
+#elif IS_ENABLED(CONFIG_BEACON_OWN_BATTERY_RIGHT)
+#define OWN_BYTE 1
+#endif
 /* A modifier keycode held this long is a hold: ZMK's default tapping term,
  * fixed here, never read from the keymap. */
 #define MOD_CONFIRM_MS 200
@@ -136,8 +155,9 @@ static struct k_work_q bcast_q;
 
 static struct bt_le_ext_adv *adv;
 
-/* Written by the listener on ZMK's event thread, read on bcast_q. */
-static atomic_t battery[SLOT_COUNT];
+/* Written by the listener on the threads that raise ZMK's battery events,
+ * read on bcast_q. */
+static atomic_t battery[BATTERY_BYTES];
 /* Key presses since boot; the payload carries the low byte. */
 static atomic_t keystrokes;
 /* Set once the set advertises: from then on a press may kick the tick. */
@@ -406,6 +426,18 @@ static void on_keycode(const struct zmk_keycode_state_changed *ev) {
     }
 }
 
+#if IS_ENABLED(CONFIG_ZMK_BATTERY_REPORTING)
+/* The byte a peripheral's slot fills, -1 for none: the bytes the device's own
+ * level leaves, in slot order (header). */
+static int peripheral_byte(uint8_t source) {
+#ifdef OWN_BYTE
+    return source == 0 ? 1 - OWN_BYTE : -1;
+#else
+    return source < BATTERY_BYTES ? source : -1;
+#endif
+}
+#endif
+
 static int event_listener(const zmk_event_t *eh) {
     const struct zmk_keycode_state_changed *kc = as_zmk_keycode_state_changed(eh);
     if (kc != NULL) {
@@ -413,14 +445,26 @@ static int event_listener(const zmk_event_t *eh) {
         return ZMK_EV_EVENT_BUBBLE;
     }
 
+#if IS_ENABLED(CONFIG_ZMK_BATTERY_REPORTING)
+#ifdef OWN_BYTE
+    const struct zmk_battery_state_changed *own = as_zmk_battery_state_changed(eh);
+    if (own != NULL) {
+        atomic_set(&battery[OWN_BYTE], own->state_of_charge);
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+#endif
+
     const struct zmk_peripheral_battery_state_changed *bat =
         as_zmk_peripheral_battery_state_changed(eh);
     if (bat != NULL) {
-        if (bat->source < SLOT_COUNT) {
-            atomic_set(&battery[bat->source], bat->state_of_charge);
+        const int byte = peripheral_byte(bat->source);
+
+        if (byte >= 0) {
+            atomic_set(&battery[byte], bat->state_of_charge);
         }
         return ZMK_EV_EVENT_BUBBLE;
     }
+#endif
 
     const struct zmk_position_state_changed *pos = as_zmk_position_state_changed(eh);
     if (pos != NULL && pos->state && !seen_before(pos)) {
@@ -431,6 +475,11 @@ static int event_listener(const zmk_event_t *eh) {
 }
 
 ZMK_LISTENER(beacon_broadcaster, event_listener);
+#if IS_ENABLED(CONFIG_ZMK_BATTERY_REPORTING)
+#ifdef OWN_BYTE
+ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_battery_state_changed);
+#endif
 ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_peripheral_battery_state_changed);
+#endif
 ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_position_state_changed);
 ZMK_SUBSCRIPTION(beacon_broadcaster, zmk_keycode_state_changed);

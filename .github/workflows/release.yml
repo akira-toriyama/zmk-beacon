@@ -106,9 +106,9 @@ jobs:
 
   draft:
     needs: [version, build]
-    # After a partial build too: a red check build (corne_left, build.yaml)
-    # must not leave the notes the version job already upserted over an older
-    # prospector.uf2. A missing prospector.uf2 still stops the Collect step;
+    # After a partial build too: a red check build (corne_left or reviung41,
+    # build.yaml) must not leave the notes the version job already upserted
+    # over an older prospector.uf2. A missing prospector.uf2 still stops the Collect step;
     # a failed version job, after which no build ran, skips the job.
     if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.release == 'true' }}
     # Assets only: upload the firmware and prune anything outside the
@@ -136,12 +136,12 @@ jobs:
           mkdir -p out
           # Public repository: release assets are an explicit allowlist, never
           # a glob, so a future build.yaml entry cannot leak into a public
-          # release unnoticed. corne_left.uf2 is build.yaml's check of the
-          # broadcaster: built with the release, never attached.
+          # release unnoticed. corne_left.uf2 and reviung41.uf2 are build.yaml's
+          # checks of the broadcaster: built with the release, never attached.
           for f in prospector; do
             cp "dist/$f/$f.uf2" "out/$f.uf2"
           done
-          if [ -n "$(find dist -name '*.uf2' ! -name 'prospector.uf2' ! -name 'corne_left.uf2' -print -quit)" ]; then
+          if [ -n "$(find dist -name '*.uf2' ! -name 'prospector.uf2' ! -name 'corne_left.uf2' ! -name 'reviung41.uf2' -print -quit)" ]; then
             echo "::error::a .uf2 outside the allowlist was built; refusing to attach assets"
             exit 1
           fi

@@ -1,12 +1,14 @@
 # Copyright (c) 2026 akira-toriyama
 # SPDX-License-Identifier: MIT
 #
-# Zephyr does not read a shield's own CMakeLists.txt, so the shield's sources
-# are added from the module root, guarded by the shield symbol.
+# Zephyr does not read a shield's own CMakeLists.txt, so the status screen's
+# sources are added from the module root, guarded by BEACON_SCREEN (the
+# prospector shield turns it on), on which every option below depends. The
+# backlight is the devicetree's pwm-leds node, which LED_PWM needs.
 
-if(CONFIG_SHIELD_PROSPECTOR)
-  target_sources(app PRIVATE src/backlight.c src/status_observer.c)
-  target_sources_ifdef(CONFIG_ZMK_DISPLAY_STATUS_SCREEN_CUSTOM app PRIVATE src/prospector_screen.c src/hp_bar.c)
+if(CONFIG_BEACON_SCREEN)
+  target_sources_ifdef(CONFIG_LED_PWM app PRIVATE src/backlight.c)
+  target_sources(app PRIVATE src/status_observer.c src/prospector_screen.c src/hp_bar.c)
   # The name row's katakana font (generated: tools/pkmn_font.py).
   target_sources_ifdef(CONFIG_BEACON_HP_BAR_NAME_ROW app PRIVATE src/font_pkmn.c)
   target_sources_ifdef(CONFIG_BEACON_SCREEN_OFF app PRIVATE src/screen_off.c)

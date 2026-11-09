@@ -15,9 +15,10 @@
 #
 # --logging and --sprite build the prospector shield only: without a target
 # the run takes build.yaml's prospector, and a run that names another target
-# stops (corne_left, the broadcaster's check: its nice!nano has no CDC ACM node
-# for the log, and the sprite is the prospector shield's). --kconfig, --tag
-# and --update with no target build both images.
+# stops (corne_left and reviung41, the broadcaster's checks: their nice!nano
+# has no CDC ACM node for the log, and the sprite is the status screen's,
+# which only the prospector shield turns on). --kconfig, --tag and --update
+# with no target build every image.
 #
 # Options (local builds only: CI and releases build the plain image):
 #   --logging         USB CDC logging: CONFIG_ZMK_USB_LOGGING=y, a 4 KiB CDC ring

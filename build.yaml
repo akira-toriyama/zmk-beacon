@@ -5,8 +5,12 @@
 include:
   - board: xiao_ble/nrf52840/zmk
     shield: prospector
-  # The check that the broadcaster builds on a stock split central, unpatched:
-  # ZMK's Corne on the nice!nano, its left half the central, with README's
-  # recipe (config/corne_left.conf). release.yml builds it and never attaches it.
+  # The checks that the broadcaster builds on stock ZMK, unpatched, with
+  # README's recipe: ZMK's Corne on the nice!nano, its left half the central
+  # (config/corne_left.conf), and ZMK's Reviung41 on the nice!nano, a keyboard
+  # that is not a split (config/reviung41.conf). release.yml builds them and
+  # never attaches them.
   - board: nice_nano/nrf52840/zmk
     shield: corne_left
+  - board: nice_nano/nrf52840/zmk
+    shield: reviung41
