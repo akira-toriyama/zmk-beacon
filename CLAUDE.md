@@ -40,16 +40,19 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   2026-11-08); they live here. canon appears there as an example (its scripts,
   its dongle's conf) or as the one keyboard the module has run on. The
   hardware record, the last item of Invariants, is where a hardware fact and
-  its date go. Two passages stay as they were until canon t-t63a replaces
-  them: the colour paragraphs of "The sprite pack" and "The sprite sender",
-  which name canon's `dongle.py palette` and t-0967. "Pokémon sprites", between
+  its date go. The colour paragraphs of "The sprite pack" and "The sprite
+  sender" name zmk-lantern's `tools/lantern_port.py` and its README's The
+  host for the keyboard's side (canon t-t63a, 2026-11-08; up to then canon's
+  `dongle.py palette` and t-0967, which `tools/sprite_colours.py`'s docstring
+  and the sender's `Main.swift` still name beside it). "Pokémon sprites", between
   "Using it in a ZMK config" and "What it does" (canon t-tw7z, 2026-11-08), is
   the one place in README with the rights lines (the template repository's
   README, "The pictures and the names", says the same in its own words:
   change the two together), the three routes by what the reader has, and the
   Mac route's needs, with a plain LaunchAgent plist that ends with the swap
-  (canon t-t63a adds the key LEDs' step in zmk-lantern's README, in the same
-  shape). Its Bluetooth step sends the first run through launchd
+  (zmk-lantern's README, The host: every morning, adds the key LEDs' step as
+  a script the agent runs in the sender's place, canon t-t63a). Its Bluetooth
+  step sends the first run through launchd
   (`launchctl kickstart`) because TCC keys the answer to the responsible
   process: under a LaunchAgent the app asks for itself and the answer survives
   a rebuild under the same identity (canon t-3cf6, 2026-10-05, the TCC log's

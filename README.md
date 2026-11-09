@@ -413,8 +413,10 @@ the agent sends nothing. A morning that fails (no device in range within
 30 s, a GIF the device refuses: exit 1) is skipped, and the next morning
 takes the next number. The log's lines tell things about the sprite (The
 sprite sender, below), and `~/Library/Logs` is read by you alone: keep the
-log out of anything public. The agent ends with the swap; nothing here
-reaches the keyboard.
+log out of anything public. The agent ends with the swap; for the keys of
+a keyboard running zmk-lantern to take the sprite's colours, the agent runs
+a script in the sender's place, the swap first (zmk-lantern's README, The
+host: every morning).
 
 Other pictures go the same ways: any directory of `<number>.gif` files runs
 through the sender, their back views in a directory of the same names;
@@ -700,9 +702,11 @@ while a modifier is held), and added;
 shades within a distance of a heavier colour merged into it, the heaviest
 lively one (saturation and value at least a quarter) first and the rest
 heaviest after it, cycling through them when the sprite shows fewer. The
-key LEDs of the user's keyboard take the line as their palette (canon's
-`dongle.py palette`, slot 0 first; its t-0967); the docstring has the
-numbers and why.
+key LEDs of a keyboard running
+[zmk-lantern](https://github.com/akira-toriyama/zmk-lantern) take the line
+as their palette, slot 0 first: its `tools/lantern_port.py palette` writes it
+on the keyboard's port (zmk-lantern's README, The host); the docstring has
+the numbers and why.
 
 ### The sprite sender
 
@@ -762,9 +766,9 @@ the next GIF), 2 for bad usage or config.
 the device after a `daily` that succeeded, and of its back view when the
 collection has one, weighed as `sprite_colours.py` (above) says, and sends
 nothing; it exits 1 with no state, no readable front GIF, a config it cannot
-read or the colour tool failing, 2 for bad usage or config. The user's
-LaunchAgent runs it after each successful swap and hands the line to the
-keyboard (canon t-0967, daily since 2026-10-21).
+read or the colour tool failing, 2 for bad usage or config. A LaunchAgent
+that runs it after each successful swap and hands the line to the keyboard
+is in zmk-lantern's README (The host: every morning).
 
 No line the sender logs names a GIF, the sprite, the name's length or a GIF's
 number: a number, or a rare length matched against the public list of names,

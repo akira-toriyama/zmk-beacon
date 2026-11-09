@@ -4,8 +4,9 @@
   sprite_colours.py [--count N] <front.gif> [<back.gif>]
 
 Prints one line of COUNT (or N) words, RRGGBB each, the colour to light the
-keys with first: canon's `dongle.py palette` takes the line's words as
-slots 0.. (its t-0967). Nothing it prints names a GIF. Standard library
+keys with first: zmk-lantern's `tools/lantern_port.py palette` takes the
+line's words as slots 0.. (and canon's `dongle.py palette`, its t-0967).
+Nothing it prints names a GIF. Standard library
 only, Python 3.9. Exit 0; 2 for bad usage (more than two GIFs among it), a
 file that is no GIF, or GIFs that show nothing.
 
