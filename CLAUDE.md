@@ -128,8 +128,11 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   never the old `zmk-beacon` (canon t-g1p7, 2026-11-09; a rename moves all
   four together, canon's `build-zmk.sh --module` matches the module.yml name
   against its west project). The sprite sender's bundle id followed
-  (`com.zmk-vfx-beacon.sprite-sender`), so the Mac asked for Bluetooth again
-  once.
+  (`com.zmk-vfx-beacon.sprite-sender`), and the Bluetooth grant did not move
+  with it: macOS's TCC judged every request by its responsible process, the
+  wrapper's bash (`/nix/store/…-bash-5.3p9/bin/bash`) in the 06:00 run and VS
+  Code for a run from its terminal, both allowed, the app only the requesting
+  process (the unified log, `subsystem == "com.apple.TCC"`, 2026-11-09).
 - Tasks: on canon's board for now (`furrow list -r canon`; epic e-exg9, the
   module made general for other keyboards, 2026-11-09; before it e-3sm7; the
   2026-09-29 refactor: epic e-vgt5).
