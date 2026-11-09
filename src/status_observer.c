@@ -48,8 +48,6 @@
 
 LOG_MODULE_REGISTER(beacon_observer, LOG_LEVEL_INF);
 
-BUILD_ASSERT(IS_ENABLED(CONFIG_BT_OBSERVER), "the status observer needs CONFIG_BT_OBSERVER=y");
-
 #define SCAN_RETRY_MS 1000
 #define LOG_PERIOD_MS 60000
 /* A larger difference in one payload is the keyboard's counter starting over

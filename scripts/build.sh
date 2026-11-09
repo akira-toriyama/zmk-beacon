@@ -15,9 +15,10 @@
 #
 # --logging and --sprite build the prospector shield only: without a target
 # the run takes build.yaml's prospector, and a run that names another target
-# stops (corne_left, the broadcaster's check: its nice!nano has no CDC ACM node
-# for the log, and the sprite is the prospector shield's). --kconfig, --tag
-# and --update with no target build both images.
+# stops (corne_left and reviung41, the broadcaster's checks: their nice!nano
+# has no CDC ACM node for the log, and the sprite is the status screen's,
+# which only the prospector shield turns on). --kconfig, --tag and --update
+# with no target build every image.
 #
 # Options (local builds only: CI and releases build the plain image):
 #   --logging         USB CDC logging: CONFIG_ZMK_USB_LOGGING=y, a 4 KiB CDC ring
@@ -41,7 +42,8 @@
 #                     one more Kconfig line, merged after the sprite and logging
 #                     lines. Repeatable; the images carry -kconfig.
 #                     CONFIG_BEACON_SPRITE_* go only through --sprite and
-#                     --sprite-name, and nothing that turns the display off
+#                     --sprite-name, and nothing that turns the status screen
+#                     off (ZMK's display lines, CONFIG_BEACON_SCREEN, CONFIG_BT)
 #                     combines with --sprite.
 #   --tag <name>      appended to the build directory and the image name.
 #   --update          west update before building: moves zmk@main and its modules.
@@ -164,8 +166,10 @@ for kv in ${KCONFIG[@]+"${KCONFIG[@]}"}; do
   case "$kv" in
     *$'\n'*) die 2 "--kconfig takes one line" ;;
     CONFIG_BEACON_SPRITE_*) die 2 "--kconfig: CONFIG_BEACON_SPRITE_* go only through --sprite and --sprite-name" ;;
-    CONFIG_ZMK_DISPLAY=* | CONFIG_ZMK_DISPLAY_*)
-      # The sprite needs the custom status screen.
+    CONFIG_ZMK_DISPLAY=* | CONFIG_ZMK_DISPLAY_* | CONFIG_BEACON_SCREEN=* | CONFIG_BT=*)
+      # The sprite needs the status screen (BEACON_SCREEN), which needs ZMK's
+      # custom status screen and Bluetooth: a line that turns one off drops
+      # the sprite with a mere Kconfig warning.
       if [ -n "$SPRITE" ]; then die 2 "--kconfig: ${kv%%=*} does not combine with --sprite"; fi
       ;;
     CONFIG_?*=?*) ;;

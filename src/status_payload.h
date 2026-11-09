@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: MIT
  *
  * The status payload: 26 bytes of BLE manufacturer data, written by
- * status_broadcaster.c on the keyboard's split central and read by
- * status_observer.c on the Prospector Dongle. The byte offsets are
+ * status_broadcaster.c on the device that runs the keyboard's keymap and read
+ * by status_observer.c on the Prospector Dongle. The byte offsets are
  * prospector-zmk-module v2.2.3's layout (include/zmk/status_advertisement.h
  * there, CENTRAL_SIDE="AUX"). Only the fields below are written and read;
  * every other byte stays 0. A new layout is a new version byte (canon task
@@ -31,12 +31,17 @@
 #define BEACON_PAYLOAD_OFFSET_VERSION 4
 #define BEACON_PAYLOAD_VERSION 0x22
 
-/* Battery of each half in percent, 0 = no reading. Left = ZMK split slot 0,
- * right = slot 1: a slot is the order the central first heard each half in,
- * before pairing, kept in its settings (ZMK's zmk_ble_put_peripheral_addr();
- * canon CLAUDE.md, "slot index"; on canon's dongle left/right measured
- * 2026-09-27 by powering each half off). A central half has one peripheral,
- * in slot 0 whichever half it is. */
+/* Battery of each half in percent, 0 = no reading: the broadcaster's own
+ * level in the byte BEACON_OWN_BATTERY names (by default the left, and none
+ * on a split central with more than one peripheral, a dongle), and ZMK's
+ * split slots in the others, slot 0 first (status_broadcaster.c). A dongle
+ * sends none of its own: left = slot 0, right = slot 1. A slot is the order
+ * the central first heard each half in, before pairing, kept in its settings
+ * (ZMK's zmk_ble_put_peripheral_addr(); canon CLAUDE.md, "slot index"; on
+ * canon's dongle left/right measured 2026-09-27 by powering each half off).
+ * A central half with one peripheral has it in slot 0 whichever half it is.
+ * The field's meaning grew from the peripherals to the broadcaster's own
+ * level without a new version byte (canon task t-r9dt): 0 stays no reading. */
 #define BEACON_PAYLOAD_OFFSET_LEFT 5
 #define BEACON_PAYLOAD_OFFSET_RIGHT 12
 
@@ -46,7 +51,8 @@
 #define BEACON_PAYLOAD_OFFSET_LAYER_NAME 15
 #define BEACON_PAYLOAD_LAYER_NAME_LEN 4
 
-/* Keystrokes: key presses on either half, any key, counted modulo 256. The
+/* Keystrokes: key presses, any key, either half's on a split, counted modulo
+ * 256. The
  * observer takes the difference between consecutive payloads, so a lost
  * payload loses no press and a payload that replaced one not yet on air
  * carries both. The field took over the layout's wpm_value byte without a new

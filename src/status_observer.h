@@ -15,8 +15,10 @@
 struct beacon_status {
     /* False until the first valid status payload arrives. */
     bool received;
-    /* Battery of each half in percent; 0 = no reading (the half has not
-     * reported since it connected, or it is disconnected). */
+    /* The payload's left and right battery in percent (status_payload.h);
+     * 0 = no reading: a half not reported since it connected or gone, the
+     * central's own level not sampled yet, or a byte nothing fills (a
+     * dongle's own, a keyboard that is not a split's right one). */
     uint8_t left;
     uint8_t right;
     /* k_uptime_get() of the last valid payload. */

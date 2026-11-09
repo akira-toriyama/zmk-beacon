@@ -6,8 +6,8 @@ the **Prospector Dongle**, a Seeed XIAO nRF52840 with a Waveshare 1.69"
 [beekeeb pre-soldered Prospector](https://shop.beekeeb.com/products/pre-soldered-prospector-zmk-dongle))
 that sits next to a keyboard and shows its battery as an HP bar under a
 sprite, and the broadcaster that sends the advertisement from the keyboard's
-split central, a dongle or the half that is the central (a keyboard that is
-not a split has no central and cannot send it). The Prospector Dongle
+central, the device that runs the keymap: a split's central (a half or a
+dongle), or the keyboard itself when it is not a split. The Prospector Dongle
 listens passively for the keyboard and advertises connectably for the
 sprite, which a Mac can swap over BLE; it never pairs. Its USB-C carries
 power and one serial port, used to reflash it, to take a picture of its
@@ -64,15 +64,17 @@ per-key LEDs, is the lantern.
    missing from an older broadcaster while a newer Prospector Dongle still
    accepts its payload.
 
-2. The keyboard: three lines in the split central's own conf, the central
-   half's (`config/corne_left.conf` for ZMK's Corne, whose left half is the
+2. The keyboard: three lines in the central's own conf, the central half's
+   (`config/corne_left.conf` for ZMK's Corne, whose left half is the
    central by its shield's default) or the dongle's
-   (`config/<shield>_dongle.conf`). ZMK merges every conf whose name
-   prefixes the shield (`corne.conf` and `corne_left.conf` for
-   `corne_left`), so the central's own conf reaches the central alone; on a
-   peripheral, or on a keyboard that is not a split, the three lines drop
-   out with Kconfig warnings, since the broadcaster and the fetching exist
-   only on a split central.
+   (`config/<shield>_dongle.conf`), and the first two in the conf of a
+   keyboard that is not a split (`config/reviung41.conf` for ZMK's
+   Reviung41). ZMK merges every conf whose name prefixes the shield
+   (`corne.conf` and `corne_left.conf` for `corne_left`), so the central's
+   own conf reaches the central alone; on a peripheral the lines drop out
+   with Kconfig warnings, since the broadcaster exists only on the central,
+   and so does the third on a keyboard that is not a split, since the
+   fetching exists only on a split central.
 
    ```
    CONFIG_BEACON_STATUS_BROADCAST=y
@@ -83,18 +85,30 @@ per-key LEDs, is the lantern.
    The first builds the broadcaster. The second is required with it: the
    broadcaster selects `CONFIG_BT_EXT_ADV`, under which ZMK's own
    connectable advertising takes one set of the same pool, whose default is
-   1 (asserted at build time). The third is the batteries: the payload's
-   battery bytes are ZMK's peripheral battery events, which a central raises
-   only with this line, off by ZMK's default; without it the build passes
-   and the Prospector Dongle shows an empty bar and `--/100` (read from the
-   code, not tried). The batteries are a choice: the broadcaster works
-   without the line (the key presses and the modifiers, which the screen and
-   the sprite follow), and the bar then stays `--/100`. ZMK's
-   `CONFIG_ZMK_BATTERY_REPORTING` stays on, its default with BLE (the
-   broadcaster subscribes to an event ZMK compiles only with it). The bar
-   shows the central's peripherals, never the central's own battery: on a
-   keyboard whose central is a half it is the other half's level, and the
-   mean of both halves needs a dongle as the central.
+   1 (asserted at build time). The third is the halves' batteries on a
+   split: ZMK's peripheral battery events, which a central raises only with
+   this line, off by ZMK's default; without it the build passes and the
+   halves' readings stay empty, so a dongle's Prospector Dongle shows an
+   empty bar and `--/100` (read from the code, not tried). The batteries are
+   a choice: the broadcaster works without the line (the key presses and the
+   modifiers, which the screen and the sprite follow).
+
+   The payload carries two batteries, the left half's and the right half's.
+   A keyboard that is not a split, and a split central with one peripheral,
+   a central half, send their own level, ZMK's battery level
+   (`CONFIG_ZMK_BATTERY_REPORTING`, on by default with BLE; without it no
+   battery is sent at all, and ZMK's own split code does not link with the
+   third line), as the left half's, and the half the central connects to
+   fills the other: so the bar is the mean of both halves on a keyboard
+   whose central is a half, and the keyboard's own level on one that is not
+   a split. A split central with two peripherals or more, a dongle, sends
+   none of its own: its first two fill both, in the order it first heard
+   them. A keyboard whose central is its right half adds
+   `CONFIG_BEACON_OWN_BATTERY_RIGHT=y` (its left half then fills the left
+   one); a dongle with one peripheral adds
+   `CONFIG_BEACON_OWN_BATTERY_NONE=y`, and a central half with two
+   peripherals or more `CONFIG_BEACON_OWN_BATTERY_LEFT=y` or `_RIGHT=y`,
+   which leaves its second peripheral out.
 
    ZMK `main` compiles the fetching with a write it does not bounds-check
    ([zmk#3522](https://github.com/zmkfirmware/zmk/issues/3522); the fix,
@@ -109,11 +123,13 @@ per-key LEDs, is the lantern.
    carries the bug until the fix merges.
 
    The broadcaster has run only on a USB-powered dongle with no Bluetooth
-   host; on a central half like the Corne's, next to a host over Bluetooth
-   and on battery, it is built, not tried. The advertisement goes out in
-   plaintext to anyone in range; what it tells, and the untried cases, are
-   in The status advertisement, below. The check build's conf is these
-   three lines, [config/corne_left.conf](config/corne_left.conf); canon's
+   host; on a central half like the Corne's, on a keyboard that is not a
+   split like the Reviung41, next to a host over Bluetooth and on battery,
+   it is built, not tried. The advertisement goes out in plaintext to anyone
+   in range; what it tells, and the untried cases, are in The status
+   advertisement, below. The check builds' confs are these three lines,
+   [config/corne_left.conf](config/corne_left.conf), and the first two,
+   [config/reviung41.conf](config/reviung41.conf); canon's
    [config/imprint_dongle.conf](https://github.com/akira-toriyama/canon/blob/main/config/imprint_dongle.conf)
    carries them on a dongle, beside lines that only canon's ZMK and Zephyr
    patches define and canon's own choices: take the three lines from it,
@@ -139,10 +155,16 @@ per-key LEDs, is the lantern.
    second shield of a keyboard's build (its conf would turn the keyboard's
    split off, and its scan and its advertising would take what a central
    needs; read from the code). A Prospector that is today a keyboard's
-   dongle, as other Prospector modules make it, needs another split central
-   first: a dongle, or a central half. A `config/prospector.conf` in the
+   dongle, as other Prospector modules make it, needs another central first:
+   a dongle, or a central half (a keyboard that is not a split is its own).
+   A `config/prospector.conf` in the
    config repository overrides any line of the shield's own
-   `prospector.conf` (Then, as you want them, below); none is needed.
+   `prospector.conf` (Then, as you want them, below); none is needed. The
+   screen itself is `CONFIG_BEACON_SCREEN`, which the shield turns on;
+   another display device that is not a keyboard can take it in its own
+   conf, with ZMK's custom status screen and Bluetooth, and the screen's
+   options follow it (the option's help says what each needs; read from the
+   code: the shield is the only display it has run on).
 
 4. Flashing. Both devices take a UF2 image. The Prospector Dongle's first
    flash is the double-tap (the 1200 baud entry below exists once this
@@ -169,9 +191,11 @@ per-key LEDs, is the lantern.
    (`CONFIG_BEACON_SCREEN_OFF_AFTER_S`, default 300; `=0` in
    `config/prospector.conf` keeps it lit); the first key press the keyboard
    reports lights it. With the keyboard heard, `HP` turns from grey to gold,
-   the bar stays empty with `--/100` until a half's reading arrives (the
-   third line of the keyboard's conf, above), and then fills in colour (The
-   screen, below).
+   the bar stays empty with `--/100` until a battery reading arrives, and
+   then fills in colour (The screen, below). The central's own reading comes
+   at its first battery sample; a half's that the central connects to, a
+   dongle's two or a central half's other half, comes only with the third
+   line of the keyboard's conf, above.
 
 ### Then, as you want them
 
@@ -254,12 +278,13 @@ left half the central with the three lines, the 1200 baud entry and
 zmk-lantern, built green by ZMK's workflow
 ([the run](https://github.com/akira-toriyama/zmk-config-lantern-check/actions/runs/42452649801)):
 the central half's `.config` lists the broadcaster's lines, the right
-half's none of them. This repository's own check is the stock Corne left
+half's none of them. This repository's own checks are the stock Corne left
 half with the three lines alone
 ([config/corne_left.conf](config/corne_left.conf); no port, no 1200 baud
-entry, no zmk-lantern), built with the Prospector Dongle by its own
-reusable workflow, which runs the same west build as ZMK's (Building this
-repository, below).
+entry, no zmk-lantern) and the stock Reviung41 with the first two
+([config/reviung41.conf](config/reviung41.conf)), built with the Prospector
+Dongle by its own reusable workflow, which runs the same west build as
+ZMK's (Building this repository, below).
 
 ## Pokémon sprites
 
@@ -427,7 +452,7 @@ another repository of such files with its commit (`sprites_repo`,
 unless `name` is given.
 
 The keyboard is the same for every route: the bar shows its battery once
-the split central broadcasts (The least, the keyboard); until then the
+the central broadcasts (The least, the keyboard); until then the
 screen shows a grey `HP` and `--/100`, and the default image, a local
 build's too, goes dark five minutes after boot without a key press (The
 least, step 4), where the Actions route's stays lit (A sprite image from
@@ -438,10 +463,10 @@ GitHub Actions, below).
 ### The screen
 
 One battle-screen HP bar in a dark box along the bottom: `HP` and a bar with
-its value on it (`65/100`). Its length is the battery of the central's
-peripherals: on a dongle the mean of both halves' readings, or the one half
-that has a reading; on a central half the other half's level alone (the
-central's own is never sent). The bar is green, yellow under 50 % and red
+its value on it (`65/100`). Its length is the keyboard's battery: the mean
+of the payload's two batteries, or the one that has a reading (a dongle's
+two halves; a central half's own and the other half's; the keyboard's own
+when it is not a split). The bar is green, yellow under 50 % and red
 under 20 %. A build that plays a named sprite (a received pack's name, or
 `CONFIG_BEACON_SPRITE_NAME`, `--sprite-name`, for the embedded one) shows
 its name on the box's first row, centred, above `HP` and the bar: an ASCII
@@ -454,15 +479,15 @@ bytes of UTF-8, all printable ASCII or all katakana: 15 ASCII characters, or
 
 | Shows | Meaning |
 | --- | --- |
-| A coloured bar and `65/100` | The battery of the central's peripherals (on a central half, the other half's alone), from a status advertisement received in the last minute. |
-| An empty bar and `--/100` | The keyboard is heard, but no peripheral has a reading (on a central half, the other half): off or out of range, not reported since it connected, or the central does not fetch the batteries (the third line of The least, the keyboard). |
+| A coloured bar and `65/100` | The keyboard's battery (above), from a status advertisement received in the last minute. |
+| An empty bar and `--/100` | The keyboard is heard, but neither battery has a reading: none of the central's own (a dongle sends none; a central without a battery reading has none yet) and none of the halves (off or out of range, not reported since they connected, or not fetched by the central: the third line of The least, the keyboard). |
 | Grey `HP` and `--/100` | No status advertisement in the last minute, or none since the Prospector Dongle started; a broadcaster of another payload version counts as none. |
 | Nothing: the screen is dark | No key press on the keyboard for five minutes. |
 
 The screen turns off when the keyboard has not been typed on for five minutes
 (`CONFIG_BEACON_SCREEN_OFF_AFTER_S`, default 300; 0 keeps it lit): the
-backlight fades out within a second, and the next key press, either half, any
-key, lights it at once. Only the keyboard's key presses count, so the screen
+backlight fades out within a second, and the next key press, any key, either
+half's on a split, lights it at once. Only the keyboard's key presses count, so the screen
 also goes dark while only a pointing device is in use, and five minutes after
 the Prospector Dongle started when no key press has reached it by then.
 
@@ -474,19 +499,23 @@ build with a named embedded sprite.
 
 ### The status advertisement
 
-What the keyboard's split central sends and the Prospector Dongle reads: 26
+What the keyboard's central sends and the Prospector Dongle reads: 26
 bytes of manufacturer data in a legacy, non-connectable, non-scannable
 advertisement on a second advertising set next to ZMK's own, every 200 ms
 for as long as the central runs. A key press, a confirmed modifier and its
 release refresh the payload, which goes on air at the next advertising
 event (at most about 210 ms later) and adds no advertisement. The layout is
 [src/status_payload.h](src/status_payload.h), prospector-zmk-module v2.2.3's
-offsets under the same prefix and version byte. The fields written: each
-peripheral's battery (ZMK's peripheral slots 0 and 1, in the order the
-central first heard them: a dongle's two halves; a central half's one, the
-other half, in slot 0, and its own never; 0 for no reading), the highest
+offsets under the same prefix and version byte. The fields written: two
+batteries, the left half's and the right half's, 0 for no reading (the
+central's own level in the one `CONFIG_BEACON_OWN_BATTERY` names, the left
+by default and neither on a split central with two peripherals or more, a
+dongle; its peripherals in the others, in ZMK's slot order, the order the
+central first heard them: a dongle's two halves; a central half's own and
+the other half's; the keyboard's own when it is not a split), the highest
 active layer's index and the first four bytes of its name, a count of key
-presses (every key of either half, modulo 256) and the modifiers held, once
+presses (every key, either half's on a split, modulo 256) and the modifiers
+held, once
 a hold is confirmed (pressed for 0.2 s, or a non-modifier key pressed under
 it; a layer key or another modifier confirms nothing), each kept on air
 until 0.25 s after its confirmation even when released sooner. Nothing
@@ -507,14 +536,14 @@ the code, not tried).
 
 The cost on the central: `CONFIG_BT_EXT_ADV`, about 34 KB of flash and 11 KB
 of RAM on an nRF52840, and the host on the extended HCI commands; no
-Bluetooth connection, and no set of ZMK's. With it the central's scan for
-its halves is an extended scan that follows nearby AuxPtr fields, and ZMK's
-Zephyr fork lacks upstream 5ce9d0c621, so an invalid AuxPtr channel index
-can trip a controller assert while a half is away (read from the code,
-never seen). The one central it has run on is
-a USB-powered dongle with no Bluetooth host: on a central half, next to a
-host connected over Bluetooth, and on battery, it is built and untried, and
-its draw on a battery is unmeasured.
+Bluetooth connection, and no set of ZMK's. With it a split central's scan
+for its halves is an extended scan that follows nearby AuxPtr fields, and
+ZMK's Zephyr fork lacks upstream 5ce9d0c621, so an invalid AuxPtr channel
+index can trip a controller assert while a half is away (read from the
+code, never seen). The one central it has run on is a USB-powered dongle
+with no Bluetooth host: on a central half, on a keyboard that is not a
+split, next to a host connected over Bluetooth, and on battery, it is built
+and untried, and its draw on a battery is unmeasured.
 
 ### The serial port
 
@@ -569,7 +598,8 @@ embedded one, else nothing until a pack arrives.
 While nobody types it plays at three quarters of the GIF's own tempo and stops
 only while the screen is off. While the keyboard is typed on it runs on the key
 presses instead: every
-press, either half, any key, queues eight visibly different frames. A render
+press, any key, either half's on a split, queues eight visibly different
+frames. A render
 steps one of them while the queue holds one press's worth or less, and several
 at a time (skipping frames, so the sprite runs faster) as presses pile up.
 0.2 s after the last press arrived, the frames still queued are dropped and
@@ -866,24 +896,24 @@ taller) or the linker (``region `FLASH' overflowed``; Limits, above).
 
 | Path | What |
 | --- | --- |
-| `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device. `prospector.conf` holds the defaults a consumer can override. |
+| `boards/shields/prospector/` | The shield: ST7789V panel over SPI3, PWM backlight on D6 (P1.11), a dummy kscan (ZMK needs one), one USB CDC ACM port and no HID device, with the status screen on (`CONFIG_BEACON_SCREEN`). `prospector.conf` holds the defaults a consumer can override. |
 | `src/status_observer.c` | The BLE observer. It brings Bluetooth up itself (`CONFIG_ZMK_BLE=n` in the shield, so ZMK never advertises), scans passively without a duplicate filter, and reads each half's battery, the key press count and the modifiers held from the status payload. The scan pauses while the sprite receiver has a central connected. |
 | `src/ble_receiver.c` | `CONFIG_BEACON_SPRITE_RECEIVE`: advertises connectably, takes a sprite pack over one GATT service into the sprite room (the shield overlay's `sprite_partition`, 384 KiB), shows it, and gives it back at boot. The protocol is its header. |
-| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on a keyboard's split central, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press, a modifier confirmed as held (held 0.2 s, the broadcaster's fixed confirm time, or a non-modifier key pressed under it) and its release refresh the payload for the next advertising event. |
+| `src/status_broadcaster.c` | `CONFIG_BEACON_STATUS_BROADCAST`: on the keyboard's central, a split's or the keyboard itself when it is not a split, sends the status payload as manufacturer data on a second, legacy, non-connectable advertising set next to ZMK's own, every 200 ms; a key press, a modifier confirmed as held (held 0.2 s, the broadcaster's fixed confirm time, or a non-modifier key pressed under it) and its release refresh the payload for the next advertising event. |
 | `src/status_payload.h` | The payload both sides share: 26 bytes at prospector-zmk-module v2.2.3's offsets, of which the battery bytes, the active layer's index and name, the key press counter and the modifier byte are used. |
-| `src/prospector_screen.c` | ZMK custom status screen (LVGL 9): the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that an embedded GIF fits. |
-| `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on the row above; and the mapping of both halves' batteries to its one level. |
+| `src/prospector_screen.c` | `CONFIG_BEACON_SCREEN`: ZMK custom status screen (LVGL 9), the HP bar along the bottom and the sprite above it, fed the observer's state every 500 ms; checks at compile time that an embedded GIF fits. |
+| `src/hp_bar.c`, `src/hp_bar.h` | The HP bar: `HP`, the bar with its value and, with the name row, the playing sprite's name on the row above; and the mapping of the payload's two batteries to its one level. |
 | `src/sprite.c`, `src/sprite_pack.c` | `CONFIG_BEACON_SPRITE`: the sprite pack player, with a tempo, eight frames per key press, one invalidation per changed picture, an endless loop, the back view while a modifier is held, and its own nearest-neighbour draw into the display buffer; it plays the room's pack, the embedded one or a received one, and names the HP bar. The pack's reader and inflater are plain C that also compiles on the host. |
 | `src/bootloader_on_1200_baud.c` | `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`: setting the serial port to 1200 baud reboots the device into its UF2 bootloader. On by default for the shield; a keyboard's central turns it on in its conf (Then, as you want them). |
 | `src/screen_dump.c` | `CONFIG_BEACON_SCREEN_DUMP`: setting the serial port to 2400 baud makes the device render its screen once more and send it over the port, band by band, with a CRC-32. On by default for the shield. |
 | `src/screen_off.c` | `CONFIG_BEACON_SCREEN_OFF_AFTER_S`: fades the backlight out and blanks the panel once no key press has arrived for that long, and lights both at the next key press. The screen keeps being drawn while it is dark; only the sprite stands still. |
 | `src/backlight.c` | Lights the backlight (`CONFIG_BEACON_BACKLIGHT_BRIGHTNESS`) at boot, before LVGL and ZMK's display start, and sets it for `src/screen_off.c`. |
-| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_SCREEN_DUMP`, `BEACON_SCREEN_OFF_AFTER_S`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_SPRITE_RECEIVE`, `BEACON_STATUS_BROADCAST`. |
+| `Kconfig` | The `BEACON_*` options: `BEACON_BACKLIGHT_BRIGHTNESS`, `BEACON_BOOTLOADER_ON_1200_BAUD`, `BEACON_OWN_BATTERY`, `BEACON_SCREEN`, `BEACON_SCREEN_DUMP`, `BEACON_SCREEN_OFF_AFTER_S`, `BEACON_SPRITE_GIF`, `BEACON_SPRITE_NAME`, `BEACON_SPRITE_RECEIVE`, `BEACON_STATUS_BROADCAST`. |
 
 ## Building this repository
 
 ```sh
-./scripts/build.sh              # every target in build.yaml: firmware/prospector.uf2 and firmware/corne_left.uf2
+./scripts/build.sh              # every target in build.yaml: firmware/prospector.uf2, corne_left.uf2 and reviung41.uf2
 ./scripts/build.sh prospector   # one
 ./scripts/build.sh --logging    # firmware/prospector-logging.uf2: the log on the serial port
 ./scripts/build.sh --sprite ~/a.gif --sprite-name "A"  # firmware/prospector-sprite.uf2 (local only)
@@ -900,14 +930,17 @@ shield only: without a target the run takes build.yaml's `prospector`, and a
 run that names another target stops.
 
 The images are build checks as much as firmware: `prospector.uf2`, the
-Prospector Dongle's image and the one the release attaches, and
-`corne_left.uf2`, the broadcaster on ZMK's stock split central, the Corne's
-left half on the nice!nano, with the three lines of The least
-([config/corne_left.conf](config/corne_left.conf)): built so that a change
-which breaks the broadcaster on stock ZMK fails here (CI also checks that
-every `CONFIG_` line of `config/<shield>.conf`, here `config/corne_left.conf`,
-took, since Zephyr only warns about one that does not), never attached to a
-release, never run on hardware. CI
+Prospector Dongle's image and the one the release attaches; `corne_left.uf2`,
+the broadcaster on ZMK's stock split central, the Corne's left half on the
+nice!nano, with the three lines of The least
+([config/corne_left.conf](config/corne_left.conf)); and `reviung41.uf2`, the
+broadcaster on ZMK's stock Reviung41 on the nice!nano, a keyboard that is
+not a split, with the first two
+([config/reviung41.conf](config/reviung41.conf)). The last two are built so
+that a change which breaks the broadcaster on stock ZMK fails here (CI also
+checks that every `CONFIG_` line of `config/<shield>.conf` took, since Zephyr
+only warns about one that does not), never attached to a release, never run
+on hardware. CI
 builds every `build.yaml` target on pull requests and on `main`, and once a
 week against the current ZMK `main`, nothing patched. Every push to `main`
 refreshes one rolling draft release with `prospector.uf2` attached, and it

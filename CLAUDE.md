@@ -8,23 +8,27 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
 - A ZMK module for both ends of the status advertisement: the **Prospector
   Dongle** (shield `prospector`: a BLE observer showing the keyboard's battery as
   an HP bar under a sprite, which a Mac swaps over BLE into the sprite room,
-  `CONFIG_BEACON_SPRITE_RECEIVE`) and the broadcaster for a keyboard's split
-  central (`CONFIG_BEACON_STATUS_BROADCAST`; canon's **Imprint Dongle** is the
-  one on hardware). Device names follow canon's
+  `CONFIG_BEACON_SPRITE_RECEIVE`) and the broadcaster for a keyboard's
+  central, a split's or the keyboard itself when it is not a split
+  (`CONFIG_BEACON_STATUS_BROADCAST`; canon's **Imprint Dongle** is the one on
+  hardware). Device names follow canon's
   [docs/glossary.md](https://github.com/akira-toriyama/canon/blob/main/docs/glossary.md):
   Cyboard Imprint (the halves), Imprint Dongle (the split central), Prospector
   Dongle; never "XIAO dongle" or "scanner".
 - Two roles in one tree ([config/west.yml](config/west.yml)): a Zephyr module
   (`zephyr/module.yml`, `boards/`, `src/`, `Kconfig`, `CMakeLists.txt`) and the
   zmk-config (`config/`, `build.yaml`) that CI and [scripts/build.sh](scripts/build.sh)
-  build: the Prospector Dongle's image, and the broadcaster's check build, ZMK's
-  Corne on the nice!nano with its left half the central and README's three
-  lines in `config/corne_left.conf` (canon t-4hw7, 2026-11-08), so that CI
-  compiles the broadcaster on a stock split central against unpatched ZMK
-  `main` and a change that breaks it there fails here first. That image is
-  built, never attached to a release (release.yml's asset guard names it) and
-  never run on hardware: canon's Imprint Dongle stays the one broadcaster on
-  hardware, built with canon's ZMK patches and two peripherals.
+  build: the Prospector Dongle's image, and the broadcaster's check builds,
+  ZMK's Corne on the nice!nano with its left half the central and README's
+  three lines in `config/corne_left.conf` (canon t-4hw7, 2026-11-08), and
+  ZMK's Reviung41 on the nice!nano, a keyboard that is not a split, with the
+  first two in `config/reviung41.conf` (canon t-r9dt, 2026-11-09), so that CI
+  compiles the broadcaster on a stock split central and on a stock keyboard
+  that is not a split against unpatched ZMK `main` and a change that breaks
+  it there fails here first. Those images are built, never attached to a
+  release (release.yml's asset guard names them) and never run on hardware:
+  canon's Imprint Dongle stays the one broadcaster on hardware, built with
+  canon's ZMK patches and two peripherals.
 - Three repositories pin this one by commit SHA. [canon](https://github.com/akira-toriyama/canon),
   the one keyboard on hardware, for both dongles (its
   `config/imprint_dongle.conf`: `CONFIG_BEACON_STATUS_BROADCAST=y`,
@@ -118,7 +122,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   assuming its runs stopped before the send, one with a stub patch that failed
   without stopping the script). For the path past `--dry-run`, stub `Sender` in
   a copy and check that the stub took. `report` only reads.
-- Tasks: on canon's board for now (`furrow list -r canon`, epic e-3sm7; the
+- Tasks: on canon's board for now (`furrow list -r canon`; epic e-exg9, the
+  module made general for other keyboards, 2026-11-09; before it e-3sm7; the
   2026-09-29 refactor: epic e-vgt5).
 
 ## Build
@@ -128,14 +133,15 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   (flags: its header). Docker, workspace `$ZMK_WS` (default `~/.cache/zmk-beacon`),
   images `firmware/<shield>[-sprite][-logging][-kconfig][-<tag>].uf2`, then a
   summary (sha256 prefix, FLASH, RAM, revisions). `--update` moves zmk@main.
-  With no target it builds both build.yaml images, `prospector.uf2` and
-  `corne_left.uf2` (`--kconfig`, `--tag` and `--update` keep both);
-  `--logging` and `--sprite` build the `prospector` shield only (without a
-  target the run takes build.yaml's `prospector`; a named other target stops
-  it with exit 2): the nice!nano has no CDC ACM node for the log
-  (`CONFIG_ZMK_USB_LOGGING`'s select of `USB_CDC_ACM` would abort Kconfig;
-  read, not built), and the sprite options are the `prospector` shield's
-  (`BEACON_SPRITE_GIF` depends on it).
+  With no target it builds every build.yaml image, `prospector.uf2`,
+  `corne_left.uf2` and `reviung41.uf2` (`--kconfig`, `--tag` and `--update`
+  keep them all); `--logging` and `--sprite` build the `prospector` shield
+  only (without a target the run takes build.yaml's `prospector`; a named
+  other target stops it with exit 2): the nice!nano has no CDC ACM node for
+  the log (`CONFIG_ZMK_USB_LOGGING`'s select of `USB_CDC_ACM` would abort
+  Kconfig; read, not built), and the sprite options are the status screen's
+  (`BEACON_SPRITE_GIF` depends on `BEACON_SCREEN`, which only the
+  `prospector` shield turns on).
 - The west topdir is never the module root: `$RUNNER_TEMP/ws` in CI, `$ZMK_WS/ws`
   locally, the repository passed as `-DZMK_EXTRA_MODULES` (as ZMK's
   `build-user-config.yml` does). Never `west init` inside the repository.
@@ -149,9 +155,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
 - ZMK tracks `main`, never a tag: canon's Cyboard board needs zmk@main and this
   module compiles on the same tree; the weekly run of `build.yml` warns early.
 - Sizes (local Docker builds of every build.yaml target, ZMK main 4dd95d78
-  unpatched, 2026-11-08): `prospector.uf2` FLASH 283,992 B of the 356 KB code
+  unpatched, 2026-11-09): `prospector.uf2` FLASH 283,992 B of the 356 KB code
   partition (the sprite room cut from it), RAM 217,608 B of 256 KB;
-  `corne_left.uf2` FLASH 267,504 B of 792 KB, RAM 65,280 B. An embedded pack
+  `corne_left.uf2` FLASH 267,512 B of 792 KB, RAM 65,280 B; `reviung41.uf2`
+  FLASH 220,196 B of 792 KB, RAM 54,044 B. An embedded pack
   has what the code leaves: about 80 KB with the receiver, about 150 KB
   without (the code took 213,928 B without it, zmk main of 2026-11). Before
   the room, on the whole 788 KB (zmk 5b51501f, 2026-10-06): plain 25.30% /
@@ -159,15 +166,16 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   153x94 one with `--logging` 32.48% / 81.70%; the gifdec player's 84 KB
   sprite took 36.26% / 83.60% and 39.36% / 89.71% with logging (2026-10-04).
 - CI: `build.yml` → the local reusable `zmk-build.yml` (it says why not ZMK's),
-  every build.yaml target, the broadcaster's check among them;
+  every build.yaml target, the broadcaster's checks among them;
   `tools-test.yml` runs `tools/`' unit tests (Python on Ubuntu, the sprite
   sender's `swift build` and `swift test` on macOS).
   `release.yml` keeps a rolling draft release of `prospector.uf2`, tagged when
   published by hand; its Collect step is an allowlist that lets
-  `corne_left.uf2` be built and never attached, and a third build.yaml target
-  fails it until named there. Its draft job runs after a partial build
-  (`!cancelled()`, with a version job that succeeded), so a red corne_left no
-  longer leaves the draft's notes over an older `prospector.uf2`, and a
+  `corne_left.uf2` and `reviung41.uf2` be built and never attached, and a
+  fourth build.yaml target fails it until named there. Its draft job runs
+  after a partial build (`!cancelled()`, with a version job that succeeded),
+  so a red check build no longer leaves the draft's notes over an older
+  `prospector.uf2`, and a
   missing `prospector.uf2` still stops it (the `cp` under `set -e`).
   zmk-build.yml fails a leg when a `CONFIG_` line of `config/<shield>.conf` is
   not in the build's `.config` verbatim (an `=n` line when `.config` has a
@@ -175,9 +183,11 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   symbol whose dependencies are unmet): Zephyr only warns about a value that
   does not take, so a broadcaster whose dependency stopped being met would leave
   the check green and checking nothing (canon t-4hw7, 2026-11-08). A ruleset requires
-  `build / Build (xiao_ble/nrf52840/zmk, prospector)`; the check build's job is
-  `build / Build (nice_nano/nrf52840/zmk, corne_left)`, required only once the
-  ruleset names it (the ruleset edit is the user's).
+  `build / Build (xiao_ble/nrf52840/zmk, prospector)`; the check builds' jobs
+  are `build / Build (nice_nano/nrf52840/zmk, corne_left)` and
+  `build / Build (nice_nano/nrf52840/zmk, reviung41)`, required only once the
+  ruleset names them (the ruleset edit is the user's; neither was named on
+  2026-11-09).
 - The consumer's shape under ZMK's own CI is
   [zmk-config-lantern-check](https://github.com/akira-toriyama/zmk-config-lantern-check),
   zmk-lantern's check repository, a fork of ZMK's `unified-zmk-config-template`
@@ -198,8 +208,10 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   `bootloader_on_1200_baud.c` compiled; corne_right, a peripheral, has no
   broadcaster line. So the nice!nano central half takes the 1200 baud entry
   once it has a port (built, not tried on hardware). Its pin is bumped by hand
-  when README's least changes, never on each merge here (its build is the
-  proof that the recipe builds, not a gate). README's zmk#3522 caveat says the
+  when README's least changes the lines it carries for a split central, never
+  on each merge here (its build is the proof that the recipe builds, not a
+  gate; canon t-r9dt left it at e69d831: the Corne's three lines did not
+  change, only what the central half sends). README's zmk#3522 caveat says the
   fix zmk#3556 is open: true on 2026-11-08; when it merges, the caveat goes
   from README, the `BEACON_STATUS_BROADCAST` help, the header of
   `src/status_broadcaster.c` and the invariant on building canon's
@@ -217,7 +229,9 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   picture, and this repository's runs are public. Its first live run: canon
   t-hkc6 (2026-11-08). The template's README sends its readers to sections
   of this README by name (the flashing step, the keyboard's config, "The
-  sprite"): a heading change here is a template change in the same sitting
+  sprite") and says in a line which device sends the advertisement (the
+  keyboard's central since canon t-r9dt): a heading change here, or a change
+  to who sends it, is a template change in the same sitting
   (canon t-4hw7 renamed "Flashing" and "Using the module in a ZMK config";
   the template follows after the merge).
 
@@ -228,8 +242,9 @@ dongle's serial port is silent unless it runs a `--logging` image.
 
 | Goal | Command | Healthy result |
 | --- | --- | --- |
-| Prospector image from this tree | `./scripts/build.sh --logging` (the `prospector` shield alone: `--logging` and `--sprite` never take corne_left) | `images:` line with FLASH/RAM, `revisions: ... zmk-beacon <describe>` |
-| The broadcaster's check build from this tree: a stock split central, unpatched ZMK main, never flashed | `./scripts/build.sh corne_left` | `firmware/corne_left.uf2`; `build/corne_left/zephyr/.config` has `CONFIG_BEACON_STATUS_BROADCAST=y`, `CONFIG_BT_EXT_ADV=y`, `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`, `CONFIG_BT_CTLR_ADV_SET=2`, `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y`, `CONFIG_ZMK_BATTERY_REPORTING=y`, `CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=1`; `status_broadcaster.c.obj` linked, first in `.event_subscription` of its zmk.map; no warning beyond `Deprecated symbol KSCAN is enabled` (below; 2026-11-08) |
+| Prospector image from this tree | `./scripts/build.sh --logging` (the `prospector` shield alone: `--logging` and `--sprite` never take corne_left or reviung41) | `images:` line with FLASH/RAM, `revisions: ... zmk-beacon <describe>` |
+| The broadcaster's check build from this tree: a stock split central, unpatched ZMK main, never flashed | `./scripts/build.sh corne_left` | `firmware/corne_left.uf2`; `build/corne_left/zephyr/.config` has `CONFIG_BEACON_STATUS_BROADCAST=y`, `CONFIG_BEACON_OWN_BATTERY_LEFT=y`, `CONFIG_BT_EXT_ADV=y`, `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`, `CONFIG_BT_CTLR_ADV_SET=2`, `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y`, `CONFIG_ZMK_BATTERY_REPORTING=y`, `CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=1`; `status_broadcaster.c.obj` linked, first in `.event_subscription` of its zmk.map, which lists `zmk_event_sub_beacon_broadcasterzmk_battery_state_changed` among its four; no warning beyond `Deprecated symbol KSCAN is enabled` (below; 2026-11-08, the own battery 2026-11-09) |
+| The broadcaster's check build on a keyboard that is not a split: unpatched ZMK main, never flashed | `./scripts/build.sh reviung41` | `firmware/reviung41.uf2`; `build/reviung41/zephyr/.config` has `# CONFIG_ZMK_SPLIT is not set`, `CONFIG_BEACON_STATUS_BROADCAST=y`, `CONFIG_BEACON_OWN_BATTERY_LEFT=y`, `CONFIG_BT_EXT_ADV=y`, `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2`, `CONFIG_BT_CTLR_ADV_SET=2`, `CONFIG_ZMK_BATTERY_REPORTING=y`; `status_broadcaster.c.obj` first in `.event_subscription`, with the same four subscriptions; no warning beyond KSCAN's (2026-11-09) |
 | Both dongles' images against canon's exact tree (ZMK main at canon's cached commit, its patches, two peripherals): the broadcaster as it runs on hardware | canon: `./scripts/build-zmk.sh prospector imprint_dongle --module <this checkout> --logging` (`--beacon` until canon #267) | `revisions:` has `zmk-beacon <dir> @ <describe> (--module)`; the images carry `-beacon` |
 | Flash either dongle, no double-tap | canon: `./scripts/flash-dongle.sh <image.uf2>` (any directory; named `<device>.uf2` or `<device>-*.uf2`; `--dry-run` checks only) | last line `DONE <device> ... sha256=<the build summary's 12 hex>`, exit 0 |
 | Find the dongles | canon: `python3 scripts/dongle.py list` | each dongle with its `/dev/cu.*` port and `port free` |
@@ -335,23 +350,59 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   commit ([src/status_payload.h](src/status_payload.h)): an older observer then
   shows no data instead of wrong numbers; canon bumps its pin once.
 - Build canon's `imprint_dongle` against a change to the broadcaster, the
-  payload or their Kconfig before merging it (runbook row 3): CI's check build
-  compiles `src/status_broadcaster.c` on a stock central against unpatched ZMK
-  `main` (since canon t-4hw7; before it CI never compiled the file), but
+  payload or their Kconfig before merging it (runbook row 4): CI's check
+  builds compile `src/status_broadcaster.c` on a stock central (since canon
+  t-4hw7; before it CI never compiled the file) and on a stock keyboard that
+  is not a split (since canon t-r9dt) against unpatched ZMK `main`, but
   canon's dongle is the one on hardware, with canon's patches and two
   peripherals. Without `CONFIG_BT_EXT_ADV_MAX_ADV_SET=2` in the consumer a
   `BUILD_ASSERT` fails; without
   `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING` nothing fails and the
-  battery bytes stay 0, on purpose (the file's header: the key presses and the
-  modifiers work without it, and a central that takes Bluetooth hosts may
-  leave it off for zmk#3522), where zmk-lantern asserts it.
+  peripherals' battery bytes stay 0 (the byte `BEACON_OWN_BATTERY` names
+  still carries the central's own level), on purpose (the file's header: the
+  key presses and the modifiers work without it, and a central that takes
+  Bluetooth hosts may leave it off for zmk#3522), where zmk-lantern asserts
+  it.
 - Keep the broadcaster's listener ahead of ZMK's: it counts a press before a
   hold-tap or a combo captures it because ZMK calls listeners in link order and
   the module's objects link first (re-raised presses:
   [src/status_broadcaster.c](src/status_broadcaster.c)). After a ZMK bump, in a
-  broadcaster's build directory (canon's `imprint_dongle`, or `corne_left` here),
-  `grep -A1 '^ \.event_subscription$' zephyr/zmk.map | grep -o '([a-z_]*\.c\.obj)'
-  | head -1` prints `(status_broadcaster.c.obj)` (2026-09-29; corne_left 2026-11-08).
+  broadcaster's build directory (canon's `imprint_dongle`, or `corne_left` and
+  `reviung41` here), `grep -A1 '^ \.event_subscription$' zephyr/zmk.map | grep -o
+  '([a-z_]*\.c\.obj)' | head -1` prints `(status_broadcaster.c.obj)` (2026-09-29;
+  corne_left 2026-11-08; reviung41 2026-11-09).
+- **Gate a screen source or option on `BEACON_SCREEN`**, never on
+  `SHIELD_PROSPECTOR` (up to canon t-r9dt, 2026-11-09, the shield symbol gated
+  the sources and three options) nor on ZMK's `ZMK_DISPLAY_STATUS_SCREEN_CUSTOM`
+  alone: a keyboard that pins this module for the broadcaster may run another
+  module's custom status screen (a nice!view's), where a gate on ZMK's choice
+  would link a second `zmk_display_status_screen()` (read from the code). The
+  shield's `Kconfig.defconfig` turns it on, with the other module options the
+  device takes, by `configdefault`, never `config`: a second definition ORs
+  its `if SHIELD_PROSPECTOR` into the option's dependencies, which then never
+  fail on the prospector (the review of canon t-r9dt found it). So a
+  display-off prospector (`--kconfig CONFIG_ZMK_DISPLAY=n`) builds with the
+  screen, the dump, the receiver and the observer role all off (2026-11-09).
+  The change left `prospector.uf2` the same to the byte (sha256 691ad0dc499a,
+  ZMK 4dd95d78) and its `.config` one line longer (`CONFIG_BEACON_SCREEN=y`).
+  It selects `BT_OBSERVER`, which the shield conf set by hand before. The backlight is LED 0 of an okay
+  `pwm-leds` node, built only with `LED_PWM` (CMakeLists.txt), so a display
+  without one builds the screen without the backlight and the screen-off
+  time (read from the code; no other display has run it).
+- **The battery bytes: the central's own level in the byte
+  `BEACON_OWN_BATTERY` names, its peripherals in the others in slot order**
+  (canon t-r9dt, 2026-11-09; up to then slot 0 and slot 1, never the
+  central's own). The choice's NONE default for a split central with more
+  than one peripheral keeps canon's Imprint Dongle (two) as it was: its
+  `.config` has `CONFIG_BEACON_OWN_BATTERY_NONE=y` and the subscription to
+  ZMK's own battery event is not built (canon `--module` build, 2026-11-09).
+  The payload's version byte did not move: the bytes kept their offsets and
+  0 = no reading. ZMK defines both battery events only with
+  `CONFIG_ZMK_BATTERY_REPORTING`, hence the broadcaster's `#if`: main's
+  broadcaster failed to link without it (`undefined reference to
+  zmk_event_zmk_peripheral_battery_state_changed`, corne_left, 891cf17,
+  2026-11-09), and the Reviung41 builds without it, with the key and
+  modifier subscriptions alone.
 - Remove or rename a Kconfig symbol together with the canon change that stops
   setting it: Kconfig aborts on an assignment to an undefined symbol (canon's
   `config/prospector.conf` and `BEACON_SPRITE_FILL`, 2026-09-29).
@@ -454,9 +505,12 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   succeeded (canon's CLAUDE.md). The Actions
   route's first live run took about four minutes (2026-11-08, canon t-hkc6).
   Not on hardware: a central half (the check build and the check repository
-  build it), a central next to a Bluetooth host, the broadcaster on battery
-  (its drain unmeasured), the nice!nano's 1200 baud entry (the check
-  repository builds it), the panel-clock fallback, any Prospector but
+  build it), a keyboard that is not a split (the check build builds it), the
+  central's own battery byte (both check builds build it; canon's dongle
+  sends none of its own), a central next to a Bluetooth host, the
+  broadcaster on battery (its drain unmeasured), the nice!nano's 1200 baud
+  entry (the check repository builds it), the status screen on any display
+  but the prospector shield's, the panel-clock fallback, any Prospector but
   beekeeb's, and an image without the fetching line (README's `--/100` for it
   is read from the code).
 
