@@ -43,17 +43,22 @@ config LV_Z_MEM_POOL_SIZE
     default 65536 if BEACON_SPRITE
     default 49152
 
-# The device is the status screen: its sources and options hang off this.
-config BEACON_SCREEN
+# The module's options the device turns on, as configdefault, never config: a
+# config entry here would be a second definition, which Kconfig ORs into the
+# option's dependencies, so SHIELD_PROSPECTOR alone would meet them and an
+# option would stay on with its own dependencies unmet (Zephyr's Kconfig
+# docs, "Multiple symbol definitions"). BEACON_SCREEN is the status screen,
+# whose sources and options hang off it.
+configdefault BEACON_SCREEN
     default y
 
-config BEACON_BOOTLOADER_ON_1200_BAUD
+configdefault BEACON_BOOTLOADER_ON_1200_BAUD
     default y
 
-config BEACON_SCREEN_DUMP
+configdefault BEACON_SCREEN_DUMP
     default y
 
-config BEACON_SPRITE_RECEIVE
+configdefault BEACON_SPRITE_RECEIVE
     default y
 
 # The sprite receiver's link (src/ble_receiver.c). Measured on hardware

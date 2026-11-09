@@ -94,18 +94,21 @@ per-key LEDs, is the lantern.
    modifiers, which the screen and the sprite follow).
 
    The payload carries two batteries, the left half's and the right half's.
-   A central half, or a keyboard that is not a split, sends its own level,
-   ZMK's battery level (`CONFIG_ZMK_BATTERY_REPORTING`, on by default with
-   BLE; without it no battery is sent at all, and ZMK's own split code does
-   not link with the third line), as the left half's, and the
-   half it connects to fills the other: so the bar is the mean of both
-   halves on a keyboard whose central is a half, and the keyboard's own
-   level on one that is not a split. A dongle sends none of its own: on a
-   split central with two peripherals or more, the first two fill both, in
-   the order the central first heard them. A keyboard whose central is its
-   right half adds `CONFIG_BEACON_OWN_BATTERY_RIGHT=y` (its left half then
-   fills the left one), and a dongle with one peripheral
-   `CONFIG_BEACON_OWN_BATTERY_NONE=y`.
+   A keyboard that is not a split, and a split central with one peripheral,
+   a central half, send their own level, ZMK's battery level
+   (`CONFIG_ZMK_BATTERY_REPORTING`, on by default with BLE; without it no
+   battery is sent at all, and ZMK's own split code does not link with the
+   third line), as the left half's, and the half the central connects to
+   fills the other: so the bar is the mean of both halves on a keyboard
+   whose central is a half, and the keyboard's own level on one that is not
+   a split. A split central with two peripherals or more, a dongle, sends
+   none of its own: its first two fill both, in the order it first heard
+   them. A keyboard whose central is its right half adds
+   `CONFIG_BEACON_OWN_BATTERY_RIGHT=y` (its left half then fills the left
+   one); a dongle with one peripheral adds
+   `CONFIG_BEACON_OWN_BATTERY_NONE=y`, and a central half with two
+   peripherals or more `CONFIG_BEACON_OWN_BATTERY_LEFT=y` or `_RIGHT=y`,
+   which leaves its second peripheral out.
 
    ZMK `main` compiles the fetching with a write it does not bounds-check
    ([zmk#3522](https://github.com/zmkfirmware/zmk/issues/3522); the fix,
@@ -188,9 +191,11 @@ per-key LEDs, is the lantern.
    (`CONFIG_BEACON_SCREEN_OFF_AFTER_S`, default 300; `=0` in
    `config/prospector.conf` keeps it lit); the first key press the keyboard
    reports lights it. With the keyboard heard, `HP` turns from grey to gold,
-   the bar stays empty with `--/100` until a half's reading arrives (the
-   third line of the keyboard's conf, above), and then fills in colour (The
-   screen, below).
+   the bar stays empty with `--/100` until a battery reading arrives, and
+   then fills in colour (The screen, below). The central's own reading comes
+   at its first battery sample; a half's that the central connects to, a
+   dongle's two or a central half's other half, comes only with the third
+   line of the keyboard's conf, above.
 
 ### Then, as you want them
 

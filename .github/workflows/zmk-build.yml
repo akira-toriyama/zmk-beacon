@@ -95,7 +95,7 @@ jobs:
 
       # Zephyr only warns about a value that does not take, so a line of
       # config/<shield>.conf whose dependency stopped being met (the
-      # broadcaster's check build) would leave the build green and checking
+      # broadcaster's check builds) would leave the build green and checking
       # nothing: every CONFIG_ line of it must be in .config verbatim, and an
       # =n one must leave no CONFIG_X= line ("# CONFIG_X is not set", or no
       # line at all for a symbol whose dependencies are unmet).

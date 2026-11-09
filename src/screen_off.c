@@ -7,9 +7,9 @@
  * CONFIG_BEACON_SCREEN_OFF_AFTER_S the backlight fades out over FADE_MS and
  * the panel is blanked; the next key press lights the screen within a tick of
  * its payload (longer only behind a screen dump, which holds the display work
- * queue for its length). A key press is what the observer counts (status_observer.h key_ms: any key of
- * either half, and nothing else, so a pointing device does not keep the screen
- * lit). key_ms is 0 until the first press, so until then the time since boot
+ * queue for its length). A key press is what the observer counts (status_observer.h key_ms: any key,
+ * either half's on a split, and nothing else, so a pointing device does not
+ * keep the screen lit). key_ms is 0 until the first press, so until then the time since boot
  * counts: a device that hears no keyboard goes dark too.
  *
  * - Not ZMK's blank-on-idle (CONFIG_ZMK_DISPLAY_BLANK_ON_IDLE, zmk

@@ -3,8 +3,9 @@
 #
 # Zephyr does not read a shield's own CMakeLists.txt, so the status screen's
 # sources are added from the module root, guarded by BEACON_SCREEN (the
-# prospector shield turns it on), on which every option below depends. The
-# backlight is the devicetree's pwm-leds node, which LED_PWM needs.
+# prospector shield turns it on), on which every BEACON_ option in the block
+# depends. The backlight is the devicetree's pwm-leds node, which LED_PWM
+# needs.
 
 if(CONFIG_BEACON_SCREEN)
   target_sources_ifdef(CONFIG_LED_PWM app PRIVATE src/backlight.c)
