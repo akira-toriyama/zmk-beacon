@@ -90,7 +90,7 @@ config BEACON_SCREEN_DUMP
       When the host sets the CDC ACM port to 2400 baud, render the whole
       screen once more and send it over that port as RGB565 bands closed by
       a CRC-32 (the format: src/screen_dump.c), for a host to turn into a
-      picture (canon's "scripts/dongle.py shot", for example, writes a PNG).
+      picture (README, The serial port).
       The screen stands still while the bands go out, and a logging image
       drops the log lines of that time: the dump has the port to itself.
 
@@ -150,7 +150,7 @@ config BEACON_SPRITE_RECEIVE
       boot with the pack's size; nothing else. On by default for the
       prospector shield; a consumer's prospector.conf turns it off with =n.
 
-      Costs on the nRF52840 against the observer-only build (2026-10-12):
+      Costs on the nRF52840 against the observer-only build:
       about 80 KB of flash and 40 KB of RAM, 16 KB of it the LVGL pool a
       sprite build grows (Kconfig.defconfig), the rest BT_PERIPHERAL, the
       251 byte ACL buffers and the BT RX stack the shield's Kconfig.defconfig
@@ -198,9 +198,9 @@ config BEACON_SPRITE_NAME
       repository: a local build passes it (scripts/build.sh --sprite <gif>
       --sprite-name <text>, through a Kconfig fragment so that a failed
       configure step, whose command line west prints, shows only the
-      fragment's path; a consumer derives it as it likes: canon's
-      assets/sprite-name.py, for example, takes it from its name dictionary
-      or the GIF's file name).
+      fragment's path; a consumer derives it as it likes:
+      tools/name_dictionary.py <csv> --number <n>, for example, prints a
+      sprite's name from PokeAPI's species names).
 
 config BEACON_HP_BAR_NAME_ROW
     bool
