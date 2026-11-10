@@ -117,10 +117,11 @@ per-key LEDs, is the lantern.
    makes the central write a 0 to index 234 of an array of one byte per
    peripheral (a single byte on a keyboard whose central is a half), which
    on the issue's keyboard zeroed a variable of the Bluetooth controller
-   (late radio events, then a fatal controller assert); canon carries the
-   fix as a patch, which a config repository built by ZMK's reusable
-   workflow cannot, so a central that hosts connect to over Bluetooth
-   carries the bug until the fix merges.
+   (late radio events, then a fatal controller assert); a config
+   repository that patches ZMK can carry the fix (The one consumer, below,
+   does), but ZMK's reusable workflow applies no patch, so a central it
+   builds from ZMK `main` that hosts connect to over Bluetooth carries the
+   bug until the fix merges.
 
    The broadcaster has run only on a USB-powered dongle with no Bluetooth
    host; on a central half like the Corne's, on a keyboard that is not a
@@ -129,11 +130,7 @@ per-key LEDs, is the lantern.
    in range; what it tells, and the untried cases, are in The status
    advertisement, below. The check builds' confs are these three lines,
    [config/corne_left.conf](config/corne_left.conf), and the first two,
-   [config/reviung41.conf](config/reviung41.conf); canon's
-   [config/imprint_dongle.conf](https://github.com/akira-toriyama/canon/blob/main/config/imprint_dongle.conf)
-   carries them on a dongle, beside lines that only canon's ZMK and Zephyr
-   patches define and canon's own choices: take the three lines from it,
-   not the file.
+   [config/reviung41.conf](config/reviung41.conf).
 
 3. The Prospector Dongle: a device of its own, with its own target in
    `build.yaml` next to the keyboard's:
@@ -177,8 +174,7 @@ per-key LEDs, is the lantern.
    serial port to 1200 baud on purpose (`stty -f <its port> 1200` on macOS,
    the port found by its product string) reboots it into the bootloader
    with no hands on the device, and the copy is the same (The serial port,
-   below; canon's `./scripts/flash-dongle.sh <image.uf2>` does the whole of
-   it). `XIAO-SENSE` is the factory bootloader's volume name (the XIAOs this
+   below). `XIAO-SENSE` is the factory bootloader's volume name (the XIAOs this
    module has run beside mount so too; Adafruit's upstream build for the
    plain XIAO nRF52840 names it `XIAO-BOOT`): put one XIAO in its bootloader
    at a time. The keyboard's central is flashed as its board says; with the
@@ -351,8 +347,8 @@ What it takes, beyond The sprite sender, below:
   build. Keychain Access makes one (Certificate Assistant, Create a
   Certificate, of the type Code Signing; untried here), and
   [chord](https://github.com/akira-toriyama/chord)'s `setup-signing-cert.sh`
-  made this one (`chord-dev`, the default here; it needs OpenSSL 3 on the
-  PATH, not macOS's LibreSSL, and then `security import`).
+  makes one named `chord-dev`, `package.sh`'s default (it needs OpenSSL 3 on
+  the PATH, not macOS's LibreSSL, and then `security import`).
 - **The Bluetooth dialog answered once, for the app itself**: macOS asks the
   first time the app uses Bluetooth and keys the answer to what started the
   process, so the first run goes through the LaunchAgent, below, while you
@@ -549,26 +545,22 @@ and untried, and its draw on a battery is unmeasured.
 
 On USB the Prospector Dongle is one CDC ACM serial port, product string
 `Prospector Dongle`, and no keyboard: no HID device at all, under ZMK's
-default USB IDs, which most ZMK devices keep (canon's Imprint Dongle does).
-Find its port by that product string (canon's
-`python3 scripts/dongle.py port prospector`, for example),
-never by a `/dev/cu.usbmodem*` name, which follows the USB socket it is
-plugged into, nor by its USB IDs. The port's rate is a command:
+default USB IDs, which most ZMK devices keep. Find its port by that product
+string, never by a `/dev/cu.usbmodem*` name, which follows the USB socket it
+is plugged into, nor by its USB IDs. The port's rate is a command:
 
 - 1200 baud reboots the device into its UF2 bootloader, whose volume is
   `XIAO-SENSE` with the factory bootloader (The least, step 4)
   (`CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD`, on by default for the shield): a
   host flashes it with no hands on the device by setting the
   rate, waiting for the volume, copying the image onto it and waiting for
-  the device to come back (canon's `./scripts/flash-dongle.sh <image.uf2>`
-  does this, and checks that the volume belongs to this device). A
-  keyboard's central with the option takes the same touch.
+  the device to come back. A keyboard's central with the option takes the
+  same touch.
 - 2400 baud makes the device render its screen once more and send it over
   the port, band by band and closed by a CRC-32 (`CONFIG_BEACON_SCREEN_DUMP`,
   on by default for the shield; the format is the header of
-  [src/screen_dump.c](src/screen_dump.c)). canon's
-  `python3 scripts/dongle.py shot` sets 2400, writes the bands into a PNG,
-  prints its path and sets 115200 again. The screen stands still while the
+  [src/screen_dump.c](src/screen_dump.c)): a host sets 2400, reads the
+  bands and sets 115200 again. The screen stands still while the
   picture goes out, and a logging build leaves out the log lines of that
   moment. The picture is what the device draws, not what the backlight
   shows: a dark screen gives the picture it would show when lit. It shows
@@ -946,11 +938,28 @@ week against the current ZMK `main`, nothing patched. Every push to `main`
 refreshes one rolling draft release with `prospector.uf2` attached, and it
 alone; publishing the draft by hand creates the tag.
 
+## The one consumer
+
 The one keyboard this module has run on is the Cyboard Imprint of
 [akira-toriyama/canon](https://github.com/akira-toriyama/canon), through its
 Imprint Dongle, the split central whose config carries the real conf and pins
 this module by commit; what was seen on its hardware, and when, is in
-[CLAUDE.md](CLAUDE.md).
+[CLAUDE.md](CLAUDE.md). Its repository has worked examples of what this README
+leaves to you:
+
+- [config/imprint_dongle.conf](https://github.com/akira-toriyama/canon/blob/main/config/imprint_dongle.conf)
+  carries the broadcaster's three lines (The least, step 2) on a dongle,
+  beside lines that only its ZMK and Zephyr patches define and its own
+  choices: take the three lines from The least, not the file. Its patches
+  carry the fix of zmk#3522 (the same step).
+- `./scripts/flash-dongle.sh <image.uf2>` flashes a device through the 1200
+  baud touch and checks that the volume belongs to that device (The serial
+  port).
+- `python3 scripts/dongle.py port prospector` prints the Prospector Dongle's
+  port, found by its USB strings (canon's firmware stamp in the manufacturer
+  string, or the product string on an image without one), and
+  `python3 scripts/dongle.py shot` turns the 2400 baud dump into a PNG (The
+  serial port).
 
 ## Credits and license
 

@@ -41,8 +41,13 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
 - README is written for a consumer, in the order a consumer reads it (the
   least, then the options, then what it does, then the sprite), as
   zmk-vfx-lantern's: no canon task ids, dates or history there (canon t-4hw7,
-  2026-11-08); they live here. canon appears there as an example (its scripts,
-  its dongle's conf) or as the one keyboard the module has run on. The
+  2026-11-08); they live here. canon is named only in its section The one
+  consumer, the one before Credits and license: the one keyboard the module
+  has run on, and its scripts and
+  its dongle's conf as worked examples (canon t-e5pa, 2026-11-10; up to then
+  they sat where they apply), and is "the one consumer" elsewhere. Kconfig
+  help and docs/sprite-pack.md are a consumer's text under the same rule
+  (their dates: the `tools/` item and Sizes). The
   hardware record, the last item of Invariants, is where a hardware fact and
   its date go. The colour paragraphs of "The sprite pack" and "The sprite
   sender" name zmk-vfx-lantern's `tools/lantern_port.py` and its README's The
@@ -71,7 +76,9 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   it, measured 2026-11-08): README says OpenSSL 3.
 - `tools/`: `sprite_pack.py` (the sprite pack, [docs/sprite-pack.md](docs/sprite-pack.md):
   a GIF as its distinct pictures, cut to the box they ink, for the player and
-  the over-the-air swap) on
+  the over-the-air swap; the page's numbers are the user's collection's, its
+  649 pairs and 1,298 GIFs measured, and compared with Pillow, on 2026-10-06,
+  and its crop example is canon t-t4y4's of 2026-11-03) on
   `gifpics.py` (GIF composition as browsers do it), standard library only so
   that macOS's `/usr/bin/python3` (3.9) and the ZMK build image both run them;
   `sprite_colours.py` (the colours a sprite's GIFs, its front and its back,
@@ -176,6 +183,9 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   67.98%, a 89x91 sprite (a 39 KB pack from an 84 KB GIF) 30.72% / 75.65%, a
   153x94 one with `--logging` 32.48% / 81.70%; the gifdec player's 84 KB
   sprite took 36.26% / 83.60% and 39.36% / 89.71% with logging (2026-10-04).
+  The receiver's cost that `CONFIG_BEACON_SPRITE_RECEIVE`'s help gives, about
+  80 KB of flash and 40 KB of RAM against the observer-only build, is of
+  2026-10-12.
 - CI: `build.yml` → the local reusable `zmk-build.yml` (it says why not ZMK's),
   every build.yaml target, the broadcaster's checks among them;
   `tools-test.yml` runs `tools/`' unit tests (Python on Ubuntu, the sprite
@@ -205,7 +215,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   (zmk-vfx-lantern's CLAUDE.md says why a fork), which carries this module too
   since canon t-4hw7 (2026-11-08): README's manifest with both modules pinned
   by commit
-  (zmk-vfx-beacon at e69d831), the Corne on the nice!nano, its left half the
+  (zmk-vfx-beacon at e69d831 for the run below, at 2a3bbc5 since canon t-g1p7,
+  2026-11-09), the Corne on the nice!nano, its left half the
   central with README's three lines and `CONFIG_BEACON_BOOTLOADER_ON_1200_BAUD=y`
   on the CDC ACM port its overlay adds for zmk-vfx-lantern, and the template's
   `build.yml` pointed at `build-user-config.yml@main`. The run of its commit
@@ -224,7 +235,8 @@ build, flash and read the devices. Usage: [README.md](README.md). English only.
   gate; canon t-r9dt left it at e69d831: the Corne's three lines did not
   change, only what the central half sends). README's zmk#3522 caveat says the
   fix zmk#3556 is open: true on 2026-11-08; when it merges, the caveat goes
-  from README, the `BEACON_STATUS_BROADCAST` help, the header of
+  from README (The least, step 2, and The one consumer's clause on canon's
+  patches), the `BEACON_STATUS_BROADCAST` help, the header of
   `src/status_broadcaster.c` and the invariant on building canon's
   `imprint_dongle` below, and from zmk-vfx-lantern's README, and canon's patch
   with it (canon's `patches/zmk/README.md`).
@@ -350,9 +362,11 @@ Log lines; the periodic ones come every 60 s, the first a minute after boot:
   canon's `flash-watch.sh` / `flash-reset.sh` run**: both mount as `XIAO-SENSE`,
   and those scripts copy `imprint_dongle.uf2` onto any `XIAO-SENSE` mount.
 - Keep `CONFIG_USB_DEVICE_PRODUCT="Prospector Dongle"` (shield conf): canon's
-  `dongle.py` and `flash-dongle.sh` find the device by that string alone (VID/PID
-  are ZMK's defaults, the Imprint Dongle's too; a `/dev/cu.usbmodem*` name
-  follows the USB location). Change canon's `DEVICES` table with it.
+  `dongle.py` and `flash-dongle.sh` find the device by canon's firmware stamp,
+  and by that string on an image without the stamp, this repository's own
+  builds included (VID/PID are ZMK's defaults, the Imprint Dongle's too; a
+  `/dev/cu.usbmodem*` name follows the USB location). Change canon's
+  `DEVICES` table with it.
 - Keep exactly one CDC ACM port: each okay `zephyr,cdc-acm-uart` node adds a USB
   serial function; canon's `dongle.py` opens a device's first port, and two
   ports broke canon's earlier flash script (canon #219, hardware 2026-09-26). The

@@ -12,15 +12,15 @@ docstring is the byte layout. This page is the why.
 
 The Prospector Dongle played the GIF file as it was (LVGL's gifdec) until the
 pack replaced it. Three things made the GIF the wrong unit for a sprite that
-changes daily over the air:
+changes over the air:
 
 - A GIF frame is a patch over the previous frame, so playback only moves
   forward: catching up after a slow render decodes every frame in between, and
   a key press cannot step to "the next different picture" without decoding
   through the same ones.
 - A sprite animation repeats its pictures (a breathing cycle goes A B C B A),
-  and a GIF stores every repeat again. On the user's collection of 649 front
-  and back pairs, 105,673 frames showed only 36,015 distinct pictures.
+  and a GIF stores every repeat again. On a collection of 649 front and back
+  pairs, 105,673 frames showed only 36,015 distinct pictures.
 - gifdec keeps 5 bytes a pixel plus a 16 KiB LZW cache in the LVGL pool: a
   153x94 sprite needed about 98 KB of a 90,112 byte pool and could not be
   built.
@@ -37,9 +37,9 @@ changes daily over the air:
   distinct pictures, and the frames as (picture, delay) pairs. The canvas is
   the GIF's cut to the box its pictures ink, all of them together, so that
   no transparent margin reaches the player, which scales a canvas to its box
-  at one scale for both views (`sprite_pack.py`'s `crop`; a 96x96 back view
-  with 47 blank rows drew its tightly cut front view at 76 px under 94 px of
-  empty box, canon t-t4y4, 2026-11-03). Every picture is that whole canvas,
+  at one scale for both views (`sprite_pack.py`'s `crop`; uncut, a 96x96
+  back view with 47 blank rows drew its tightly cut front view at 76 px
+  under 94 px of empty box). Every picture is that whole canvas,
   composited as a browser would show it: pixel value 0 is transparent and
   1..n index the palette. Pixels are packed 4 to a byte pair
   when the palette has 15 colours or fewer (most sprites), 8 bits otherwise.
@@ -55,8 +55,8 @@ changes daily over the air:
 
 ## Why deflate with a dictionary
 
-Measured on the user's 1,298 GIFs (57.6 MB; 2026-10-06), the picture data
-plus tables came to:
+Measured on the 1,298 GIFs of those pairs (57.6 MB), the picture data plus
+tables came to:
 
 | encoding of a picture | of the GIFs' size | largest pair |
 | --- | --- | --- |
@@ -78,7 +78,7 @@ foreign flash decodes to an error.
 - `gifpics.py` composes frames as browsers do (disposal 0-3, transparency,
   interlace, local colour tables, clipping, cut files) and was compared frame
   by frame with Pillow 12.3 on the 1,298 GIFs: every pixel and every delay
-  matched (2026-10-06).
+  matched.
 - `sprite_pack.py check` unpacks a file exactly as the device decodes it and
   compares every frame with the GIFs; the same 1,298 round-tripped with no
   mismatch, and the device's C inflater decoded all of them to the same bytes
